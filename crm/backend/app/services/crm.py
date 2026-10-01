@@ -110,6 +110,18 @@ def list_organizations(db: Session) -> list[Organization]:
 def update_organization(db: Session, org_id: UUID, data) -> Organization:
     item = require_organization(db, org_id)
     updates = data.model_dump(exclude_none=True)
+
+    next_currency = updates.get("currency")
+    if next_currency and next_currency != item.currency:
+        has_payments = db.scalar(
+            select(Payment.id).where(Payment.organization_id == org_id).limit(1)
+        ) is not None
+        if has_payments:
+            raise HTTPException(
+                status_code=409,
+                detail="Organization currency cannot be changed after payments have been created",
+            )
+
     for key, value in updates.items():
         setattr(item, key, value)
     record_audit(db, org_id, "organization", item.id, "organization.settings_updated", updates)
@@ -721,6 +733,7 @@ def list_student_subscriptions(db: Session, org_id: UUID, student_id: UUID | Non
 
 
 def create_payment(db: Session, org_id: UUID, data) -> Payment:
+    organization = require_organization(db, org_id)
     student = scoped_get(db, Student, org_id, data.student_id)
     if data.subscription_id is not None:
         subscription = scoped_get(db, StudentSubscription, org_id, data.subscription_id)
@@ -731,6 +744,7 @@ def create_payment(db: Session, org_id: UUID, data) -> Payment:
         student_id=student.id,
         subscription_id=data.subscription_id,
         amount_minor=data.amount_minor,
+        currency=organization.currency,
         due_date=data.due_date,
         note=data.note,
     )
