@@ -181,6 +181,25 @@ def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate) -> TrialLes
     return item
 
 
+def update_trial(db: Session, org_id: UUID, trial_id: UUID, starts_at: datetime | None, location_id: UUID | None) -> TrialLesson:
+    trial = scoped_get(db, TrialLesson, org_id, trial_id)
+    if location_id is not None:
+        scoped_get(db, Location, org_id, location_id)
+        trial.location_id = location_id
+    if starts_at is not None:
+        trial.starts_at = starts_at
+    student = scoped_get(db, Student, org_id, trial.student_id)
+    student.crm_status = CrmStatus.TRIAL_SCHEDULED
+    record_audit(db, org_id, "student", student.id, "trial.rescheduled", {
+        "trial_id": str(trial.id),
+        "starts_at": trial.starts_at.isoformat(),
+        "location_id": str(trial.location_id) if trial.location_id else None,
+    })
+    db.commit()
+    db.refresh(trial)
+    return trial
+
+
 def list_trials(db: Session, org_id: UUID) -> list[TrialLesson]:
     return list(db.scalars(select(TrialLesson).where(TrialLesson.organization_id == org_id).order_by(TrialLesson.starts_at)))
 
