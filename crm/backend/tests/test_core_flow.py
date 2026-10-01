@@ -1531,3 +1531,48 @@ def test_owner_can_create_single_use_password_reset_link_for_staff(client):
         json={"reset_token": reset_token, "password": "another-new-password"},
     )
     assert reused.status_code == 400
+
+
+def test_admin_cannot_reset_owner_password(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "Owner Protected School",
+            "organization_slug": "owner-protected",
+            "full_name": "Owner",
+            "email": "protected-owner@example.com",
+            "password": "owner-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    owner_headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    invite = client.post(
+        "/organization-invitations",
+        headers=owner_headers,
+        json={"email": "protected-admin@example.com", "role": "admin"},
+    )
+    assert invite.status_code == 201, invite.text
+    accepted = client.post(
+        "/auth/accept-invite",
+        json={
+            "invite_token": invite.json()["invite_token"],
+            "full_name": "Admin",
+            "password": "admin-secure-password",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    admin_headers = {
+        "Authorization": f"Bearer {accepted.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+    blocked = client.post(
+        "/password-reset-links",
+        headers=admin_headers,
+        json={"email": "protected-owner@example.com"},
+    )
+    assert blocked.status_code == 403
