@@ -125,6 +125,10 @@ function App() {
   const [paymentStudentId, setPaymentStudentId] = useState<EntityId>("8");
   const [paymentPlanId, setPaymentPlanId] = useState<EntityId>("1");
   const [paymentDueDate, setPaymentDueDate] = useState("2026-10-31");
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [planName, setPlanName] = useState("8 занять / 30 днів");
+  const [planPrice, setPlanPrice] = useState(1800);
+  const [planLessons, setPlanLessons] = useState(8);
   const [locations, setLocations] = useState<LocationDemo[]>([
     { id: "1", name: "Основна локація", address: "Івано-Франківськ", isActive: true },
   ]);
@@ -403,11 +407,21 @@ function App() {
 
   const createPayment = async () => {
     const plan = plans.find((item) => item.id === paymentPlanId);
-    if (!plan) return;
+    if (!plan || plan.price <= 0) {
+      setWorkspaceError("Для нарахування оберіть абонемент із заданою ціною.");
+      return;
+    }
     if (apiEnabled && session) {
       try {
+        const subscription = await apiPost<{ id: string }>("/student-subscriptions", {
+          student_id: paymentStudentId,
+          plan_id: paymentPlanId,
+          starts_on: new Date().toISOString().slice(0, 10),
+          discount_minor: 0,
+        }, session);
         await apiPost("/payments", {
           student_id: paymentStudentId,
+          subscription_id: subscription.id,
           amount_minor: Math.round(plan.price * 100),
           due_date: paymentDueDate || null,
           note: plan.name,
@@ -429,6 +443,32 @@ function App() {
       status: "pending",
     }]);
     setShowPaymentForm(false);
+  };
+
+  const createPlan = async () => {
+    if (!planName.trim() || planPrice < 0) return;
+    if (apiEnabled && session) {
+      try {
+        await apiPost("/subscription-plans", {
+          name: planName.trim(),
+          price_minor: Math.round(planPrice * 100),
+          period_days: 30,
+          lessons_included: planLessons > 0 ? planLessons : null,
+        }, session);
+        await syncWorkspace(session);
+        setShowPlanForm(false);
+        return;
+      } catch {
+        return;
+      }
+    }
+    setPlans((items) => [...items, {
+      id: crypto.randomUUID(),
+      name: planName.trim(),
+      price: planPrice,
+      lessons: planLessons > 0 ? planLessons : null,
+    }]);
+    setShowPlanForm(false);
   };
 
   const paymentTotals = {
@@ -756,7 +796,7 @@ function App() {
           </div>
           <aside className="paymentsSide">
             <article className="panel">
-              <div className="panelHead"><div><p className="eyebrow">Тарифи</p><h2>Абонементи</h2></div><span className="counter">{plans.length}</span></div>
+              <div className="panelHead"><div><p className="eyebrow">Тарифи</p><h2>Абонементи</h2></div><div className="miniActions"><span className="counter">{plans.length}</span><button className="link" onClick={() => setShowPlanForm(true)}>+ Тариф</button></div></div>
               <div className="planCards">{plans.map((plan) => <div className="planCard" key={plan.id}><div><b>{plan.name}</b><span>{plan.lessons ? plan.lessons + " занять" : "Гнучкі умови"}</span></div><strong>{plan.price ? formatMoney(plan.price) : "Індивідуально"}</strong></div>)}</div>
             </article>
             <article className="panel financeHint"><p className="eyebrow">MVP</p><h2>Що вже враховано</h2><p>Оплата зберігається окремо від абонемента. Це дозволить пізніше підключити LiqPay, WayForPay чи інший еквайринг без зміни ядра.</p></article>
@@ -951,6 +991,19 @@ function App() {
             setStaff((items) => items.map((item) => item.id === selectedStaff.id ? {...item,isActive:!item.isActive} : item));
           }}>{selectedStaff.isActive ? "Деактивувати працівника" : "Активувати працівника"}</button></div>
         </aside>
+      </div>}
+
+            {showPlanForm && <div className="modalBackdrop" onClick={() => setShowPlanForm(false)}>
+        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => setShowPlanForm(false)}>×</button>
+          <p className="eyebrow">Абонементи</p><h2>Новий тариф</h2>
+          <label>Назва<input value={planName} onChange={(e) => setPlanName(e.target.value)} /></label>
+          <div className="formTwo">
+            <label>Ціна, грн<input type="number" min={0} value={planPrice} onChange={(e) => setPlanPrice(Number(e.target.value))} /></label>
+            <label>Занять<input type="number" min={0} value={planLessons} onChange={(e) => setPlanLessons(Number(e.target.value))} /></label>
+          </div>
+          <button className="primary full" disabled={!planName.trim()} onClick={createPlan}>Створити тариф</button>
+        </div>
       </div>}
 
             {showPaymentForm && <div className="modalBackdrop" onClick={() => setShowPaymentForm(false)}>
