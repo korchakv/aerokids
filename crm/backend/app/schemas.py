@@ -327,6 +327,7 @@ class PaymentRead(ORMModel):
     organization_id: UUID
     student_id: UUID
     subscription_id: UUID | None
+    plan_id: UUID | None = None
     amount_minor: int
     currency: str
     status: PaymentStatus
