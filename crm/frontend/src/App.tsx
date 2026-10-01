@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, clearSession, loadOperations, loadSession, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type WorkspaceBundle } from "./api";
+import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadOperations, loadSession, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -1296,6 +1296,18 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [bootstrapAvailable, setBootstrapAvailable] = useState(false);
+  const [checkingBootstrap, setCheckingBootstrap] = useState(true);
+  const [organizationName, setOrganizationName] = useState("AeroKiDS");
+  const [organizationSlug, setOrganizationSlug] = useState("aerokids");
+  const [ownerName, setOwnerName] = useState("");
+
+  useEffect(() => {
+    getBootstrapStatus()
+      .then(setBootstrapAvailable)
+      .catch(() => setBootstrapAvailable(false))
+      .finally(() => setCheckingBootstrap(false));
+  }, []);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -1310,19 +1322,54 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
     }
   };
 
+  const setup = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      onAuthenticated(await bootstrapOwner({
+        organization_name: organizationName.trim(),
+        organization_slug: organizationSlug.trim().toLowerCase(),
+        full_name: ownerName.trim(),
+        email,
+        password,
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не вдалося створити першу організацію");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return <div className="loginScreen">
     <div className="loginCard">
       <div className="loginBrand"><span className="mark">✦</span><div><b>School CRM</b><small>Керування школою в одному місці</small></div></div>
-      <p className="eyebrow">Вхід</p>
-      <h1>Увійдіть у CRM</h1>
-      <p className="loginIntro">Використовуйте email і пароль вашого облікового запису.</p>
-      <form onSubmit={submit}>
-        <label>Email<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-        <label>Пароль<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-        {error && <div className="loginError">{error}</div>}
-        <button className="primary full" disabled={loading}>{loading ? "Входимо…" : "Увійти"}</button>
-      </form>
-      <small className="loginNote">Доступ визначається роллю в конкретній організації.</small>
+
+      {checkingBootstrap ? <div className="loginChecking">Перевіряємо CRM…</div> : bootstrapAvailable ? <>
+        <p className="eyebrow">Перший запуск</p>
+        <h1>Створіть першу організацію</h1>
+        <p className="loginIntro">Це виконується один раз. Після цього ви станете власником організації та зможете запрошувати команду.</p>
+        <form onSubmit={setup}>
+          <label>Назва організації<input value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} required /></label>
+          <label>Короткий slug<input value={organizationSlug} onChange={(e) => setOrganizationSlug(e.target.value.replace(/[^a-z0-9-]/g, ""))} required /></label>
+          <label>Ваше ім’я<input autoComplete="name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} required /></label>
+          <label>Email<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+          <label>Пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          {error && <div className="loginError">{error}</div>}
+          <button className="primary full" disabled={loading}>{loading ? "Створюємо…" : "Створити CRM"}</button>
+        </form>
+      </> : <>
+        <p className="eyebrow">Вхід</p>
+        <h1>Увійдіть у CRM</h1>
+        <p className="loginIntro">Використовуйте email і пароль вашого облікового запису.</p>
+        <form onSubmit={submit}>
+          <label>Email<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+          <label>Пароль<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          {error && <div className="loginError">{error}</div>}
+          <button className="primary full" disabled={loading}>{loading ? "Входимо…" : "Увійти"}</button>
+        </form>
+        <small className="loginNote">Доступ визначається роллю в конкретній організації.</small>
+      </>}
     </div>
   </div>;
 }
