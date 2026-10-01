@@ -59,6 +59,27 @@ class AttendanceStatus(str, enum.Enum):
     EXCUSED = "excused"
 
 
+class SubscriptionStatus(str, enum.Enum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+
+
+class PaymentStatus(str, enum.Enum):
+    PENDING = "pending"
+    PAID = "paid"
+    REFUNDED = "refunded"
+    CANCELLED = "cancelled"
+
+
+class PaymentMethod(str, enum.Enum):
+    CASH = "cash"
+    CARD = "card"
+    BANK = "bank"
+    OTHER = "other"
+
+
 class Organization(Base):
     __tablename__ = "organizations"
 
@@ -203,3 +224,53 @@ class Attendance(Base):
     status: Mapped[AttendanceStatus] = mapped_column(Enum(AttendanceStatus), nullable=False)
     note: Mapped[str | None] = mapped_column(String(300))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+
+class SubscriptionPlan(Base):
+    __tablename__ = "subscription_plans"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_subscription_plan_org_name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    price_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    period_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    lessons_included: Mapped[int | None] = mapped_column(Integer)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class StudentSubscription(Base):
+    __tablename__ = "student_subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    plan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("subscription_plans.id"), index=True, nullable=False)
+    status: Mapped[SubscriptionStatus] = mapped_column(Enum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE, nullable=False)
+    starts_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[date] = mapped_column(Date, nullable=False)
+    price_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    discount_minor: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    discount_label: Mapped[str | None] = mapped_column(String(160))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    subscription_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("student_subscriptions.id"), index=True)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="UAH", nullable=False)
+    status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
+    method: Mapped[PaymentMethod | None] = mapped_column(Enum(PaymentMethod))
+    due_date: Mapped[date | None] = mapped_column(Date)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
