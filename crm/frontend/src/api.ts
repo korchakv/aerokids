@@ -459,3 +459,23 @@ export function loadAuditEvents(entityType: string, entityId: string, session: S
   const query = new URLSearchParams({ entity_type: entityType, entity_id: entityId, limit: "100" });
   return apiGet<ApiAuditEvent[]>(`/audit-events?${query.toString()}`, session);
 }
+
+
+export async function resetPassword(input: {
+  reset_token: string;
+  password: string;
+}): Promise<Session> {
+  const result = await request<{ access_token: string; user: AuthUser }>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  const organizationId = result.user.memberships[0]?.organization_id;
+  if (!organizationId) throw new Error("Для цього користувача немає доступної організації");
+  const session: Session = {
+    accessToken: result.access_token,
+    user: result.user,
+    organizationId,
+  };
+  saveSession(session);
+  return session;
+}
