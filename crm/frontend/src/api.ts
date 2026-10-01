@@ -106,3 +106,56 @@ export function apiPost<T>(path: string, body: unknown, session: Session) {
 export function apiPatch<T>(path: string, body: unknown, session: Session) {
   return request<T>(path, { method: "PATCH", body: JSON.stringify(body) }, session);
 }
+
+
+export type WorkspaceLead = {
+  student_id: string;
+  first_name: string;
+  last_name: string | null;
+  age: number | null;
+  source: string | null;
+  crm_status: "new" | "contacted" | "trial_scheduled" | "trial_completed" | "waiting_for_group" | "enrolled" | "no_response" | "declined" | "not_relevant";
+  contact_name: string | null;
+  contact_phone: string | null;
+  latest_trial_at: string | null;
+  recommended_level: string | null;
+};
+
+export type WorkspaceStudent = {
+  student_id: string;
+  first_name: string;
+  last_name: string | null;
+  age: number | null;
+  source: string | null;
+  student_status: "active" | "paused" | "archived";
+  contact_name: string | null;
+  contact_phone: string | null;
+  group_id: string | null;
+  group_name: string | null;
+};
+
+export type WorkspaceGroup = {
+  group_id: string;
+  name: string;
+  location_id: string | null;
+  location_name: string | null;
+  capacity: number | null;
+  enrolled_count: number;
+  min_age: number | null;
+  max_age: number | null;
+};
+
+export type WorkspaceBundle = {
+  leads: WorkspaceLead[];
+  students: WorkspaceStudent[];
+  groups: WorkspaceGroup[];
+};
+
+export async function loadWorkspace(session: Session): Promise<WorkspaceBundle> {
+  const [leads, students, groups] = await Promise.all([
+    apiGet<WorkspaceLead[]>("/workspace/leads", session),
+    apiGet<WorkspaceStudent[]>("/workspace/students", session),
+    apiGet<WorkspaceGroup[]>("/workspace/groups", session),
+  ]);
+  return { leads, students, groups };
+}
