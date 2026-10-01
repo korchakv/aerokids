@@ -1,3 +1,4 @@
+import hashlib
 import re
 from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
@@ -7,7 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
+from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 
 def record_audit(
@@ -86,6 +87,55 @@ def ensure_group_capacity(db: Session, org_id: UUID, group: Group, student_id: U
     )) or 0
     if occupied >= group.capacity:
         raise HTTPException(status_code=409, detail="Group has no available seats")
+
+
+def enforce_public_intake_rate_limit(
+    db: Session,
+    org_id: UUID,
+    scope: str,
+    fingerprint: str,
+    limit: int,
+    window_minutes: int,
+) -> None:
+    now = datetime.now(timezone.utc)
+    digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
+    row = db.scalar(
+        select(PublicIntakeThrottle)
+        .where(
+            PublicIntakeThrottle.organization_id == org_id,
+            PublicIntakeThrottle.scope == scope,
+            PublicIntakeThrottle.fingerprint_hash == digest,
+        )
+        .with_for_update()
+    )
+
+    if row is None:
+        row = PublicIntakeThrottle(
+            organization_id=org_id,
+            scope=scope,
+            fingerprint_hash=digest,
+            window_started_at=now,
+            request_count=1,
+            updated_at=now,
+        )
+        db.add(row)
+        db.commit()
+        return
+
+    window_started = row.window_started_at
+    if window_started.tzinfo is None:
+        window_started = window_started.replace(tzinfo=timezone.utc)
+
+    if now - window_started >= timedelta(minutes=window_minutes):
+        row.window_started_at = now
+        row.request_count = 1
+    else:
+        if row.request_count >= limit:
+            raise HTTPException(status_code=429, detail="Too many form submissions. Please try again later.")
+        row.request_count += 1
+
+    row.updated_at = now
+    db.commit()
 
 
 def normalize_phone(value: str) -> str:
