@@ -154,6 +154,17 @@ def public_intake(organization_slug: str, data: IntakeCreate, db: Session = Depe
     return IntakeResult(student_id=student.id, contact_id=contact.id, crm_status=student.crm_status)
 
 
+@router.post("/intake", response_model=IntakeResult, status_code=201)
+def internal_intake(
+    data: IntakeCreate,
+    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
+    db: Session = Depends(get_db),
+):
+    organization = crm.require_organization(db, org_id)
+    student, contact = crm.create_intake(db, organization, data)
+    return IntakeResult(student_id=student.id, contact_id=contact.id, crm_status=student.crm_status)
+
+
 @router.get("/students/{student_id}", response_model=StudentDetail)
 def get_student(student_id: UUID, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     student, contacts, trials = crm.student_detail(db, org_id, student_id)
