@@ -49,3 +49,16 @@ jobs:
           cache-dependency-path: crm/frontend/package.json
       - run: npm install
       - run: npm run build
+
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose
+        working-directory: crm
+        run: docker compose config
+      - name: Build backend image
+        run: docker build -t schoolcrm-api-ci crm/backend
+      - name: Build frontend image
+        run: docker build --build-arg VITE_API_URL=http://localhost:8000 -t schoolcrm-web-ci crm/frontend
