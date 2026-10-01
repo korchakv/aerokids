@@ -89,3 +89,18 @@ def test_completed_trial_moves_student_to_waiting_for_group(client):
     assert completed.status_code == 200, completed.text
     detail = client.get(f"/students/{student['id']}", headers=headers).json()
     assert detail["crm_status"] == "waiting_for_group"
+
+
+def test_scheduling_trial_updates_crm_status(client):
+    org = create_org(client, "AeroKiDS", "aerokids-schedule")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Марко", "age_at_inquiry": 9}).json()
+
+    trial = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={"student_id": student["id"], "starts_at": "2026-10-07T17:30:00+03:00"},
+    )
+    assert trial.status_code == 201, trial.text
+    detail = client.get(f"/students/{student['id']}", headers=headers).json()
+    assert detail["crm_status"] == "trial_scheduled"
