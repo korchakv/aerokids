@@ -38,6 +38,23 @@ type LessonItem = {
   topic: string;
 };
 
+type PlanDemo = {
+  id: number;
+  name: string;
+  price: number;
+  lessons: number | null;
+};
+
+type PaymentDemo = {
+  id: number;
+  studentId: number;
+  planId: number;
+  amount: number;
+  dueDate: string;
+  status: "pending" | "paid" | "overdue";
+  method?: "Картка" | "Готівка" | "Переказ";
+};
+
 const nav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти"];
 
 const initialLeads: Lead[] = [
@@ -68,6 +85,18 @@ function App() {
   const [attendance, setAttendance] = useState<Record<number, Record<number, AttendanceValue>>>({
     1: { 8: "present", 9: "late" },
   });
+  const [plans] = useState<PlanDemo[]>([
+    { id: 1, name: "8 занять / 30 днів", price: 1800, lessons: 8 },
+    { id: 2, name: "Індивідуальний", price: 0, lessons: null },
+  ]);
+  const [payments, setPayments] = useState<PaymentDemo[]>([
+    { id: 1, studentId: 8, planId: 1, amount: 1800, dueDate: "2026-10-05", status: "pending" },
+    { id: 2, studentId: 9, planId: 1, amount: 1800, dueDate: "2026-09-28", status: "paid", method: "Картка" },
+  ]);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [paymentStudentId, setPaymentStudentId] = useState(8);
+  const [paymentPlanId, setPaymentPlanId] = useState(1);
+  const [paymentDueDate, setPaymentDueDate] = useState("2026-10-31");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [studentStates, setStudentStates] = useState<Record<number, "Активний" | "Пауза" | "Архів">>({});
@@ -202,6 +231,31 @@ function App() {
     }]);
     setSelectedLessonId(nextId);
     setActive("Відвідування");
+  };
+
+  const markPaymentPaid = (id: number) => {
+    setPayments((items) => items.map((item) => item.id === id ? { ...item, status: "paid", method: "Картка" } : item));
+  };
+
+  const createPayment = () => {
+    const plan = plans.find((item) => item.id === paymentPlanId);
+    if (!plan) return;
+    const nextId = Math.max(0, ...payments.map((item) => item.id)) + 1;
+    setPayments((items) => [...items, {
+      id: nextId,
+      studentId: paymentStudentId,
+      planId: paymentPlanId,
+      amount: plan.price,
+      dueDate: paymentDueDate,
+      status: "pending",
+    }]);
+    setShowPaymentForm(false);
+  };
+
+  const paymentTotals = {
+    paid: payments.filter((x) => x.status === "paid").reduce((sum, x) => sum + x.amount, 0),
+    pending: payments.filter((x) => x.status === "pending").reduce((sum, x) => sum + x.amount, 0),
+    overdue: payments.filter((x) => x.status === "overdue").reduce((sum, x) => sum + x.amount, 0),
   };
 
   return (
@@ -344,6 +398,41 @@ function App() {
           </article>
         </section>}
 
+        {active === "Оплати" && <section className="paymentsLayout">
+          <div className="paymentsMain">
+            <section className="paymentStats">
+              <article><span>Сплачено</span><strong>{formatMoney(paymentTotals.paid)}</strong><small>{payments.filter((x) => x.status === "paid").length} платежів</small></article>
+              <article><span>Очікується</span><strong>{formatMoney(paymentTotals.pending)}</strong><small>{payments.filter((x) => x.status === "pending").length} рахунків</small></article>
+              <article><span>Прострочено</span><strong>{formatMoney(paymentTotals.overdue)}</strong><small>{payments.filter((x) => x.status === "overdue").length} боргів</small></article>
+            </section>
+            <article className="panel paymentsPanel">
+              <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати учнів</h2></div><button className="primary" onClick={() => setShowPaymentForm(true)}>+ Нарахування</button></div>
+              <div className="paymentTable">
+                <div className="paymentRow paymentHead"><span>Учень</span><span>Абонемент</span><span>Сума</span><span>До дати</span><span>Статус</span><span></span></div>
+                {payments.map((payment) => {
+                  const student = leads.find((lead) => lead.id === payment.studentId);
+                  const plan = plans.find((item) => item.id === payment.planId);
+                  return <div className="paymentRow" key={payment.id}>
+                    <span><b>{student?.child ?? "Учень"}</b><small>{student?.parent}</small></span>
+                    <span>{plan?.name ?? "—"}</span>
+                    <span><b>{formatMoney(payment.amount)}</b></span>
+                    <span>{new Date(payment.dueDate).toLocaleDateString("uk-UA")}</span>
+                    <span className={"paymentStatus " + payment.status}>{payment.status === "paid" ? "Сплачено" : payment.status === "overdue" ? "Прострочено" : "Очікується"}</span>
+                    <span>{payment.status !== "paid" ? <button className="link payAction" onClick={() => markPaymentPaid(payment.id)}>Позначити сплачено</button> : <small>{payment.method}</small>}</span>
+                  </div>;
+                })}
+              </div>
+            </article>
+          </div>
+          <aside className="paymentsSide">
+            <article className="panel">
+              <div className="panelHead"><div><p className="eyebrow">Тарифи</p><h2>Абонементи</h2></div><span className="counter">{plans.length}</span></div>
+              <div className="planCards">{plans.map((plan) => <div className="planCard" key={plan.id}><div><b>{plan.name}</b><span>{plan.lessons ? plan.lessons + " занять" : "Гнучкі умови"}</span></div><strong>{plan.price ? formatMoney(plan.price) : "Індивідуально"}</strong></div>)}</div>
+            </article>
+            <article className="panel financeHint"><p className="eyebrow">MVP</p><h2>Що вже враховано</h2><p>Оплата зберігається окремо від абонемента. Це дозволить пізніше підключити LiqPay, WayForPay чи інший еквайринг без зміни ядра.</p></article>
+          </aside>
+        </section>}
+
         {active === "Групи" && <section className="groupsLayout">
           <article className="panel">
             <div className="panelHead"><div><p className="eyebrow">Waiting list</p><h2>Очікують групу</h2></div><span className="counter">{waiting.length}</span></div>
@@ -382,12 +471,23 @@ function App() {
           </div>
         </section>}
 
-        {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && active !== "Розклад" && active !== "Відвідування" && <section className="panel placeholder">
+        {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && active !== "Розклад" && active !== "Відвідування" && active !== "Оплати" && <section className="panel placeholder">
           <p className="eyebrow">Наступний модуль</p>
           <h2>{active}</h2>
           <p>Каркас модуля вже передбачений у навігації. Реалізуємо після завершення наскрізного сценарію «заявка → пробне → група → учень».</p>
         </section>}
       </main>
+
+      {showPaymentForm && <div className="modalBackdrop" onClick={() => setShowPaymentForm(false)}>
+        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
+          <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
+          <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(Number(e.target.value))}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · {student.parent}</option>)}</select></label>
+          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(Number(e.target.value))}>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {plan.price ? formatMoney(plan.price) : "індивідуально"}</option>)}</select></label>
+          <label>Оплатити до<input type="date" value={paymentDueDate} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
+          <button className="primary full" onClick={createPayment}>Створити нарахування</button>
+        </div>
+      </div>}
 
       {selectedStudent && <div className="drawerBackdrop" onClick={() => setSelectedStudentId(null)}>
         <aside className="drawer studentDrawer" onClick={(e) => e.stopPropagation()}>
@@ -500,6 +600,10 @@ function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: number) => v
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span></div>
     {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{lead.source}</span><span className="pill">{lead.status}</span></button>)}
   </div>;
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("uk-UA", { style: "currency", currency: "UAH", maximumFractionDigits: 0 }).format(value);
 }
 
 function scheduleSlots(group: GroupItem) {
