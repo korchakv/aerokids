@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from app.models.core import Organization, PaymentStatus, StaffRole, User
 from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LeadListItem, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentSummary, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
 from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult
+from app.core.config import settings
 from app.core.security import auth_is_required
 from app.services import crm
 
@@ -170,10 +171,35 @@ def create_enrollment(data: EnrollmentCreate, org_id: UUID = Depends(require_org
 
 
 @router.post("/public/intake/{organization_slug}", response_model=IntakeResult, status_code=201)
-def public_intake(organization_slug: str, data: IntakeCreate, db: Session = Depends(get_db)):
+def public_intake(organization_slug: str, data: IntakeCreate, request: Request, db: Session = Depends(get_db)):
     organization = db.scalar(select(Organization).where(Organization.slug == organization_slug))
     if organization is None:
         raise HTTPException(status_code=404, detail="Organization not found")
+
+    if data.website:
+        raise HTTPException(status_code=422, detail="Invalid form submission")
+
+    forwarded = request.headers.get("x-forwarded-for")
+    client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+    normalized_phone = crm.normalize_phone(data.phone)
+
+    crm.enforce_public_intake_rate_limit(
+        db,
+        organization.id,
+        "ip",
+        f"{organization.id}:{client_ip}",
+        settings.public_intake_ip_limit,
+        settings.public_intake_window_minutes,
+    )
+    crm.enforce_public_intake_rate_limit(
+        db,
+        organization.id,
+        "phone",
+        f"{organization.id}:{normalized_phone}",
+        settings.public_intake_phone_limit,
+        settings.public_intake_window_minutes,
+    )
+
     student, contact = crm.create_intake(db, organization, data)
     return IntakeResult(student_id=student.id, contact_id=contact.id, crm_status=student.crm_status)
 
