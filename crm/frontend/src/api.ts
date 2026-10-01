@@ -341,3 +341,54 @@ export async function acceptInvite(input: {
   saveSession(session);
   return session;
 }
+
+
+export type ApiGroupSchedule = {
+  id: string;
+  organization_id: string;
+  group_id: string;
+  weekday: number;
+  start_time: string;
+  duration_minutes: number;
+  is_active: boolean;
+};
+
+export type ApiLessonSession = {
+  id: string;
+  organization_id: string;
+  group_id: string;
+  location_id: string | null;
+  starts_at: string;
+  duration_minutes: number;
+  topic: string | null;
+  notes: string | null;
+  status: "scheduled" | "completed" | "cancelled";
+};
+
+export type ApiAttendance = {
+  id: string;
+  organization_id: string;
+  session_id: string;
+  student_id: string;
+  status: "present" | "absent" | "late" | "excused";
+  note: string | null;
+};
+
+export type TeachingBundle = {
+  schedules: ApiGroupSchedule[];
+  lessons: ApiLessonSession[];
+};
+
+export async function loadTeaching(session: Session): Promise<TeachingBundle> {
+  const membership = session.user.memberships.find((item) => item.organization_id === session.organizationId);
+  if (membership?.role === "accountant") return { schedules: [], lessons: [] };
+  const [schedules, lessons] = await Promise.all([
+    apiGet<ApiGroupSchedule[]>("/group-schedules", session),
+    apiGet<ApiLessonSession[]>("/lesson-sessions", session),
+  ]);
+  return { schedules, lessons };
+}
+
+export function loadAttendance(sessionId: string, session: Session) {
+  return apiGet<ApiAttendance[]>(`/lesson-sessions/${sessionId}/attendance`, session);
+}
