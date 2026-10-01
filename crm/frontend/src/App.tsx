@@ -731,6 +731,9 @@ function App() {
   const currentMembership = session?.user.memberships.find((item) => item.organization_id === session.organizationId);
   const navigation = visibleNavigation(currentMembership?.role);
   const canManageRecurringSchedule = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
+  const canManageLeads = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
+  const canManageStudents = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
+  const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
 
   return (
     <div className="shell">
@@ -751,7 +754,7 @@ function App() {
               <span>{roleLabel(currentMembership?.role)}</span>
             </div>}
             <button className="search">⌕ Пошук</button>
-            <button className="primary" onClick={() => setActive("Заявки")}>+ Нова заявка</button>
+            {canManageLeads && <button className="primary" onClick={() => setActive("Заявки")}>+ Нова заявка</button>}
             {session && <button className="search" onClick={() => { clearSession(); setSession(null); }}>Вийти</button>}
           </div>
         </header>
@@ -960,7 +963,7 @@ function App() {
         {active === "Локації" && <section className="locationsLayout">
           <div className="panelHead locationsHead">
             <div><p className="eyebrow">Мережа</p><h2>Локації школи</h2></div>
-            <button className="primary" onClick={() => setShowLocationForm(true)}>+ Додати локацію</button>
+            {canManageLocations && <button className="primary" onClick={() => setShowLocationForm(true)}>+ Додати локацію</button>}
           </div>
           <div className="locationCards">
             {locations.map((location) => {
@@ -1175,21 +1178,23 @@ function App() {
           </div>
           <div className="contactCard"><span>Контакт</span><b>{selectedStudent.parent}</b><a href={"tel:" + selectedStudent.phone.replace(/\s/g, "")}>{selectedStudent.phone}</a></div>
 
-          <div className="studentSection">
-            <h3>Статус учня</h3>
-            <div className="segmented">
-              {(["Активний","Пауза","Архів"] as const).map((state) => <button className={(studentStates[selectedStudent.id] ?? "Активний") === state ? "active" : ""} onClick={() => setStudentLifecycle(selectedStudent.id, state)} key={state}>{state}</button>)}
+          {canManageStudents && <>
+            <div className="studentSection">
+              <h3>Статус учня</h3>
+              <div className="segmented">
+                {(["Активний","Пауза","Архів"] as const).map((state) => <button className={(studentStates[selectedStudent.id] ?? "Активний") === state ? "active" : ""} onClick={() => setStudentLifecycle(selectedStudent.id, state)} key={state}>{state}</button>)}
+              </div>
             </div>
-          </div>
 
-          <div className="studentSection">
-            <h3>Перевести в іншу групу</h3>
-            <select className="transferSelect" value={transferGroupId ?? ""} onChange={(e) => setTransferGroupId(e.target.value || null)}>
-              <option value="">Оберіть групу</option>
-              {groups.map((group) => <option value={group.id} key={group.id}>{group.name} · {group.members.length}/{group.capacity}</option>)}
-            </select>
-            <button className="primary full" disabled={transferGroupId === null || transferGroupId === studentGroup(selectedStudent.id)?.id} onClick={transferStudent}>Перевести учня</button>
-          </div>
+            <div className="studentSection">
+              <h3>Перевести в іншу групу</h3>
+              <select className="transferSelect" value={transferGroupId ?? ""} onChange={(e) => setTransferGroupId(e.target.value || null)}>
+                <option value="">Оберіть групу</option>
+                {groups.map((group) => <option value={group.id} key={group.id}>{group.name} · {group.members.length}/{group.capacity}</option>)}
+              </select>
+              <button className="primary full" disabled={transferGroupId === null || transferGroupId === studentGroup(selectedStudent.id)?.id} onClick={transferStudent}>Перевести учня</button>
+            </div>
+          </>}
 
           <div className="history">
             <h3>Історія учня</h3>
