@@ -106,6 +106,9 @@ function App() {
   const [entityEvents, setEntityEvents] = useState<ApiAuditEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [active, setActive] = useState("Дашборд");
+  const [leadFilter, setLeadFilter] = useState<"all" | "new" | "trial" | "waiting">("all");
+  const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
+  const [candidateFilter, setCandidateFilter] = useState<"all" | "8-10" | "11-13" | "beginner">("all");
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showLeadForm, setShowLeadForm] = useState(false);
@@ -276,6 +279,28 @@ function App() {
     .filter((lead) => lead.trialAt && lead.status === "Пробне заплановано")
     .sort((a, b) => new Date(a.trialAt ?? 0).getTime() - new Date(b.trialAt ?? 0).getTime())
     .slice(0, 5), [leads]);
+
+  const visibleLeads = useMemo(() => {
+    if (leadFilter === "new") return leads.filter((item) => item.status === "Нова");
+    if (leadFilter === "trial") return leads.filter((item) => item.status === "Пробне заплановано");
+    if (leadFilter === "waiting") return leads.filter((item) => item.status === "Очікує групу");
+    return leads;
+  }, [leads, leadFilter]);
+
+  const visibleStudents = useMemo(() => activeStudents.filter((item) => {
+    const state = studentStates[item.id] ?? "Активний";
+    if (studentFilter === "active") return state === "Активний";
+    if (studentFilter === "paused") return state === "Пауза";
+    if (studentFilter === "archived") return state === "Архів";
+    return true;
+  }), [activeStudents, studentStates, studentFilter]);
+
+  const visibleWaiting = useMemo(() => waiting.filter((item) => {
+    if (candidateFilter === "8-10") return item.age >= 8 && item.age <= 10;
+    if (candidateFilter === "11-13") return item.age >= 11 && item.age <= 13;
+    if (candidateFilter === "beginner") return item.recommendedLevel === "Початковий";
+    return true;
+  }), [waiting, candidateFilter]);
 
   const createManualLead = async () => {
     if (!leadChildName.trim() || !leadContactName.trim() || !leadPhone.trim()) return;
@@ -908,21 +933,31 @@ function App() {
         {active === "Заявки" && <section className="panel leadsPage">
           <div className="panelHead">
             <div><p className="eyebrow">Воронка</p><h2>Заявки та пробні</h2></div>
-            <div className="filters"><button className="chip active">Усі</button><button className="chip">Нові</button><button className="chip">Пробні</button><button className="chip">Очікують групу</button></div>
+            <div className="filters">
+              <button className={"chip " + (leadFilter === "all" ? "active" : "")} onClick={() => setLeadFilter("all")}>Усі</button>
+              <button className={"chip " + (leadFilter === "new" ? "active" : "")} onClick={() => setLeadFilter("new")}>Нові</button>
+              <button className={"chip " + (leadFilter === "trial" ? "active" : "")} onClick={() => setLeadFilter("trial")}>Пробні</button>
+              <button className={"chip " + (leadFilter === "waiting" ? "active" : "")} onClick={() => setLeadFilter("waiting")}>Очікують групу</button>
+            </div>
           </div>
-          <LeadTable leads={leads} onOpen={openLead} />
+          <LeadTable leads={visibleLeads} onOpen={openLead} />
         </section>}
 
         {active === "Учні" && <section className="studentsLayout">
           <article className="panel studentsPanel">
             <div className="panelHead">
               <div><p className="eyebrow">База учнів</p><h2>Активні учні</h2></div>
-              <div className="filters"><button className="chip active">Усі</button><button className="chip">Активні</button><button className="chip">Пауза</button></div>
+              <div className="filters">
+                <button className={"chip " + (studentFilter === "all" ? "active" : "")} onClick={() => setStudentFilter("all")}>Усі</button>
+                <button className={"chip " + (studentFilter === "active" ? "active" : "")} onClick={() => setStudentFilter("active")}>Активні</button>
+                <button className={"chip " + (studentFilter === "paused" ? "active" : "")} onClick={() => setStudentFilter("paused")}>Пауза</button>
+                <button className={"chip " + (studentFilter === "archived" ? "active" : "")} onClick={() => setStudentFilter("archived")}>Архів</button>
+              </div>
             </div>
             <div className="studentTable">
               <div className="studentRow studentHead"><span>Учень</span><span>Група</span><span>Контакт</span><span>Статус</span></div>
-              {activeStudents.length === 0 && <div className="emptyState">Після формування груп тут з’являться активні учні.</div>}
-              {activeStudents.map((student) => {
+              {visibleStudents.length === 0 && <div className="emptyState">За цим фільтром учнів немає.</div>}
+              {visibleStudents.map((student) => {
                 const group = studentGroup(student.id);
                 const state = studentStates[student.id] ?? "Активний";
                 return <button className="studentRow studentButton" key={student.id} onClick={() => { setSelectedStudentId(student.id); setTransferGroupId(group?.id ?? null); }}>
@@ -1154,10 +1189,15 @@ function App() {
                 {active === "Групи" && <section className="groupsLayout">
           <article className="panel">
             <div className="panelHead"><div><p className="eyebrow">Waiting list</p><h2>Очікують групу</h2></div><span className="counter">{waiting.length}</span></div>
-            <div className="candidateFilters"><button className="chip active">Усі</button><button className="chip">8–10 років</button><button className="chip">11–13 років</button><button className="chip">Початковий</button></div>
+            <div className="candidateFilters">
+              <button className={"chip " + (candidateFilter === "all" ? "active" : "")} onClick={() => setCandidateFilter("all")}>Усі</button>
+              <button className={"chip " + (candidateFilter === "8-10" ? "active" : "")} onClick={() => setCandidateFilter("8-10")}>8–10 років</button>
+              <button className={"chip " + (candidateFilter === "11-13" ? "active" : "")} onClick={() => setCandidateFilter("11-13")}>11–13 років</button>
+              <button className={"chip " + (candidateFilter === "beginner" ? "active" : "")} onClick={() => setCandidateFilter("beginner")}>Початковий</button>
+            </div>
             <div className="candidateList">
-              {waiting.length === 0 && <div className="emptyState">Усі кандидати вже розподілені по групах.</div>}
-              {waiting.map((lead) => <label className={"candidate " + (selectedCandidates.includes(lead.id) ? "selected" : "")} key={lead.id}>
+              {visibleWaiting.length === 0 && <div className="emptyState">За цим фільтром кандидатів немає.</div>}
+              {visibleWaiting.map((lead) => <label className={"candidate " + (selectedCandidates.includes(lead.id) ? "selected" : "")} key={lead.id}>
                 <input type="checkbox" checked={selectedCandidates.includes(lead.id)} onChange={() => toggleCandidate(lead.id)} />
                 <span className="candidateAvatar">{lead.child[0]}</span>
                 <span className="candidateMain"><b>{lead.child}</b><small>{lead.age} років · {lead.recommendedLevel ?? "Рівень не вказано"}</small></span>
