@@ -9,6 +9,11 @@ on:
   pull_request:
     paths:
       - "crm/**"
+      - ".github/workflows/crm-ci.yml"
+
+concurrency:
+  group: crm-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend-tests:
@@ -25,3 +30,18 @@ jobs:
           cache-dependency-path: crm/backend/requirements.txt
       - run: pip install -r requirements.txt
       - run: pytest -q
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crm/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: crm/frontend/package.json
+      - run: npm install
+      - run: npm run build
