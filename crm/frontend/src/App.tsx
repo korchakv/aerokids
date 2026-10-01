@@ -55,6 +55,26 @@ type PaymentDemo = {
   method?: "Картка" | "Готівка" | "Переказ";
 };
 
+type LocationDemo = {
+  id: number;
+  name: string;
+  address: string;
+  isActive: boolean;
+};
+
+type StaffRoleDemo = "Власник" | "Адміністратор" | "Менеджер" | "Викладач" | "Бухгалтер";
+
+type StaffDemo = {
+  id: number;
+  fullName: string;
+  role: StaffRoleDemo;
+  email: string;
+  phone: string;
+  locationIds: number[];
+  groupIds: number[];
+  isActive: boolean;
+};
+
 const nav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти"];
 
 const initialLeads: Lead[] = [
@@ -97,6 +117,22 @@ function App() {
   const [paymentStudentId, setPaymentStudentId] = useState(8);
   const [paymentPlanId, setPaymentPlanId] = useState(1);
   const [paymentDueDate, setPaymentDueDate] = useState("2026-10-31");
+  const [locations, setLocations] = useState<LocationDemo[]>([
+    { id: 1, name: "Основна локація", address: "Івано-Франківськ", isActive: true },
+  ]);
+  const [staff, setStaff] = useState<StaffDemo[]>([
+    { id: 1, fullName: "Іван Викладач", role: "Викладач", email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: [1], groupIds: [1], isActive: true },
+    { id: 2, fullName: "Адміністратор AeroKiDS", role: "Адміністратор", email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: [1], groupIds: [], isActive: true },
+  ]);
+  const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null);
+  const [showStaffForm, setShowStaffForm] = useState(false);
+  const [showLocationForm, setShowLocationForm] = useState(false);
+  const [staffName, setStaffName] = useState("");
+  const [staffRole, setStaffRole] = useState<StaffRoleDemo>("Викладач");
+  const [staffEmail, setStaffEmail] = useState("");
+  const [staffPhone, setStaffPhone] = useState("");
+  const [locationName, setLocationName] = useState("");
+  const [locationAddress, setLocationAddress] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [studentStates, setStudentStates] = useState<Record<number, "Активний" | "Пауза" | "Архів">>({});
@@ -256,6 +292,59 @@ function App() {
     paid: payments.filter((x) => x.status === "paid").reduce((sum, x) => sum + x.amount, 0),
     pending: payments.filter((x) => x.status === "pending").reduce((sum, x) => sum + x.amount, 0),
     overdue: payments.filter((x) => x.status === "overdue").reduce((sum, x) => sum + x.amount, 0),
+  };
+
+  const selectedStaff = staff.find((item) => item.id === selectedStaffId) ?? null;
+
+  const createStaffMember = () => {
+    if (!staffName.trim()) return;
+    const nextId = Math.max(0, ...staff.map((item) => item.id)) + 1;
+    setStaff((items) => [...items, {
+      id: nextId,
+      fullName: staffName.trim(),
+      role: staffRole,
+      email: staffEmail.trim(),
+      phone: staffPhone.trim(),
+      locationIds: locations[0] ? [locations[0].id] : [],
+      groupIds: [],
+      isActive: true,
+    }]);
+    setStaffName("");
+    setStaffEmail("");
+    setStaffPhone("");
+    setShowStaffForm(false);
+  };
+
+  const createLocationDemo = () => {
+    if (!locationName.trim()) return;
+    const nextId = Math.max(0, ...locations.map((item) => item.id)) + 1;
+    setLocations((items) => [...items, {
+      id: nextId,
+      name: locationName.trim(),
+      address: locationAddress.trim(),
+      isActive: true,
+    }]);
+    setLocationName("");
+    setLocationAddress("");
+    setShowLocationForm(false);
+  };
+
+  const toggleStaffLocation = (staffId: number, locationId: number) => {
+    setStaff((items) => items.map((item) => item.id !== staffId ? item : {
+      ...item,
+      locationIds: item.locationIds.includes(locationId)
+        ? item.locationIds.filter((id) => id !== locationId)
+        : [...item.locationIds, locationId],
+    }));
+  };
+
+  const toggleStaffGroup = (staffId: number, groupId: number) => {
+    setStaff((items) => items.map((item) => item.id !== staffId ? item : {
+      ...item,
+      groupIds: item.groupIds.includes(groupId)
+        ? item.groupIds.filter((id) => id !== groupId)
+        : [...item.groupIds, groupId],
+    }));
   };
 
   return (
@@ -433,7 +522,52 @@ function App() {
           </aside>
         </section>}
 
-        {active === "Групи" && <section className="groupsLayout">
+        {active === "Працівники" && <section className="staffLayout">
+          <article className="panel staffPanel">
+            <div className="panelHead">
+              <div><p className="eyebrow">Команда</p><h2>Працівники</h2></div>
+              <button className="primary" onClick={() => setShowStaffForm(true)}>+ Додати працівника</button>
+            </div>
+            <div className="staffTable">
+              <div className="staffRow staffHead"><span>Працівник</span><span>Роль</span><span>Локації</span><span>Групи</span><span>Статус</span></div>
+              {staff.map((member) => <button className="staffRow staffButton" key={member.id} onClick={() => setSelectedStaffId(member.id)}>
+                <span className="staffIdentity"><i>{member.fullName[0]}</i><b>{member.fullName}<small>{member.email || member.phone || "Контакти не вказано"}</small></b></span>
+                <span>{member.role}</span>
+                <span>{member.locationIds.map((id) => locations.find((loc) => loc.id === id)?.name).filter(Boolean).join(", ") || "—"}</span>
+                <span>{member.groupIds.length}</span>
+                <span className={"staffStatus " + (member.isActive ? "active" : "inactive")}>{member.isActive ? "Активний" : "Неактивний"}</span>
+              </button>)}
+            </div>
+          </article>
+          <aside className="panel staffSummary">
+            <p className="eyebrow">Команда</p><h2>{staff.filter((x) => x.isActive).length} активних</h2>
+            <div className="summaryMetric"><span>Викладачі</span><strong>{staff.filter((x) => x.role === "Викладач" && x.isActive).length}</strong></div>
+            <div className="summaryMetric"><span>Адміністрація</span><strong>{staff.filter((x) => ["Власник","Адміністратор","Менеджер"].includes(x.role) && x.isActive).length}</strong></div>
+            <div className="summaryMetric"><span>Локацій</span><strong>{locations.filter((x) => x.isActive).length}</strong></div>
+          </aside>
+        </section>}
+
+        {active === "Локації" && <section className="locationsLayout">
+          <div className="panelHead locationsHead">
+            <div><p className="eyebrow">Мережа</p><h2>Локації школи</h2></div>
+            <button className="primary" onClick={() => setShowLocationForm(true)}>+ Додати локацію</button>
+          </div>
+          <div className="locationCards">
+            {locations.map((location) => {
+              const locationStaff = staff.filter((member) => member.locationIds.includes(location.id) && member.isActive);
+              const locationGroups = groups.filter((group) => group.location === location.name);
+              return <article className="panel locationCard" key={location.id}>
+                <div className="locationTop"><span className="locationIcon">⌂</span><span className={"staffStatus " + (location.isActive ? "active" : "inactive")}>{location.isActive ? "Активна" : "Неактивна"}</span></div>
+                <h2>{location.name}</h2>
+                <p>{location.address || "Адресу ще не вказано"}</p>
+                <div className="locationMetrics"><span><b>{locationStaff.length}</b> працівників</span><span><b>{locationGroups.length}</b> груп</span></div>
+                <div className="locationPeople">{locationStaff.slice(0,4).map((member) => <i title={member.fullName} key={member.id}>{member.fullName[0]}</i>)}</div>
+              </article>;
+            })}
+          </div>
+        </section>}
+
+                {active === "Групи" && <section className="groupsLayout">
           <article className="panel">
             <div className="panelHead"><div><p className="eyebrow">Waiting list</p><h2>Очікують групу</h2></div><span className="counter">{waiting.length}</span></div>
             <div className="candidateFilters"><button className="chip active">Усі</button><button className="chip">8–10 років</button><button className="chip">11–13 років</button><button className="chip">Початковий</button></div>
@@ -471,14 +605,47 @@ function App() {
           </div>
         </section>}
 
-        {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && active !== "Розклад" && active !== "Відвідування" && active !== "Оплати" && <section className="panel placeholder">
+        {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && active !== "Розклад" && active !== "Відвідування" && active !== "Оплати" && active !== "Працівники" && active !== "Локації" && <section className="panel placeholder">
           <p className="eyebrow">Наступний модуль</p>
           <h2>{active}</h2>
           <p>Каркас модуля вже передбачений у навігації. Реалізуємо після завершення наскрізного сценарію «заявка → пробне → група → учень».</p>
         </section>}
       </main>
 
-      {showPaymentForm && <div className="modalBackdrop" onClick={() => setShowPaymentForm(false)}>
+      {showStaffForm && <div className="modalBackdrop" onClick={() => setShowStaffForm(false)}>
+        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => setShowStaffForm(false)}>×</button>
+          <p className="eyebrow">Команда</p><h2>Новий працівник</h2>
+          <label>Ім’я та прізвище<input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="Іван Петренко" /></label>
+          <label>Роль<select value={staffRole} onChange={(e) => setStaffRole(e.target.value as StaffRoleDemo)}>{["Власник","Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+          <div className="formTwo"><label>Email<input type="email" value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} /></label><label>Телефон<input value={staffPhone} onChange={(e) => setStaffPhone(e.target.value)} /></label></div>
+          <button className="primary full" disabled={!staffName.trim()} onClick={createStaffMember}>Додати працівника</button>
+        </div>
+      </div>}
+
+      {showLocationForm && <div className="modalBackdrop" onClick={() => setShowLocationForm(false)}>
+        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => setShowLocationForm(false)}>×</button>
+          <p className="eyebrow">Мережа</p><h2>Нова локація</h2>
+          <label>Назва<input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="AeroKiDS Центр" /></label>
+          <label>Адреса<input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="Івано-Франківськ" /></label>
+          <button className="primary full" disabled={!locationName.trim()} onClick={createLocationDemo}>Створити локацію</button>
+        </div>
+      </div>}
+
+      {selectedStaff && <div className="drawerBackdrop" onClick={() => setSelectedStaffId(null)}>
+        <aside className="drawer studentDrawer" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => setSelectedStaffId(null)}>×</button>
+          <p className="eyebrow">Працівник</p>
+          <div className="studentHero"><span>{selectedStaff.fullName[0]}</span><div><h2>{selectedStaff.fullName}</h2><p>{selectedStaff.role}</p></div></div>
+          <div className="contactCard"><span>Контакти</span><b>{selectedStaff.email || "Email не вказано"}</b><a href={"tel:" + selectedStaff.phone.replace(/\s/g,"")}>{selectedStaff.phone || "Телефон не вказано"}</a></div>
+          <div className="studentSection"><h3>Локації</h3><div className="assignmentList">{locations.map((location) => <label key={location.id}><input type="checkbox" checked={selectedStaff.locationIds.includes(location.id)} onChange={() => toggleStaffLocation(selectedStaff.id, location.id)} /><span>{location.name}<small>{location.address}</small></span></label>)}</div></div>
+          <div className="studentSection"><h3>Групи</h3><div className="assignmentList">{groups.map((group) => <label key={group.id}><input type="checkbox" checked={selectedStaff.groupIds.includes(group.id)} onChange={() => toggleStaffGroup(selectedStaff.id, group.id)} /><span>{group.name}<small>{group.schedule}</small></span></label>)}</div></div>
+          <div className="studentSection"><h3>Статус</h3><button className="search full" onClick={() => setStaff((items) => items.map((item) => item.id === selectedStaff.id ? {...item,isActive:!item.isActive} : item))}>{selectedStaff.isActive ? "Деактивувати працівника" : "Активувати працівника"}</button></div>
+        </aside>
+      </div>}
+
+            {showPaymentForm && <div className="modalBackdrop" onClick={() => setShowPaymentForm(false)}>
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
           <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
