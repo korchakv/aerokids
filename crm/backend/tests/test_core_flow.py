@@ -553,3 +553,49 @@ def test_same_user_can_have_memberships_in_multiple_organizations(client):
     assert mb.status_code == 201, mb.text
     assert ma.json()["user_id"] == mb.json()["user_id"]
     assert ma.json()["organization_id"] != mb.json()["organization_id"]
+
+
+def test_overview_report_is_tenant_scoped(client):
+    org_a = create_org(client, "School A", "report-a")
+    org_b = create_org(client, "School B", "report-b")
+    a_headers = {"X-Organization-Id": org_a["id"]}
+    b_headers = {"X-Organization-Id": org_b["id"]}
+
+    student_a = client.post("/students", headers=a_headers, json={"first_name": "A"}).json()
+    client.patch(
+        f"/students/{student_a['id']}/crm-status",
+        headers=a_headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    formed = client.post(
+        "/groups/form",
+        headers=a_headers,
+        json={"name": "A Group", "capacity": 8, "student_ids": [student_a["id"]]},
+    )
+    assert formed.status_code == 201, formed.text
+
+    client.post("/locations", headers=a_headers, json={"name": "A Location"})
+    client.post("/staff", headers=a_headers, json={"full_name": "Teacher A", "role": "teacher"})
+
+    student_b = client.post("/students", headers=b_headers, json={"first_name": "B"}).json()
+    client.post(
+        "/payments",
+        headers=b_headers,
+        json={"student_id": student_b["id"], "amount_minor": 99900},
+    )
+
+    report_a = client.get("/reports/overview", headers=a_headers)
+    assert report_a.status_code == 200, report_a.text
+    body_a = report_a.json()
+    assert body_a["active_students"] == 1
+    assert body_a["active_groups"] == 1
+    assert body_a["enrolled_students"] == 1
+    assert body_a["group_capacity"] == 8
+    assert body_a["active_staff"] == 1
+    assert body_a["active_locations"] == 1
+    assert body_a["payments"]["pending_minor"] == 0
+
+    report_b = client.get("/reports/overview", headers=b_headers)
+    assert report_b.status_code == 200
+    assert report_b.json()["payments"]["pending_minor"] == 99900
+    assert report_b.json()["active_students"] == 0
