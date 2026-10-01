@@ -1458,3 +1458,9 @@ def test_public_intake_rate_limits_repeated_phone(client):
 
     blocked = client.post("/public/intake/rate-limit-school", json=payload)
     assert blocked.status_code == 429
+
+
+def test_readiness_checks_database(client):
+    response = client.get("/ready")
+    assert response.status_code == 200, response.text
+    assert response.json() == {"status": "ready", "database": "ok"}
