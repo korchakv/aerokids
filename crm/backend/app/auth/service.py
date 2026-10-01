@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.schemas import AuthMembershipInfo, AuthUserInfo, BootstrapOwnerCreate
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models.core import Organization, OrganizationInvitation, OrganizationMembership, Staff, StaffRole, User
+from app.models.core import Organization, OrganizationInvitation, OrganizationMembership, PasswordResetToken, Staff, StaffRole, User
 
 
 def normalize_email(email: str) -> str:
@@ -188,6 +188,87 @@ def accept_invitation(db: Session, raw_token: str, full_name: str, password: str
         staff.is_active = True
 
     invitation.accepted_at = now
+    db.commit()
+    db.refresh(user)
+    return user, create_access_token(user.id), auth_user_info(db, user)
+
+
+
+def create_password_reset_link(
+    db: Session,
+    org_id: UUID,
+    requested_by_user_id: UUID,
+    requester_role: StaffRole,
+    email: str,
+):
+    normalized = normalize_email(email)
+    user = db.scalar(select(User).where(User.email == normalized, User.is_active.is_(True)))
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    membership = db.scalar(select(OrganizationMembership).where(
+        OrganizationMembership.organization_id == org_id,
+        OrganizationMembership.user_id == user.id,
+        OrganizationMembership.is_active.is_(True),
+    ))
+    if membership is None:
+        raise HTTPException(status_code=404, detail="User is not a member of this organization")
+    if membership.role == StaffRole.OWNER and requester_role != StaffRole.OWNER:
+        raise HTTPException(status_code=403, detail="Only an owner can reset another owner's password")
+
+    now = datetime.now(timezone.utc)
+    active_tokens = list(db.scalars(select(PasswordResetToken).where(
+        PasswordResetToken.organization_id == org_id,
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+    )))
+    for item in active_tokens:
+        item.used_at = now
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    expires_at = now + timedelta(hours=1)
+    reset = PasswordResetToken(
+        user_id=user.id,
+        organization_id=org_id,
+        token_hash=token_hash,
+        created_by_user_id=requested_by_user_id,
+        expires_at=expires_at,
+    )
+    db.add(reset)
+    db.commit()
+    db.refresh(reset)
+    return user, reset, raw_token
+
+
+def complete_password_reset(db: Session, raw_token: str, password: str):
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    reset = db.scalar(select(PasswordResetToken).where(
+        PasswordResetToken.token_hash == token_hash,
+        PasswordResetToken.used_at.is_(None),
+    ))
+    now = datetime.now(timezone.utc)
+    if reset is None:
+        raise HTTPException(status_code=400, detail="Reset link is invalid or already used")
+
+    expires_at = reset.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < now:
+        raise HTTPException(status_code=400, detail="Reset link is invalid or expired")
+
+    user = get_user(db, reset.user_id)
+    user.password_hash = hash_password(password)
+    reset.used_at = now
+
+    other_tokens = list(db.scalars(select(PasswordResetToken).where(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+        PasswordResetToken.id != reset.id,
+    )))
+    for item in other_tokens:
+        item.used_at = now
+
     db.commit()
     db.refresh(user)
     return user, create_access_token(user.id), auth_user_info(db, user)
