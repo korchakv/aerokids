@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Contact, Enrollment, Group, Location, Organization, Student, StudentContact, TrialLesson
+from app.models.core import Contact, CrmStatus, Enrollment, Group, Location, Organization, Student, StudentContact, TrialLesson
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 
 
@@ -209,9 +209,9 @@ def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommende
     trial.teacher_notes = teacher_notes
     student = scoped_get(db, Student, org_id, trial.student_id)
     if status.value == "completed":
-        student.crm_status = "WAITING_FOR_GROUP"
+        student.crm_status = CrmStatus.WAITING_FOR_GROUP
     elif status.value == "no_show":
-        student.crm_status = "CONTACTED"
+        student.crm_status = CrmStatus.CONTACTED
     db.commit()
     db.refresh(trial)
     return trial
