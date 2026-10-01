@@ -30,6 +30,10 @@ jobs:
           cache-dependency-path: crm/backend/requirements.txt
       - run: pip install -r requirements.txt
       - run: pytest -q
+      - name: Verify Alembic migrations
+        env:
+          DATABASE_URL: sqlite:///./migration-ci.db
+        run: alembic upgrade head
 
   frontend-build:
     runs-on: ubuntu-latest
