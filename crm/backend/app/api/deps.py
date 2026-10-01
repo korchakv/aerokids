@@ -91,3 +91,12 @@ def require_org_roles(*roles: StaffRole) -> Callable:
         return access.organization_id
 
     return dependency
+
+
+def require_org_access_roles(*roles: StaffRole) -> Callable:
+    def dependency(access: OrgAccess = Depends(get_org_access)) -> OrgAccess:
+        if access.role not in roles:
+            raise HTTPException(status_code=403, detail="Insufficient role for this action")
+        return access
+
+    return dependency
