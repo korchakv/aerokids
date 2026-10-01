@@ -114,6 +114,7 @@ export type WorkspaceLead = {
   last_name: string | null;
   age: number | null;
   source: string | null;
+  comment: string | null;
   crm_status: "new" | "contacted" | "trial_scheduled" | "trial_completed" | "waiting_for_group" | "enrolled" | "no_response" | "declined" | "not_relevant";
   contact_name: string | null;
   contact_phone: string | null;
