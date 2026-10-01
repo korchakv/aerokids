@@ -392,3 +392,36 @@ export async function loadTeaching(session: Session): Promise<TeachingBundle> {
 export function loadAttendance(sessionId: string, session: Session) {
   return apiGet<ApiAttendance[]>(`/lesson-sessions/${sessionId}/attendance`, session);
 }
+
+
+export type OverviewReport = {
+  funnel: Array<{ status: WorkspaceLead["crm_status"]; count: number }>;
+  active_students: number;
+  active_groups: number;
+  enrolled_students: number;
+  group_capacity: number;
+  active_staff: number;
+  active_locations: number;
+  attendance: {
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    total: number;
+    attendance_rate: number;
+  };
+  payments: {
+    paid_minor: number;
+    pending_minor: number;
+    overdue_minor: number;
+    paid_count: number;
+    pending_count: number;
+    overdue_count: number;
+  };
+};
+
+export async function loadOverviewReport(session: Session): Promise<OverviewReport | null> {
+  const membership = session.user.memberships.find((item) => item.organization_id === session.organizationId);
+  if (membership?.role === "teacher") return null;
+  return apiGet<OverviewReport>("/reports/overview", session);
+}
