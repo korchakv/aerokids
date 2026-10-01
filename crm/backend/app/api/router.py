@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_org_id
 from app.models.core import Organization, PaymentStatus
-from app.schemas import AttendanceBulkUpdate, AttendanceRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentSummary, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
+from app.schemas import AttendanceBulkUpdate, AttendanceRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentSummary, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
 from app.services import crm
 
 router = APIRouter()
@@ -225,3 +225,52 @@ def mark_payment_paid(payment_id: UUID, data: PaymentMarkPaid, org_id: UUID = De
 @router.get("/payments-summary", response_model=PaymentSummary)
 def payments_summary(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
     return crm.payment_summary(db, org_id)
+
+
+@router.post("/staff", response_model=StaffRead, status_code=201)
+def create_staff(data: StaffCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.create_staff(db, org_id, data)
+
+
+@router.get("/staff", response_model=list[StaffRead])
+def staff(active_only: bool = True, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.list_staff(db, org_id, active_only)
+
+
+@router.patch("/staff/{staff_id}", response_model=StaffRead)
+def update_staff(staff_id: UUID, data: StaffUpdate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.update_staff(db, org_id, staff_id, data)
+
+
+@router.get("/staff/{staff_id}/profile", response_model=StaffProfile)
+def get_staff_profile(staff_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    item, location_ids, group_ids = crm.staff_profile(db, org_id, staff_id)
+    return StaffProfile(
+        **StaffRead.model_validate(item).model_dump(),
+        assignments=StaffAssignmentInfo(location_ids=location_ids, group_ids=group_ids),
+    )
+
+
+@router.put("/staff/{staff_id}/locations", response_model=StaffRead)
+def update_staff_locations(staff_id: UUID, data: StaffLocationAssignment, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.set_staff_locations(db, org_id, staff_id, data.location_ids)
+
+
+@router.post("/staff/{staff_id}/groups", status_code=201)
+def assign_staff_group(staff_id: UUID, data: StaffGroupAssignment, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    item = crm.assign_staff_to_group(db, org_id, staff_id, data.group_id, data.is_primary)
+    return {"id": str(item.id), "group_id": str(item.group_id), "is_primary": item.is_primary}
+
+
+@router.post("/organization-memberships", response_model=OrganizationMembershipRead, status_code=201)
+def create_organization_membership(data: OrganizationMembershipCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    membership, user = crm.create_membership(db, org_id, data)
+    return OrganizationMembershipRead(
+        id=membership.id,
+        organization_id=membership.organization_id,
+        user_id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=membership.role,
+        is_active=membership.is_active,
+    )
