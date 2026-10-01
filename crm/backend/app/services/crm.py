@@ -1029,3 +1029,17 @@ def ensure_group_access(db: Session, org_id: UUID, user_id: UUID | None, role: S
     if allowed is not None and group_id not in allowed:
         raise HTTPException(status_code=403, detail="No access to this group")
     return group
+
+
+def remove_staff_from_group(db: Session, org_id: UUID, staff_id: UUID, group_id: UUID) -> None:
+    scoped_get(db, Staff, org_id, staff_id)
+    scoped_get(db, Group, org_id, group_id)
+    item = db.scalar(select(GroupStaff).where(
+        GroupStaff.organization_id == org_id,
+        GroupStaff.staff_id == staff_id,
+        GroupStaff.group_id == group_id,
+    ))
+    if item is None:
+        return
+    db.delete(item)
+    db.commit()
