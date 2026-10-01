@@ -254,3 +254,93 @@ def test_archiving_student_finishes_active_enrollment(client):
 
     profile = client.get(f"/students/{student['id']}/profile", headers=headers).json()
     assert profile["groups"][0]["enrollment_status"] == "finished"
+
+
+def test_schedule_session_and_attendance_flow(client):
+    org = create_org(client, "AeroKiDS", "aerokids-attendance")
+    headers = {"X-Organization-Id": org["id"]}
+
+    student = client.post("/students", headers=headers, json={"first_name": "Максим", "age_at_inquiry": 9}).json()
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "FPV Start", "capacity": 8, "student_ids": [student["id"]]},
+    )
+    assert formed.status_code == 201, formed.text
+    group_id = formed.json()["group"]["id"]
+
+    schedule = client.post(
+        "/group-schedules",
+        headers=headers,
+        json={"group_id": group_id, "weekday": 0, "start_time": "17:00", "duration_minutes": 60},
+    )
+    assert schedule.status_code == 201, schedule.text
+    assert schedule.json()["weekday"] == 0
+
+    roster = client.get(f"/groups/{group_id}/roster", headers=headers)
+    assert roster.status_code == 200, roster.text
+    assert roster.json()[0]["first_name"] == "Максим"
+
+    session = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={
+            "group_id": group_id,
+            "starts_at": "2026-10-05T17:00:00+03:00",
+            "duration_minutes": 60,
+            "topic": "FPV simulator",
+        },
+    )
+    assert session.status_code == 201, session.text
+    session_id = session.json()["id"]
+
+    marked = client.put(
+        f"/lesson-sessions/{session_id}/attendance",
+        headers=headers,
+        json={"items": [{"student_id": student["id"], "status": "present"}]},
+    )
+    assert marked.status_code == 200, marked.text
+    assert marked.json()[0]["status"] == "present"
+
+    attendance = client.get(f"/lesson-sessions/{session_id}/attendance", headers=headers)
+    assert attendance.status_code == 200
+    assert attendance.json()[0]["student_id"] == student["id"]
+
+    sessions = client.get("/lesson-sessions", headers=headers)
+    assert sessions.status_code == 200
+    assert sessions.json()[0]["status"] == "completed"
+
+
+def test_attendance_rejects_student_from_another_group(client):
+    org = create_org(client, "AeroKiDS", "aerokids-attendance-scope")
+    headers = {"X-Organization-Id": org["id"]}
+
+    student_a = client.post("/students", headers=headers, json={"first_name": "A"}).json()
+    student_b = client.post("/students", headers=headers, json={"first_name": "B"}).json()
+    for student in (student_a, student_b):
+        client.patch(
+            f"/students/{student['id']}/crm-status",
+            headers=headers,
+            json={"crm_status": "waiting_for_group"},
+        )
+
+    group_a = client.post("/groups/form", headers=headers, json={"name": "A group", "capacity": 8, "student_ids": [student_a["id"]]}).json()["group"]
+    client.post("/groups/form", headers=headers, json={"name": "B group", "capacity": 8, "student_ids": [student_b["id"]]})
+
+    session = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={"group_id": group_a["id"], "starts_at": "2026-10-05T17:00:00+03:00"},
+    ).json()
+
+    response = client.put(
+        f"/lesson-sessions/{session['id']}/attendance",
+        headers=headers,
+        json={"items": [{"student_id": student_b["id"], "status": "present"}]},
+    )
+    assert response.status_code == 409
