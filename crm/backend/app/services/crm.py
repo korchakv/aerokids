@@ -903,6 +903,7 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             "crm_status": student.crm_status,
             "contact_name": contact.full_name if contact else None,
             "contact_phone": contact.phone if contact else None,
+            "latest_trial_id": trial.id if trial else None,
             "latest_trial_at": trial.starts_at if trial else None,
             "recommended_level": trial.recommended_level if trial else None,
         })
