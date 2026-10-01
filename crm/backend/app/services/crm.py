@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Attendance, AttendanceStatus, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, LessonSession, LessonStatus, Location, Organization, Payment, PaymentMethod, PaymentStatus, Student, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson
+from app.models.core import Attendance, AttendanceStatus, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, Staff, StaffLocation, StaffRole, Student, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 
 
@@ -607,3 +607,163 @@ def payment_summary(db: Session, org_id: UUID) -> dict:
         "pending_count": len(pending),
         "overdue_count": len(overdue),
     }
+
+
+def create_staff(db: Session, org_id: UUID, data) -> Staff:
+    require_organization(db, org_id)
+    if data.email:
+        existing = db.scalar(select(Staff).where(Staff.organization_id == org_id, Staff.email == data.email))
+        if existing:
+            raise HTTPException(status_code=409, detail="Staff email already exists in this organization")
+    locations = []
+    for location_id in data.location_ids:
+        locations.append(scoped_get(db, Location, org_id, location_id))
+    item = Staff(
+        organization_id=org_id,
+        full_name=data.full_name,
+        email=data.email,
+        phone=data.phone,
+        role=data.role,
+        notes=data.notes,
+    )
+    db.add(item)
+    db.flush()
+    for location in locations:
+        db.add(StaffLocation(
+            organization_id=org_id,
+            staff_id=item.id,
+            location_id=location.id,
+        ))
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def list_staff(db: Session, org_id: UUID, active_only: bool = True) -> list[Staff]:
+    stmt = select(Staff).where(Staff.organization_id == org_id)
+    if active_only:
+        stmt = stmt.where(Staff.is_active.is_(True))
+    return list(db.scalars(stmt.order_by(Staff.full_name)))
+
+
+def update_staff(db: Session, org_id: UUID, staff_id: UUID, data) -> Staff:
+    item = scoped_get(db, Staff, org_id, staff_id)
+    payload = data.model_dump(exclude_unset=True)
+    if "email" in payload and payload["email"]:
+        duplicate = db.scalar(select(Staff).where(
+            Staff.organization_id == org_id,
+            Staff.email == payload["email"],
+            Staff.id != staff_id,
+        ))
+        if duplicate:
+            raise HTTPException(status_code=409, detail="Staff email already exists in this organization")
+    for key, value in payload.items():
+        setattr(item, key, value)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def set_staff_locations(db: Session, org_id: UUID, staff_id: UUID, location_ids: list[UUID]) -> Staff:
+    item = scoped_get(db, Staff, org_id, staff_id)
+    unique_ids = list(dict.fromkeys(location_ids))
+    for location_id in unique_ids:
+        scoped_get(db, Location, org_id, location_id)
+
+    existing = list(db.scalars(select(StaffLocation).where(
+        StaffLocation.organization_id == org_id,
+        StaffLocation.staff_id == staff_id,
+    )))
+    for row in existing:
+        db.delete(row)
+    for location_id in unique_ids:
+        db.add(StaffLocation(
+            organization_id=org_id,
+            staff_id=staff_id,
+            location_id=location_id,
+        ))
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def assign_staff_to_group(db: Session, org_id: UUID, staff_id: UUID, group_id: UUID, is_primary: bool = False) -> GroupStaff:
+    staff = scoped_get(db, Staff, org_id, staff_id)
+    if not staff.is_active:
+        raise HTTPException(status_code=409, detail="Inactive staff member cannot be assigned")
+    scoped_get(db, Group, org_id, group_id)
+
+    existing = db.scalar(select(GroupStaff).where(
+        GroupStaff.organization_id == org_id,
+        GroupStaff.staff_id == staff_id,
+        GroupStaff.group_id == group_id,
+    ))
+    if existing:
+        existing.is_primary = is_primary
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    if is_primary:
+        primary_rows = list(db.scalars(select(GroupStaff).where(
+            GroupStaff.organization_id == org_id,
+            GroupStaff.group_id == group_id,
+            GroupStaff.is_primary.is_(True),
+        )))
+        for row in primary_rows:
+            row.is_primary = False
+
+    item = GroupStaff(
+        organization_id=org_id,
+        staff_id=staff_id,
+        group_id=group_id,
+        is_primary=is_primary,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def staff_profile(db: Session, org_id: UUID, staff_id: UUID):
+    item = scoped_get(db, Staff, org_id, staff_id)
+    location_ids = list(db.scalars(select(StaffLocation.location_id).where(
+        StaffLocation.organization_id == org_id,
+        StaffLocation.staff_id == staff_id,
+    )))
+    group_ids = list(db.scalars(select(GroupStaff.group_id).where(
+        GroupStaff.organization_id == org_id,
+        GroupStaff.staff_id == staff_id,
+    )))
+    return item, location_ids, group_ids
+
+
+def create_membership(db: Session, org_id: UUID, data):
+    require_organization(db, org_id)
+    normalized_email = data.email.strip().lower()
+    user = db.scalar(select(User).where(User.email == normalized_email))
+    if user is None:
+        user = User(email=normalized_email, full_name=data.full_name)
+        db.add(user)
+        db.flush()
+
+    existing = db.scalar(select(OrganizationMembership).where(
+        OrganizationMembership.organization_id == org_id,
+        OrganizationMembership.user_id == user.id,
+    ))
+    if existing:
+        existing.role = data.role
+        existing.is_active = True
+        db.commit()
+        db.refresh(existing)
+        return existing, user
+
+    membership = OrganizationMembership(
+        organization_id=org_id,
+        user_id=user.id,
+        role=data.role,
+    )
+    db.add(membership)
+    db.commit()
+    db.refresh(membership)
+    return membership, user
