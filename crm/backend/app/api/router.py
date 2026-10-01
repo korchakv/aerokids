@@ -4,9 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_org_id
-from app.models.core import Organization, PaymentStatus
+from app.api.deps import get_current_user, get_db, get_org_id, require_org_roles
+from app.models.core import Organization, PaymentStatus, StaffRole, User
 from app.schemas import AttendanceBulkUpdate, AttendanceRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OverviewReport, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentSummary, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
+from app.auth import service as auth_service
+from app.auth.schemas import AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, LoginCreate
+from app.core.security import auth_is_required
 from app.services import crm
 
 router = APIRouter()
@@ -17,18 +20,43 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.post("/auth/bootstrap", response_model=BootstrapOwnerResult, status_code=201)
+def auth_bootstrap(data: BootstrapOwnerCreate, db: Session = Depends(get_db)):
+    organization, user, token = auth_service.bootstrap_owner(db, data)
+    return BootstrapOwnerResult(
+        organization_id=organization.id,
+        user_id=user.id,
+        access_token=token,
+    )
+
+
+@router.post("/auth/login", response_model=AuthTokenResponse)
+def auth_login(data: LoginCreate, db: Session = Depends(get_db)):
+    token, user_info = auth_service.issue_login_token(db, data.email, data.password)
+    return AuthTokenResponse(access_token=token, user=user_info)
+
+
+@router.get("/auth/me", response_model=AuthUserInfo)
+def auth_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return auth_service.auth_user_info(db, user)
+
+
 @router.post("/organizations", response_model=OrganizationRead, status_code=201)
 def create_organization(data: OrganizationCreate, db: Session = Depends(get_db)):
+    if auth_is_required():
+        raise HTTPException(status_code=403, detail="Direct organization creation is disabled when authentication is required")
     return crm.create_organization(db, data)
 
 
 @router.get("/organizations", response_model=list[OrganizationRead])
 def organizations(db: Session = Depends(get_db)):
+    if auth_is_required():
+        raise HTTPException(status_code=403, detail="Use /auth/me to list your organizations")
     return crm.list_organizations(db)
 
 
 @router.post("/locations", response_model=LocationRead, status_code=201)
-def create_location(data: LocationCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_location(data: LocationCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
     return crm.create_location(db, org_id, data)
 
 
@@ -188,7 +216,7 @@ def attendance(session_id: UUID, org_id: UUID = Depends(get_org_id), db: Session
 
 
 @router.post("/subscription-plans", response_model=SubscriptionPlanRead, status_code=201)
-def create_subscription_plan(data: SubscriptionPlanCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_subscription_plan(data: SubscriptionPlanCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.create_subscription_plan(db, org_id, data)
 
 
@@ -198,7 +226,7 @@ def subscription_plans(org_id: UUID = Depends(get_org_id), db: Session = Depends
 
 
 @router.post("/student-subscriptions", response_model=StudentSubscriptionRead, status_code=201)
-def create_student_subscription(data: StudentSubscriptionCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_student_subscription(data: StudentSubscriptionCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.create_student_subscription(db, org_id, data)
 
 
@@ -208,7 +236,7 @@ def student_subscriptions(student_id: UUID | None = None, org_id: UUID = Depends
 
 
 @router.post("/payments", response_model=PaymentRead, status_code=201)
-def create_payment(data: PaymentCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_payment(data: PaymentCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.create_payment(db, org_id, data)
 
 
@@ -218,7 +246,7 @@ def payments(student_id: UUID | None = None, status: PaymentStatus | None = None
 
 
 @router.patch("/payments/{payment_id}/paid", response_model=PaymentRead)
-def mark_payment_paid(payment_id: UUID, data: PaymentMarkPaid, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def mark_payment_paid(payment_id: UUID, data: PaymentMarkPaid, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.mark_payment_paid(db, org_id, payment_id, data.method, data.paid_at)
 
 
@@ -228,22 +256,22 @@ def payments_summary(org_id: UUID = Depends(get_org_id), db: Session = Depends(g
 
 
 @router.post("/staff", response_model=StaffRead, status_code=201)
-def create_staff(data: StaffCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_staff(data: StaffCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
     return crm.create_staff(db, org_id, data)
 
 
 @router.get("/staff", response_model=list[StaffRead])
-def staff(active_only: bool = True, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def staff(active_only: bool = True, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
     return crm.list_staff(db, org_id, active_only)
 
 
 @router.patch("/staff/{staff_id}", response_model=StaffRead)
-def update_staff(staff_id: UUID, data: StaffUpdate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def update_staff(staff_id: UUID, data: StaffUpdate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
     return crm.update_staff(db, org_id, staff_id, data)
 
 
 @router.get("/staff/{staff_id}/profile", response_model=StaffProfile)
-def get_staff_profile(staff_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def get_staff_profile(staff_id: UUID, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
     item, location_ids, group_ids = crm.staff_profile(db, org_id, staff_id)
     return StaffProfile(
         **StaffRead.model_validate(item).model_dump(),
@@ -252,18 +280,18 @@ def get_staff_profile(staff_id: UUID, org_id: UUID = Depends(get_org_id), db: Se
 
 
 @router.put("/staff/{staff_id}/locations", response_model=StaffRead)
-def update_staff_locations(staff_id: UUID, data: StaffLocationAssignment, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def update_staff_locations(staff_id: UUID, data: StaffLocationAssignment, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
     return crm.set_staff_locations(db, org_id, staff_id, data.location_ids)
 
 
 @router.post("/staff/{staff_id}/groups", status_code=201)
-def assign_staff_group(staff_id: UUID, data: StaffGroupAssignment, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def assign_staff_group(staff_id: UUID, data: StaffGroupAssignment, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
     item = crm.assign_staff_to_group(db, org_id, staff_id, data.group_id, data.is_primary)
     return {"id": str(item.id), "group_id": str(item.group_id), "is_primary": item.is_primary}
 
 
 @router.post("/organization-memberships", response_model=OrganizationMembershipRead, status_code=201)
-def create_organization_membership(data: OrganizationMembershipCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_organization_membership(data: OrganizationMembershipCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER)), db: Session = Depends(get_db)):
     membership, user = crm.create_membership(db, org_id, data)
     return OrganizationMembershipRead(
         id=membership.id,
@@ -277,10 +305,10 @@ def create_organization_membership(data: OrganizationMembershipCreate, org_id: U
 
 
 @router.patch("/locations/{location_id}", response_model=LocationRead)
-def update_location(location_id: UUID, data: LocationUpdate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def update_location(location_id: UUID, data: LocationUpdate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
     return crm.update_location(db, org_id, location_id, data)
 
 
 @router.get("/reports/overview", response_model=OverviewReport)
-def report_overview(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def report_overview(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.overview_report(db, org_id)
