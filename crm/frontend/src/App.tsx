@@ -1774,6 +1774,7 @@ function AuditHistory({ title, events, loading }: { title: string; events: ApiAu
 function auditEventLabel(type: string) {
   const labels: Record<string, string> = {
     "lead.created": "Заявка створена",
+    "lead.duplicate_intake": "Повторна заявка",
     "student.crm_status_changed": "Статус заявки змінено",
     "trial.scheduled": "Пробне заплановано",
     "trial.rescheduled": "Пробне перенесено",
