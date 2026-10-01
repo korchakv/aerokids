@@ -16,6 +16,7 @@ type Lead = {
   comment?: string;
   trialId?: string;
   trialAt?: string;
+  trialLocationId?: string;
   trialLocation?: string;
   trialResult?: "scheduled" | "completed" | "no_show";
   recommendedLevel?: string;
@@ -331,8 +332,9 @@ function App() {
     setSelectedId(id);
     setTrialMode(null);
     const lead = leads.find((item) => item.id === id);
-    if (lead?.trialAt) setTrialAt(lead.trialAt);
+    if (lead?.trialAt) setTrialAt(toLocalDateTimeInput(lead.trialAt));
     if (lead?.trialLocation) setTrialLocation(lead.trialLocation);
+    if (lead?.trialLocationId) setTrialLocationId(lead.trialLocationId);
     if (lead?.recommendedLevel) setRecommendedLevel(lead.recommendedLevel);
     setTeacherNotes(lead?.teacherNotes ?? "");
   };
@@ -1458,6 +1460,8 @@ function applyWorkspace(
     status: crmStatusLabel(item.crm_status),
     trialId: item.latest_trial_id ?? undefined,
     trialAt: item.latest_trial_at ?? undefined,
+    trialLocationId: item.trial_location_id ?? undefined,
+    trialLocation: item.trial_location_name ?? undefined,
     recommendedLevel: item.recommended_level ?? undefined,
     trialResult: item.crm_status === "waiting_for_group" || item.crm_status === "enrolled" ? "completed" : item.latest_trial_at ? "scheduled" : undefined,
   }));
@@ -1711,6 +1715,12 @@ function roleLabel(role?: string) {
     accountant: "Бухгалтер",
   };
   return role ? labels[role] ?? role : "Demo";
+}
+
+function toLocalDateTimeInput(value: string) {
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function formatMoney(value: number) {
