@@ -294,6 +294,20 @@ function App() {
     overdue: payments.filter((x) => x.status === "overdue").reduce((sum, x) => sum + x.amount, 0),
   };
 
+  const attendanceValues = Object.values(attendance).flatMap((lesson) => Object.values(lesson));
+  const attendanceStats = {
+    present: attendanceValues.filter((x) => x === "present").length,
+    late: attendanceValues.filter((x) => x === "late").length,
+    absent: attendanceValues.filter((x) => x === "absent").length,
+    excused: attendanceValues.filter((x) => x === "excused").length,
+  };
+  const attendanceRate = attendanceValues.length
+    ? Math.round((attendanceStats.present + attendanceStats.late) / attendanceValues.length * 100)
+    : 0;
+  const totalCapacity = groups.reduce((sum, group) => sum + group.capacity, 0);
+  const occupiedSeats = groups.reduce((sum, group) => sum + group.members.length, 0);
+  const occupancy = totalCapacity ? Math.round(occupiedSeats / totalCapacity * 100) : 0;
+
   const selectedStaff = staff.find((item) => item.id === selectedStaffId) ?? null;
 
   const createStaffMember = () => {
@@ -567,6 +581,62 @@ function App() {
           </div>
         </section>}
 
+                {active === "Звіти" && <section className="reportsPage">
+          <section className="reportStats">
+            <article><span>Конверсія в учні</span><strong>{leads.length ? Math.round(activeStudents.length / leads.length * 100) : 0}%</strong><small>{activeStudents.length} з {leads.length} записів</small></article>
+            <article><span>Заповненість груп</span><strong>{occupancy}%</strong><small>{occupiedSeats} з {totalCapacity} місць</small></article>
+            <article><span>Відвідуваність</span><strong>{attendanceRate}%</strong><small>{attendanceValues.length} відміток</small></article>
+            <article><span>Сплачено</span><strong>{formatMoney(paymentTotals.paid)}</strong><small>зафіксовані платежі</small></article>
+          </section>
+
+          <section className="reportsGrid">
+            <article className="panel">
+              <div className="panelHead"><div><p className="eyebrow">Воронка</p><h2>Заявка → учень</h2></div></div>
+              <div className="funnelBars">
+                {[
+                  ["Нова", leads.filter((x) => x.status === "Нова").length],
+                  ["Пробне", leads.filter((x) => x.status === "Пробне заплановано").length],
+                  ["Очікує групу", waiting.length],
+                  ["Зарахований", activeStudents.length],
+                ].map(([label,count]) => {
+                  const numeric = Number(count);
+                  const max = Math.max(1, leads.length);
+                  return <div className="funnelBar" key={String(label)}><span><b>{label}</b><i>{numeric}</i></span><div><em style={{width: Math.max(4, numeric / max * 100) + "%"}} /></div></div>;
+                })}
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panelHead"><div><p className="eyebrow">Навчання</p><h2>Відвідування</h2></div><strong className="reportBig">{attendanceRate}%</strong></div>
+              <div className="attendanceSummary">
+                <span><i className="dot present"></i>Був <b>{attendanceStats.present}</b></span>
+                <span><i className="dot late"></i>Запізнився <b>{attendanceStats.late}</b></span>
+                <span><i className="dot absent"></i>Відсутній <b>{attendanceStats.absent}</b></span>
+                <span><i className="dot excused"></i>Поважна <b>{attendanceStats.excused}</b></span>
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати</h2></div></div>
+              <div className="financeRows">
+                <span><i>Сплачено</i><b>{formatMoney(paymentTotals.paid)}</b></span>
+                <span><i>Очікується</i><b>{formatMoney(paymentTotals.pending)}</b></span>
+                <span><i>Прострочено</i><b>{formatMoney(paymentTotals.overdue)}</b></span>
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panelHead"><div><p className="eyebrow">Масштаб</p><h2>Організація</h2></div></div>
+              <div className="organizationReport">
+                <span><strong>{locations.filter((x) => x.isActive).length}</strong><small>локацій</small></span>
+                <span><strong>{staff.filter((x) => x.isActive).length}</strong><small>працівників</small></span>
+                <span><strong>{groups.length}</strong><small>груп</small></span>
+                <span><strong>{activeStudents.length}</strong><small>учнів</small></span>
+              </div>
+            </article>
+          </section>
+        </section>}
+
                 {active === "Групи" && <section className="groupsLayout">
           <article className="panel">
             <div className="panelHead"><div><p className="eyebrow">Waiting list</p><h2>Очікують групу</h2></div><span className="counter">{waiting.length}</span></div>
@@ -605,7 +675,7 @@ function App() {
           </div>
         </section>}
 
-        {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && active !== "Розклад" && active !== "Відвідування" && active !== "Оплати" && active !== "Працівники" && active !== "Локації" && <section className="panel placeholder">
+        {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && active !== "Розклад" && active !== "Відвідування" && active !== "Оплати" && active !== "Працівники" && active !== "Локації" && active !== "Звіти" && <section className="panel placeholder">
           <p className="eyebrow">Наступний модуль</p>
           <h2>{active}</h2>
           <p>Каркас модуля вже передбачений у навігації. Реалізуємо після завершення наскрізного сценарію «заявка → пробне → група → учень».</p>
