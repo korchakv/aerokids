@@ -106,6 +106,13 @@ function App() {
   const [entityEvents, setEntityEvents] = useState<ApiAuditEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [active, setActive] = useState("Дашборд");
+  const [showLeadForm, setShowLeadForm] = useState(false);
+  const [leadChildName, setLeadChildName] = useState("");
+  const [leadAge, setLeadAge] = useState(9);
+  const [leadContactName, setLeadContactName] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [leadSource, setLeadSource] = useState("phone");
+  const [leadComment, setLeadComment] = useState("");
   const [leads, setLeads] = useState(initialLeads);
   const [groups, setGroups] = useState<GroupItem[]>([
     { id: "1", name: "FPV Start 8–10", ages: "8–10", schedule: "Пн / Ср · 17:00", location: "Основна локація", capacity: 8, members: ["8", "9"] },
@@ -262,6 +269,47 @@ function App() {
     waiting: waiting.length,
     activeStudents: leads.filter((x) => x.status === "Зарахований").length,
   }), [leads, waiting]);
+
+  const createManualLead = async () => {
+    if (!leadChildName.trim() || !leadContactName.trim() || !leadPhone.trim()) return;
+    if (apiEnabled && session) {
+      try {
+        await apiPost("/intake", {
+          child_first_name: leadChildName.trim(),
+          child_age: leadAge,
+          contact_name: leadContactName.trim(),
+          phone: leadPhone.trim(),
+          source: leadSource,
+          comment: leadComment.trim() || null,
+        }, session);
+        await syncWorkspace(session);
+        setShowLeadForm(false);
+        setActive("Заявки");
+        setLeadChildName("");
+        setLeadContactName("");
+        setLeadPhone("");
+        setLeadComment("");
+        return;
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити заявку");
+        return;
+      }
+    }
+
+    const nextId = crypto.randomUUID();
+    setLeads((items) => [{
+      id: nextId,
+      child: leadChildName.trim(),
+      age: leadAge,
+      parent: leadContactName.trim(),
+      phone: leadPhone.trim(),
+      source: leadSource,
+      status: "Нова",
+      comment: leadComment.trim() || undefined,
+    }, ...items]);
+    setShowLeadForm(false);
+    setActive("Заявки");
+  };
 
   const updateStatus = async (id: EntityId, status: LeadStatus) => {
     if (apiEnabled && session) {
@@ -792,7 +840,7 @@ function App() {
               <span>{roleLabel(currentMembership?.role)}</span>
             </div>}
             <button className="search">⌕ Пошук</button>
-            {canManageLeads && <button className="primary" onClick={() => setActive("Заявки")}>+ Нова заявка</button>}
+            {canManageLeads && <button className="primary" onClick={() => setShowLeadForm(true)}>+ Нова заявка</button>}
             {session && <button className="search" onClick={() => { clearSession(); setSession(null); }}>Вийти</button>}
           </div>
         </header>
@@ -1118,6 +1166,28 @@ function App() {
           <p>Каркас модуля вже передбачений у навігації. Реалізуємо після завершення наскрізного сценарію «заявка → пробне → група → учень».</p>
         </section>}
       </main>
+
+      {showLeadForm && <div className="modalBackdrop" onClick={() => setShowLeadForm(false)}>
+        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => setShowLeadForm(false)}>×</button>
+          <p className="eyebrow">Нова заявка</p><h2>Додати дитину</h2>
+          <div className="formTwo">
+            <label>Ім’я дитини<input value={leadChildName} onChange={(e) => setLeadChildName(e.target.value)} placeholder="Максим" /></label>
+            <label>Вік<input type="number" min={3} max={25} value={leadAge} onChange={(e) => setLeadAge(Number(e.target.value))} /></label>
+          </div>
+          <label>Контактна особа<input value={leadContactName} onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана" /></label>
+          <label>Телефон<input type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} placeholder="+380 67 123 45 67" /></label>
+          <label>Джерело<select value={leadSource} onChange={(e) => setLeadSource(e.target.value)}>
+            <option value="phone">Телефон</option>
+            <option value="website">Сайт</option>
+            <option value="instagram">Instagram</option>
+            <option value="recommendation">Рекомендація</option>
+            <option value="walk-in">Зайшли особисто</option>
+          </select></label>
+          <label>Коментар<textarea value={leadComment} onChange={(e) => setLeadComment(e.target.value)} placeholder="Що цікавить, бажаний час, примітки…" /></label>
+          <button className="primary full" disabled={!leadChildName.trim() || !leadContactName.trim() || !leadPhone.trim()} onClick={createManualLead}>Створити заявку</button>
+        </div>
+      </div>}
 
       {showInviteForm && <div className="modalBackdrop" onClick={() => setShowInviteForm(false)}>
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
