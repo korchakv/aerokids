@@ -39,18 +39,20 @@ Waiting list у MVP може бути запитом по `Student.crm_status = 
 
 Поточний Formspree endpoint залишаємо до появи захищеного public intake endpoint.
 
-Майбутній endpoint:
+Public endpoint:
 `POST /public/intake/{organization_slug}`
 
-Він має:
-1. rate limiting / anti-spam;
-2. нормалізувати телефон;
-3. знайти або створити Contact;
-4. створити Student;
-5. зв'язати StudentContact;
-6. поставити `crm_status=new`;
-7. записати source=website;
-8. створити audit/event запис.
+Він уже:
+1. має DB-backed rate limiting окремо за IP та нормалізованим телефоном;
+2. підтримує honeypot-поле `website` для форми;
+3. нормалізує українські скорочені та явні міжнародні номери;
+4. знаходить або створює Contact;
+5. не створює дубль тієї самої дитини при повторній заявці;
+6. створює/зв'язує Student + StudentContact;
+7. ставить `crm_status=new` для нової дитини;
+8. записує source та audit/event.
+
+При підключенні сайту поле `website` треба додати як приховане й залишати порожнім для реального користувача.
 
 ## Next technical milestone
 
