@@ -172,3 +172,46 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate) -
     db.refresh(student)
     db.refresh(contact)
     return student, contact
+
+
+def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, status) -> Student:
+    student = scoped_get(db, Student, org_id, student_id)
+    student.crm_status = status
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+def student_detail(db: Session, org_id: UUID, student_id: UUID) -> tuple[Student, list[Contact], list[TrialLesson]]:
+    student = scoped_get(db, Student, org_id, student_id)
+    contacts = list(db.scalars(
+        select(Contact)
+        .join(StudentContact, StudentContact.contact_id == Contact.id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == student_id,
+            Contact.organization_id == org_id,
+        )
+        .order_by(StudentContact.is_primary.desc(), Contact.full_name)
+    ))
+    trials = list(db.scalars(
+        select(TrialLesson)
+        .where(TrialLesson.organization_id == org_id, TrialLesson.student_id == student_id)
+        .order_by(TrialLesson.starts_at.desc())
+    ))
+    return student, contacts, trials
+
+
+def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommended_level: str | None, teacher_notes: str | None) -> TrialLesson:
+    trial = scoped_get(db, TrialLesson, org_id, trial_id)
+    trial.status = status
+    trial.recommended_level = recommended_level
+    trial.teacher_notes = teacher_notes
+    student = scoped_get(db, Student, org_id, trial.student_id)
+    if status.value == "completed":
+        student.crm_status = "WAITING_FOR_GROUP"
+    elif status.value == "no_show":
+        student.crm_status = "CONTACTED"
+    db.commit()
+    db.refresh(trial)
+    return trial
