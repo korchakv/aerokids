@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+import enum
+import uuid
+from datetime import date, datetime, timezone
+
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class CrmStatus(str, enum.Enum):
+    NEW = "new"
+    CONTACTED = "contacted"
+    TRIAL_SCHEDULED = "trial_scheduled"
+    TRIAL_COMPLETED = "trial_completed"
+    WAITING_FOR_GROUP = "waiting_for_group"
+    ENROLLED = "enrolled"
+    NO_RESPONSE = "no_response"
+    DECLINED = "declined"
+    NOT_RELEVANT = "not_relevant"
+
+
+class StudentStatus(str, enum.Enum):
+    PROSPECT = "prospect"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    ARCHIVED = "archived"
+
+
+class TrialStatus(str, enum.Enum):
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
+    NO_SHOW = "no_show"
+    CANCELLED = "cancelled"
+
+
+class EnrollmentStatus(str, enum.Enum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    FINISHED = "finished"
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class Location(Base):
+    __tablename__ = "locations"
+    __table_args__ = (UniqueConstraint("organization_id", "name", name="uq_location_org_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    address: Mapped[str | None] = mapped_column(String(300))
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+
+class Contact(Base):
+    __tablename__ = "contacts"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    phone: Mapped[str] = mapped_column(String(40), index=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class Student(Base):
+    __tablename__ = "students"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    first_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    last_name: Mapped[str | None] = mapped_column(String(120))
+    birth_date: Mapped[date | None] = mapped_column(Date)
+    age_at_inquiry: Mapped[int | None] = mapped_column(Integer)
+    source: Mapped[str | None] = mapped_column(String(80))
+    crm_status: Mapped[CrmStatus] = mapped_column(Enum(CrmStatus), default=CrmStatus.NEW, nullable=False)
+    student_status: Mapped[StudentStatus] = mapped_column(Enum(StudentStatus), default=StudentStatus.PROSPECT, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class StudentContact(Base):
+    __tablename__ = "student_contacts"
+    __table_args__ = (UniqueConstraint("student_id", "contact_id", name="uq_student_contact"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    contact_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("contacts.id"), index=True, nullable=False)
+    relation: Mapped[str | None] = mapped_column(String(60))
+    is_primary: Mapped[bool] = mapped_column(default=False, nullable=False)
+
+
+class TrialLesson(Base):
+    __tablename__ = "trial_lessons"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"), index=True)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[TrialStatus] = mapped_column(Enum(TrialStatus), default=TrialStatus.SCHEDULED, nullable=False)
+    recommended_level: Mapped[str | None] = mapped_column(String(80))
+    teacher_notes: Mapped[str | None] = mapped_column(Text)
+
+
+class Group(Base):
+    __tablename__ = "groups"
+    __table_args__ = (UniqueConstraint("organization_id", "name", name="uq_group_org_name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"), index=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    capacity: Mapped[int | None] = mapped_column(Integer)
+    min_age: Mapped[int | None] = mapped_column(Integer)
+    max_age: Mapped[int | None] = mapped_column(Integer)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+
+class Enrollment(Base):
+    __tablename__ = "enrollments"
+    __table_args__ = (UniqueConstraint("student_id", "group_id", name="uq_student_group_enrollment"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    group_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("groups.id"), index=True, nullable=False)
+    status: Mapped[EnrollmentStatus] = mapped_column(Enum(EnrollmentStatus), default=EnrollmentStatus.ACTIVE, nullable=False)
+    started_at: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    ended_at: Mapped[date | None] = mapped_column(Date)
