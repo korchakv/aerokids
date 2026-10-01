@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { apiEnabled, changeOrganization, clearSession, loadSession, login, refreshMe, type Session } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -92,6 +93,7 @@ const initialLeads: Lead[] = [
 const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне заплановано", "Пробне пройдено", "Очікує групу", "Зарахований"];
 
 function App() {
+  const [session, setSession] = useState<Session | null>(() => loadSession());
   const [active, setActive] = useState("Дашборд");
   const [leads, setLeads] = useState(initialLeads);
   const [groups, setGroups] = useState<GroupItem[]>([
@@ -150,7 +152,17 @@ function App() {
   const [newLessonGroupId, setNewLessonGroupId] = useState(1);
   const [newLessonAt, setNewLessonAt] = useState("2026-10-07T17:00");
   const [newLessonTopic, setNewLessonTopic] = useState("FPV / електроніка");
-  const selected = leads.find((lead) => lead.id === selectedId) ?? null;
+  useEffect(() => {
+    if (!apiEnabled || !session) return;
+    refreshMe(session).then(setSession).catch(() => {
+      clearSession();
+      setSession(null);
+    });
+    // Session is refreshed once when the app shell mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+    const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedStudent = leads.find((lead) => lead.id === selectedStudentId) ?? null;
   const activeStudents = leads.filter((lead) => lead.status === "Зарахований");
   const studentGroup = (studentId: number) => groups.find((group) => group.members.includes(studentId));
@@ -361,10 +373,16 @@ function App() {
     }));
   };
 
+  if (apiEnabled && !session) {
+    return <LoginView onAuthenticated={setSession} />;
+  }
+
+  const currentMembership = session?.user.memberships.find((item) => item.organization_id === session.organizationId);
+
   return (
     <div className="shell">
       <aside>
-        <div className="brand"><span className="mark">✦</span><div><b>School CRM</b><small>AeroKiDS · demo tenant</small></div></div>
+        <div className="brand"><span className="mark">✦</span><div><b>School CRM</b><small>{currentMembership?.organization_name ?? "AeroKiDS · demo tenant"}</small></div></div>
         <nav>{nav.map((item) => <button onClick={() => setActive(item)} className={active === item ? "active" : ""} key={item}>{item}</button>)}</nav>
         <div className="asideFooter">MVP 1 · crm-v1</div>
       </aside>
@@ -372,7 +390,17 @@ function App() {
       <main>
         <header>
           <div><p className="eyebrow">Івано-Франківськ · основна локація</p><h1>{active}</h1></div>
-          <div className="headerActions"><button className="search">⌕ Пошук</button><button className="primary" onClick={() => setActive("Заявки")}>+ Нова заявка</button></div>
+          <div className="headerActions">
+            {session && <div className="orgSwitcher">
+              <select value={session.organizationId} onChange={(e) => setSession(changeOrganization(session, e.target.value))}>
+                {session.user.memberships.map((membership) => <option value={membership.organization_id} key={membership.organization_id}>{membership.organization_name}</option>)}
+              </select>
+              <span>{roleLabel(currentMembership?.role)}</span>
+            </div>}
+            <button className="search">⌕ Пошук</button>
+            <button className="primary" onClick={() => setActive("Заявки")}>+ Нова заявка</button>
+            {session && <button className="search" onClick={() => { clearSession(); setSession(null); }}>Вийти</button>}
+          </div>
         </header>
 
         {active === "Дашборд" && <>
@@ -837,6 +865,53 @@ function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: number) => v
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span></div>
     {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{lead.source}</span><span className="pill">{lead.status}</span></button>)}
   </div>;
+}
+
+function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      onAuthenticated(await login(email, password));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не вдалося увійти");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return <div className="loginScreen">
+    <div className="loginCard">
+      <div className="loginBrand"><span className="mark">✦</span><div><b>School CRM</b><small>Керування школою в одному місці</small></div></div>
+      <p className="eyebrow">Вхід</p>
+      <h1>Увійдіть у CRM</h1>
+      <p className="loginIntro">Використовуйте email і пароль вашого облікового запису.</p>
+      <form onSubmit={submit}>
+        <label>Email<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+        <label>Пароль<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+        {error && <div className="loginError">{error}</div>}
+        <button className="primary full" disabled={loading}>{loading ? "Входимо…" : "Увійти"}</button>
+      </form>
+      <small className="loginNote">Доступ визначається роллю в конкретній організації.</small>
+    </div>
+  </div>;
+}
+
+function roleLabel(role?: string) {
+  const labels: Record<string,string> = {
+    owner: "Власник",
+    admin: "Адміністратор",
+    manager: "Менеджер",
+    teacher: "Викладач",
+    accountant: "Бухгалтер",
+  };
+  return role ? labels[role] ?? role : "Demo";
 }
 
 function formatMoney(value: number) {
