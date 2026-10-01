@@ -1015,3 +1015,28 @@ def test_audit_events_follow_student_workflow_and_are_tenant_scoped(client):
     )
     assert foreign.status_code == 200
     assert foreign.json() == []
+
+
+def test_authenticated_manual_intake_creates_real_lead(client):
+    org = create_org(client, "AeroKiDS", "manual-intake")
+    headers = {"X-Organization-Id": org["id"]}
+
+    response = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Софія",
+            "child_age": 10,
+            "contact_name": "Марина",
+            "phone": "0672223344",
+            "source": "phone",
+            "comment": "Зателефонували самі",
+        },
+    )
+    assert response.status_code == 201, response.text
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    assert leads.json()[0]["first_name"] == "Софія"
+    assert leads.json()[0]["contact_name"] == "Марина"
+    assert leads.json()[0]["source"] == "phone"
