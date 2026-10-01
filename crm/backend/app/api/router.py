@@ -89,7 +89,7 @@ def locations(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db))
 
 
 @router.post("/contacts", response_model=ContactRead, status_code=201)
-def create_contact(data: ContactCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_contact(data: ContactCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.create_contact(db, org_id, data)
 
 
@@ -99,7 +99,7 @@ def contacts(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole
 
 
 @router.post("/students", response_model=StudentRead, status_code=201)
-def create_student(data: StudentCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_student(data: StudentCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.create_student(db, org_id, data)
 
 
@@ -109,13 +109,13 @@ def students(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole
 
 
 @router.post("/students/{student_id}/contacts", status_code=201)
-def add_student_contact(student_id: UUID, data: StudentContactCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def add_student_contact(student_id: UUID, data: StudentContactCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     item = crm.attach_contact(db, org_id, student_id, data.contact_id, data.relation, data.is_primary)
     return {"id": str(item.id)}
 
 
 @router.post("/trial-lessons", response_model=TrialLessonRead, status_code=201)
-def create_trial(data: TrialLessonCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_trial(data: TrialLessonCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.create_trial(db, org_id, data)
 
 
@@ -125,17 +125,17 @@ def trials(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.A
 
 
 @router.post("/groups", response_model=GroupRead, status_code=201)
-def create_group(data: GroupCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_group(data: GroupCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.create_group(db, org_id, data)
 
 
 @router.get("/groups", response_model=list[GroupRead])
-def groups(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def groups(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.list_groups(db, org_id)
 
 
 @router.post("/enrollments", response_model=EnrollmentRead, status_code=201)
-def create_enrollment(data: EnrollmentCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_enrollment(data: EnrollmentCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.create_enrollment(db, org_id, data)
 
 
@@ -159,12 +159,12 @@ def get_student(student_id: UUID, org_id: UUID = Depends(require_org_roles(Staff
 
 
 @router.patch("/students/{student_id}/crm-status", response_model=StudentRead)
-def update_student_status(student_id: UUID, data: StudentStatusUpdate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def update_student_status(student_id: UUID, data: StudentStatusUpdate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.update_student_crm_status(db, org_id, student_id, data.crm_status)
 
 
 @router.patch("/trial-lessons/{trial_id}/complete", response_model=TrialLessonRead)
-def complete_trial(trial_id: UUID, data: TrialLessonComplete, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def complete_trial(trial_id: UUID, data: TrialLessonComplete, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.complete_trial(db, org_id, trial_id, data.status, data.recommended_level, data.teacher_notes)
 
 
@@ -174,7 +174,7 @@ def waiting_list(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, Staff
 
 
 @router.post("/groups/form", response_model=GroupFormationResult, status_code=201)
-def form_group(data: GroupFormationCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def form_group(data: GroupFormationCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     group, student_ids = crm.form_group(db, org_id, data)
     return GroupFormationResult(
         group=GroupRead.model_validate(group),
@@ -194,17 +194,17 @@ def get_student_profile(student_id: UUID, org_id: UUID = Depends(require_org_rol
 
 
 @router.patch("/students/{student_id}/status", response_model=StudentRead)
-def update_student_lifecycle(student_id: UUID, data: StudentLifecycleUpdate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def update_student_lifecycle(student_id: UUID, data: StudentLifecycleUpdate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.update_student_lifecycle(db, org_id, student_id, data.student_status)
 
 
 @router.post("/students/{student_id}/transfer", response_model=EnrollmentRead)
-def transfer_student(student_id: UUID, data: StudentTransfer, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def transfer_student(student_id: UUID, data: StudentTransfer, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.transfer_student(db, org_id, student_id, data.to_group_id, data.started_at)
 
 
 @router.post("/group-schedules", response_model=GroupScheduleRead, status_code=201)
-def create_group_schedule(data: GroupScheduleCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def create_group_schedule(data: GroupScheduleCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.create_group_schedule(db, org_id, data)
 
 
@@ -244,7 +244,7 @@ def create_subscription_plan(data: SubscriptionPlanCreate, org_id: UUID = Depend
 
 
 @router.get("/subscription-plans", response_model=list[SubscriptionPlanRead])
-def subscription_plans(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def subscription_plans(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.list_subscription_plans(db, org_id)
 
 
@@ -254,7 +254,7 @@ def create_student_subscription(data: StudentSubscriptionCreate, org_id: UUID = 
 
 
 @router.get("/student-subscriptions", response_model=list[StudentSubscriptionRead])
-def student_subscriptions(student_id: UUID | None = None, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def student_subscriptions(student_id: UUID | None = None, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.list_student_subscriptions(db, org_id, student_id)
 
 
@@ -264,7 +264,7 @@ def create_payment(data: PaymentCreate, org_id: UUID = Depends(require_org_roles
 
 
 @router.get("/payments", response_model=list[PaymentRead])
-def payments(student_id: UUID | None = None, status: PaymentStatus | None = None, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def payments(student_id: UUID | None = None, status: PaymentStatus | None = None, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.list_payments(db, org_id, student_id, status)
 
 
@@ -274,7 +274,7 @@ def mark_payment_paid(payment_id: UUID, data: PaymentMarkPaid, org_id: UUID = De
 
 
 @router.get("/payments-summary", response_model=PaymentSummary)
-def payments_summary(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def payments_summary(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.payment_summary(db, org_id)
 
 
