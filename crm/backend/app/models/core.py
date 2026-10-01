@@ -94,6 +94,9 @@ class Organization(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), default="Europe/Kyiv", nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="UAH", nullable=False)
+    locale: Mapped[str] = mapped_column(String(20), default="uk-UA", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
