@@ -1,3 +1,15 @@
+import re
+from datetime import date, datetime, time, timedelta, timezone
+from uuid import UUID
+
+from fastapi import HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, Staff, StaffLocation, StaffRole, Student, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
+from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
+
 def record_audit(
     db: Session,
     org_id: UUID,
@@ -33,18 +45,6 @@ def list_audit_events(
         stmt = stmt.where(AuditEvent.entity_id == entity_id)
     return list(db.scalars(stmt.order_by(AuditEvent.created_at.desc()).limit(limit)))
 
-
-import re
-from datetime import date, datetime, time, timedelta, timezone
-from uuid import UUID
-
-from fastapi import HTTPException
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-
-from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, Staff, StaffLocation, StaffRole, Student, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
-from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 
 
 def normalize_phone(value: str) -> str:
