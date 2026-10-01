@@ -270,6 +270,11 @@ function App() {
     activeStudents: leads.filter((x) => x.status === "Зарахований").length,
   }), [leads, waiting]);
 
+  const upcomingTrials = useMemo(() => leads
+    .filter((lead) => lead.trialAt && lead.status === "Пробне заплановано")
+    .sort((a, b) => new Date(a.trialAt ?? 0).getTime() - new Date(b.trialAt ?? 0).getTime())
+    .slice(0, 5), [leads]);
+
   const createManualLead = async () => {
     if (!leadChildName.trim() || !leadContactName.trim() || !leadPhone.trim()) return;
     if (apiEnabled && session) {
@@ -864,9 +869,11 @@ function App() {
             <article className="panel">
               <p className="eyebrow">Сьогодні</p><h2>Пробні заняття</h2>
               <div className="timeline">
-                <div><time>16:00</time><p><b>Група пробного</b><span>3 дітей · викладач Іван</span></p></div>
-                <div><time>17:30</time><p><b>Група пробного</b><span>2 дітей · викладач Іван</span></p></div>
-                <div><time>19:00</time><p><b>Пробне знайомство</b><span>1 дитина</span></p></div>
+                {upcomingTrials.length === 0 && <div className="emptyState">Запланованих пробних поки немає.</div>}
+                {upcomingTrials.map((lead) => <button className="timelineButton" key={lead.id} onClick={() => openLead(lead.id)}>
+                  <time>{new Date(lead.trialAt!).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })}<small>{new Date(lead.trialAt!).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</small></time>
+                  <p><b>{lead.child}</b><span>{lead.parent}{lead.trialLocation ? " · " + lead.trialLocation : ""}</span></p>
+                </button>)}
               </div>
             </article>
             <article className="panel">
