@@ -968,6 +968,7 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             .order_by(TrialLesson.starts_at.desc())
             .limit(1)
         )
+        trial_location = scoped_get(db, Location, org_id, trial.location_id) if trial and trial.location_id else None
         result.append({
             "student_id": student.id,
             "first_name": student.first_name,
@@ -979,6 +980,8 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             "contact_phone": contact.phone if contact else None,
             "latest_trial_id": trial.id if trial else None,
             "latest_trial_at": trial.starts_at if trial else None,
+            "trial_location_id": trial.location_id if trial else None,
+            "trial_location_name": trial_location.name if trial_location else None,
             "recommended_level": trial.recommended_level if trial else None,
         })
     return result
