@@ -453,6 +453,8 @@ class LeadListItem(BaseModel):
     contact_phone: str | None
     latest_trial_id: UUID | None
     latest_trial_at: datetime | None
+    trial_location_id: UUID | None
+    trial_location_name: str | None
     recommended_level: str | None
 
 
