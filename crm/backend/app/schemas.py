@@ -182,3 +182,25 @@ class GroupFormationCreate(BaseModel):
 class GroupFormationResult(BaseModel):
     group: GroupRead
     enrolled_student_ids: list[UUID]
+
+
+class StudentLifecycleUpdate(BaseModel):
+    student_status: StudentStatus
+
+
+class StudentGroupInfo(BaseModel):
+    group_id: UUID
+    group_name: str
+    enrollment_id: UUID
+    enrollment_status: EnrollmentStatus
+    started_at: date
+    location_id: UUID | None
+
+
+class StudentProfile(StudentDetail):
+    groups: list[StudentGroupInfo] = []
+
+
+class StudentTransfer(BaseModel):
+    to_group_id: UUID
+    started_at: date | None = None
