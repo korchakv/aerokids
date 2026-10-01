@@ -439,3 +439,40 @@ class OverviewReport(BaseModel):
     active_locations: int
     attendance: AttendanceSummary
     payments: PaymentSummary
+
+
+class LeadListItem(BaseModel):
+    student_id: UUID
+    first_name: str
+    last_name: str | None
+    age: int | None
+    source: str | None
+    crm_status: CrmStatus
+    contact_name: str | None
+    contact_phone: str | None
+    latest_trial_at: datetime | None
+    recommended_level: str | None
+
+
+class StudentOverviewItem(BaseModel):
+    student_id: UUID
+    first_name: str
+    last_name: str | None
+    age: int | None
+    source: str | None
+    student_status: StudentStatus
+    contact_name: str | None
+    contact_phone: str | None
+    group_id: UUID | None
+    group_name: str | None
+
+
+class GroupOverviewItem(BaseModel):
+    group_id: UUID
+    name: str
+    location_id: UUID | None
+    location_name: str | None
+    capacity: int | None
+    enrolled_count: int
+    min_age: int | None
+    max_age: int | None
