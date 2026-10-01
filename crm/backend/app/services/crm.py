@@ -71,14 +71,24 @@ def ensure_group_capacity(db: Session, org_id: UUID, group: Group, student_id: U
 
 
 def normalize_phone(value: str) -> str:
-    digits = re.sub(r"\D", "", value)
+    raw = value.strip()
+    digits = re.sub(r"\D", "", raw)
+
+    # International numbers are accepted when the country code is explicit.
+    if raw.startswith("+"):
+        if 8 <= len(digits) <= 15:
+            return f"+{digits}"
+        raise HTTPException(status_code=422, detail="Invalid international phone number")
+
+    # Ukrainian shorthand remains convenient for the first AeroKiDS tenant.
     if digits.startswith("380") and len(digits) == 12:
         return f"+{digits}"
     if digits.startswith("0") and len(digits) == 10:
         return f"+38{digits}"
     if len(digits) == 9:
         return f"+380{digits}"
-    raise HTTPException(status_code=422, detail="Invalid Ukrainian phone number")
+
+    raise HTTPException(status_code=422, detail="Use an international phone number starting with +")
 
 
 def create_organization(db: Session, data: OrganizationCreate) -> Organization:
@@ -257,10 +267,56 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate) -
         contact = Contact(organization_id=organization.id, full_name=data.contact_name, phone=phone, notes=data.comment)
         db.add(contact)
         db.flush()
-    student = Student(organization_id=organization.id, first_name=data.child_first_name, age_at_inquiry=data.child_age, source=data.source, notes=data.comment)
+    elif not contact.full_name.strip() and data.contact_name.strip():
+        contact.full_name = data.contact_name.strip()
+
+    existing_student = db.scalar(
+        select(Student)
+        .join(StudentContact, StudentContact.student_id == Student.id)
+        .where(
+            Student.organization_id == organization.id,
+            StudentContact.organization_id == organization.id,
+            StudentContact.contact_id == contact.id,
+            func.lower(Student.first_name) == data.child_first_name.strip().lower(),
+            Student.age_at_inquiry == data.child_age,
+        )
+        .order_by(Student.created_at.desc())
+        .limit(1)
+    )
+    if existing_student is not None:
+        if data.comment and not existing_student.notes:
+            existing_student.notes = data.comment
+        if data.source and not existing_student.source:
+            existing_student.source = data.source
+        record_audit(
+            db,
+            organization.id,
+            "student",
+            existing_student.id,
+            "lead.duplicate_intake",
+            {"source": data.source, "contact_id": str(contact.id)},
+        )
+        db.commit()
+        db.refresh(existing_student)
+        db.refresh(contact)
+        return existing_student, contact
+
+    student = Student(
+        organization_id=organization.id,
+        first_name=data.child_first_name.strip(),
+        age_at_inquiry=data.child_age,
+        source=data.source,
+        notes=data.comment,
+    )
     db.add(student)
     db.flush()
-    db.add(StudentContact(organization_id=organization.id, student_id=student.id, contact_id=contact.id, relation="parent_or_guardian", is_primary=True))
+    db.add(StudentContact(
+        organization_id=organization.id,
+        student_id=student.id,
+        contact_id=contact.id,
+        relation="parent_or_guardian",
+        is_primary=True,
+    ))
     record_audit(db, organization.id, "student", student.id, "lead.created", {"source": data.source, "contact_id": str(contact.id)})
     db.commit()
     db.refresh(student)
