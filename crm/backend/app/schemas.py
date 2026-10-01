@@ -150,6 +150,11 @@ class StudentStatusUpdate(BaseModel):
     crm_status: CrmStatus
 
 
+class TrialLessonUpdate(BaseModel):
+    starts_at: datetime | None = None
+    location_id: UUID | None = None
+
+
 class TrialLessonComplete(BaseModel):
     status: TrialStatus = TrialStatus.COMPLETED
     recommended_level: str | None = Field(default=None, max_length=80)
