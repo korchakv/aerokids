@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { apiEnabled, changeOrganization, clearSession, loadSession, loadWorkspace, login, refreshMe, type Session, type WorkspaceBundle } from "./api";
+import { apiEnabled, apiPatch, apiPost, changeOrganization, clearSession, loadSession, loadWorkspace, login, refreshMe, type Session, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -14,6 +14,7 @@ type Lead = {
   source: string;
   status: LeadStatus;
   comment?: string;
+  trialId?: string;
   trialAt?: string;
   trialLocation?: string;
   trialResult?: "scheduled" | "completed" | "no_show";
@@ -168,27 +169,26 @@ function App() {
   }, []);
 
 
-  useEffect(() => {
-    if (!apiEnabled || !session) return;
-    let cancelled = false;
+  const syncWorkspace = async (currentSession: Session) => {
     setWorkspaceLoading(true);
     setWorkspaceError("");
+    try {
+      const bundle = await loadWorkspace(currentSession);
+      applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
+      setWorkspaceLoaded(true);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити дані CRM");
+      throw error;
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  };
 
-    loadWorkspace(session)
-      .then((bundle) => {
-        if (cancelled) return;
-        applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
-        setWorkspaceLoaded(true);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити дані CRM");
-      })
-      .finally(() => {
-        if (!cancelled) setWorkspaceLoading(false);
-      });
-
-    return () => { cancelled = true; };
+  useEffect(() => {
+    if (!apiEnabled || !session) return;
+    syncWorkspace(session).catch(() => undefined);
+    // Reload whenever the selected organization changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.accessToken, session?.organizationId]);
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
@@ -204,12 +204,34 @@ function App() {
     activeStudents: leads.filter((x) => x.status === "Зарахований").length,
   }), [leads, waiting]);
 
-  const updateStatus = (id: EntityId, status: LeadStatus) => {
+  const updateStatus = async (id: EntityId, status: LeadStatus) => {
+    if (apiEnabled && session) {
+      try {
+        await apiPatch(`/students/${id}/crm-status`, { crm_status: crmStatusValue(status) }, session);
+        await syncWorkspace(session);
+        return;
+      } catch {
+        return;
+      }
+    }
     setLeads((items) => items.map((item) => item.id === id ? { ...item, status } : item));
   };
 
-  const scheduleTrial = () => {
+  const scheduleTrial = async () => {
     if (!selected) return;
+    if (apiEnabled && session) {
+      try {
+        await apiPost("/trial-lessons", {
+          student_id: selected.id,
+          starts_at: new Date(trialAt).toISOString(),
+        }, session);
+        await syncWorkspace(session);
+        setTrialMode(null);
+        return;
+      } catch {
+        return;
+      }
+    }
     setLeads((items) => items.map((item) => item.id === selected.id ? {
       ...item,
       status: "Пробне заплановано",
@@ -220,8 +242,22 @@ function App() {
     setTrialMode(null);
   };
 
-  const completeTrial = (result: "completed" | "no_show") => {
+  const completeTrial = async (result: "completed" | "no_show") => {
     if (!selected) return;
+    if (apiEnabled && session && selected.trialId) {
+      try {
+        await apiPatch(`/trial-lessons/${selected.trialId}/complete`, {
+          status: result,
+          recommended_level: result === "completed" ? recommendedLevel : null,
+          teacher_notes: teacherNotes || null,
+        }, session);
+        await syncWorkspace(session);
+        setTrialMode(null);
+        return;
+      } catch {
+        return;
+      }
+    }
     setLeads((items) => items.map((item) => item.id === selected.id ? {
       ...item,
       status: result === "completed" ? "Очікує групу" : "Зв'язались",
@@ -246,13 +282,31 @@ function App() {
     setSelectedCandidates((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   };
 
-  const createGroupFromCandidates = () => {
+  const createGroupFromCandidates = async () => {
     if (!selectedCandidates.length || !groupName.trim()) return;
+    const selectedLeadRows = leads.filter((x) => selectedCandidates.includes(x.id));
+    if (apiEnabled && session) {
+      try {
+        await apiPost("/groups/form", {
+          name: groupName.trim(),
+          capacity: groupCapacity,
+          min_age: selectedLeadRows.length ? Math.min(...selectedLeadRows.map((x) => x.age)) : null,
+          max_age: selectedLeadRows.length ? Math.max(...selectedLeadRows.map((x) => x.age)) : null,
+          student_ids: selectedCandidates,
+        }, session);
+        await syncWorkspace(session);
+        setSelectedCandidates([]);
+        setShowGroupForm(false);
+        return;
+      } catch {
+        return;
+      }
+    }
     const nextId = crypto.randomUUID();
     setGroups((items) => [...items, {
       id: nextId,
       name: groupName.trim(),
-      ages: selectedCandidates.length ? ageRange(leads.filter((x) => selectedCandidates.includes(x.id))) : "—",
+      ages: selectedCandidates.length ? ageRange(selectedLeadRows) : "—",
       schedule: groupSchedule,
       location: "Основна локація",
       capacity: groupCapacity,
@@ -263,8 +317,18 @@ function App() {
     setShowGroupForm(false);
   };
 
-  const transferStudent = () => {
+  const transferStudent = async () => {
     if (!selectedStudent || transferGroupId === null) return;
+    if (apiEnabled && session) {
+      try {
+        await apiPost(`/students/${selectedStudent.id}/transfer`, { to_group_id: transferGroupId }, session);
+        await syncWorkspace(session);
+        setTransferGroupId(null);
+        return;
+      } catch {
+        return;
+      }
+    }
     setGroups((items) => items.map((group) => ({
       ...group,
       members: group.id === transferGroupId
@@ -274,7 +338,17 @@ function App() {
     setTransferGroupId(null);
   };
 
-  const setStudentLifecycle = (id: EntityId, state: "Активний" | "Пауза" | "Архів") => {
+  const setStudentLifecycle = async (id: EntityId, state: "Активний" | "Пауза" | "Архів") => {
+    if (apiEnabled && session) {
+      try {
+        const value = state === "Пауза" ? "paused" : state === "Архів" ? "archived" : "active";
+        await apiPatch(`/students/${id}/status`, { student_status: value }, session);
+        await syncWorkspace(session);
+        return;
+      } catch {
+        return;
+      }
+    }
     setStudentStates((states) => ({ ...states, [id]: state }));
   };
 
@@ -914,6 +988,7 @@ function applyWorkspace(
     phone: item.contact_phone ?? "",
     source: item.source ?? "CRM",
     status: crmStatusLabel(item.crm_status),
+    trialId: item.latest_trial_id ?? undefined,
     trialAt: item.latest_trial_at ?? undefined,
     recommendedLevel: item.recommended_level ?? undefined,
     trialResult: item.crm_status === "waiting_for_group" || item.crm_status === "enrolled" ? "completed" : item.latest_trial_at ? "scheduled" : undefined,
@@ -947,6 +1022,18 @@ function applyWorkspace(
   setLeads([...prospects, ...students]);
   setGroups(groups);
   setStudentStates(states);
+}
+
+function crmStatusValue(status: LeadStatus) {
+  const values: Record<LeadStatus, string> = {
+    "Нова": "new",
+    "Зв'язались": "contacted",
+    "Пробне заплановано": "trial_scheduled",
+    "Пробне пройдено": "trial_completed",
+    "Очікує групу": "waiting_for_group",
+    "Зарахований": "enrolled",
+  };
+  return values[status];
 }
 
 function crmStatusLabel(status: WorkspaceBundle["leads"][number]["crm_status"]): LeadStatus {
