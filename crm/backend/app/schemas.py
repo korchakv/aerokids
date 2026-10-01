@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.core import AttendanceStatus, CrmStatus, EnrollmentStatus, LessonStatus, PaymentMethod, PaymentStatus, StudentStatus, SubscriptionStatus, TrialStatus
+from app.models.core import AttendanceStatus, CrmStatus, EnrollmentStatus, LessonStatus, PaymentMethod, PaymentStatus, StaffRole, StudentStatus, SubscriptionStatus, TrialStatus
 
 
 class ORMModel(BaseModel):
@@ -343,3 +343,67 @@ class PaymentSummary(BaseModel):
     paid_count: int
     pending_count: int
     overdue_count: int
+
+
+class StaffCreate(BaseModel):
+    full_name: str = Field(min_length=2, max_length=160)
+    email: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=40)
+    role: StaffRole
+    notes: str | None = None
+    location_ids: list[UUID] = []
+
+
+class StaffRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    user_id: UUID | None
+    full_name: str
+    email: str | None
+    phone: str | None
+    role: StaffRole
+    is_active: bool
+    notes: str | None
+
+
+class StaffUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=2, max_length=160)
+    email: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=40)
+    role: StaffRole | None = None
+    is_active: bool | None = None
+    notes: str | None = None
+
+
+class StaffLocationAssignment(BaseModel):
+    location_ids: list[UUID]
+
+
+class StaffGroupAssignment(BaseModel):
+    group_id: UUID
+    is_primary: bool = False
+
+
+class StaffAssignmentInfo(BaseModel):
+    location_ids: list[UUID] = []
+    group_ids: list[UUID] = []
+
+
+class StaffProfile(StaffRead):
+    assignments: StaffAssignmentInfo
+
+
+class OrganizationMembershipCreate(BaseModel):
+    email: str = Field(min_length=5, max_length=255)
+    full_name: str | None = Field(default=None, max_length=160)
+    role: StaffRole
+
+
+class OrganizationMembershipRead(BaseModel):
+    id: UUID
+    organization_id: UUID
+    user_id: UUID
+    email: str
+    full_name: str | None
+    role: StaffRole
+    is_active: bool
