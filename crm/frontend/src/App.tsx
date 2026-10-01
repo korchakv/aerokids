@@ -1530,7 +1530,12 @@ function App() {
             </select></label>
           </div>
           <label>Розклад<input value={groupSchedule} onChange={(e) => setGroupSchedule(e.target.value)} /></label>
-          <div className="selectedNames">{leads.filter((x) => selectedCandidates.includes(x.id)).map((x) => <span key={x.id}>{x.child} · {x.age}</span>)}</div>
+          <div className="selectedNames">{leads.filter((x) => selectedCandidates.includes(x.id)).map((x) => {
+            const compatibility = candidateCompatibility(x, parseScheduleText(groupSchedule), groupLocationId || null);
+            return <span className={"candidateCompatibility " + compatibility.state} key={x.id}>
+              <b>{x.child} · {x.age}</b><small>{compatibility.label}</small>
+            </span>;
+          })}</div>
           <button className="primary full" disabled={selectedCandidates.length > groupCapacity} onClick={createGroupFromCandidates}>
             {selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : "Створити групу і зарахувати"}
           </button>
@@ -2031,6 +2036,38 @@ function toLocalDateTimeInput(value: string) {
 
 function formatMoney(value: number, locale = "uk-UA", currency = "UAH") {
   return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+}
+
+function candidateCompatibility(
+  lead: Lead,
+  schedule: Array<{ weekday: number; start_time: string; duration_minutes: number }>,
+  locationId: string | null,
+) {
+  if (lead.preferredLocationId && locationId && lead.preferredLocationId !== locationId) {
+    return { state: "mismatch", label: "Інша бажана локація" };
+  }
+  if (!schedule.length || !(lead.availability?.length)) {
+    return { state: "unknown", label: "Графік не вказано або ще не задано" };
+  }
+
+  const fits = schedule.every((lesson) => {
+    const lessonStart = timeToMinutes(lesson.start_time);
+    const lessonEnd = lessonStart + lesson.duration_minutes;
+    return lead.availability!.some((slot) =>
+      slot.weekday === lesson.weekday
+      && timeToMinutes(slot.start_time) <= lessonStart
+      && timeToMinutes(slot.end_time) >= lessonEnd
+    );
+  });
+
+  return fits
+    ? { state: "match", label: "Графік підходить" }
+    : { state: "mismatch", label: "Графік не збігається" };
+}
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
+  return hours * 60 + minutes;
 }
 
 function availabilityLabel(slots: AvailabilitySlot[]) {
