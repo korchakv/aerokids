@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     access_token_minutes: int = 720
     auth_required: bool = False
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
+    public_intake_window_minutes: int = 10
+    public_intake_ip_limit: int = 20
+    public_intake_phone_limit: int = 5
 
     model_config = SettingsConfigDict(
         env_file=".env",
