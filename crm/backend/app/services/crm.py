@@ -910,7 +910,8 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
     return result
 
 
-def list_student_overview(db: Session, org_id: UUID) -> list[dict]:
+def list_student_overview(db: Session, org_id: UUID, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[dict]:
+    allowed_groups = assigned_group_ids_for_user(db, org_id, user_id, role)
     students = list(db.scalars(
         select(Student)
         .where(Student.organization_id == org_id, Student.student_status != StudentStatus.PROSPECT)
@@ -931,6 +932,8 @@ def list_student_overview(db: Session, org_id: UUID) -> list[dict]:
             .limit(1)
         ).first()
         enrollment, group = row if row else (None, None)
+        if allowed_groups is not None and (group is None or group.id not in allowed_groups):
+            continue
         result.append({
             "student_id": student.id,
             "first_name": student.first_name,
@@ -946,12 +949,15 @@ def list_student_overview(db: Session, org_id: UUID) -> list[dict]:
     return result
 
 
-def list_group_overview(db: Session, org_id: UUID) -> list[dict]:
+def list_group_overview(db: Session, org_id: UUID, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[dict]:
+    allowed_groups = assigned_group_ids_for_user(db, org_id, user_id, role)
     groups = list(db.scalars(
         select(Group)
         .where(Group.organization_id == org_id, Group.is_active.is_(True))
         .order_by(Group.name)
     ))
+    if allowed_groups is not None:
+        groups = [group for group in groups if group.id in allowed_groups]
     result = []
     for group in groups:
         enrolled_count = db.scalar(select(func.count(Enrollment.id)).where(
@@ -971,3 +977,30 @@ def list_group_overview(db: Session, org_id: UUID) -> list[dict]:
             "max_age": group.max_age,
         })
     return result
+
+
+def assigned_group_ids_for_user(db: Session, org_id: UUID, user_id: UUID | None, role: StaffRole) -> set[UUID] | None:
+    if role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER}:
+        return None
+    if role != StaffRole.TEACHER or user_id is None:
+        return set()
+
+    staff = db.scalar(select(Staff).where(
+        Staff.organization_id == org_id,
+        Staff.user_id == user_id,
+        Staff.is_active.is_(True),
+    ))
+    if staff is None:
+        return set()
+    return set(db.scalars(select(GroupStaff.group_id).where(
+        GroupStaff.organization_id == org_id,
+        GroupStaff.staff_id == staff.id,
+    )))
+
+
+def ensure_group_access(db: Session, org_id: UUID, user_id: UUID | None, role: StaffRole, group_id: UUID) -> Group:
+    group = scoped_get(db, Group, org_id, group_id)
+    allowed = assigned_group_ids_for_user(db, org_id, user_id, role)
+    if allowed is not None and group_id not in allowed:
+        raise HTTPException(status_code=403, detail="No access to this group")
+    return group
