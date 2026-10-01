@@ -28,6 +28,16 @@ type GroupItem = {
   members: number[];
 };
 
+type AttendanceValue = "present" | "absent" | "late" | "excused";
+
+type LessonItem = {
+  id: number;
+  groupId: number;
+  startsAt: string;
+  duration: number;
+  topic: string;
+};
+
 const nav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти"];
 
 const initialLeads: Lead[] = [
@@ -38,6 +48,8 @@ const initialLeads: Lead[] = [
   { id: 5, child: "Анна", age: 9, parent: "Наталія", phone: "+380 68 555 11 20", status: "Очікує групу", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
   { id: 6, child: "Олег", age: 10, parent: "Вікторія", phone: "+380 95 100 23 44", status: "Очікує групу", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
   { id: 7, child: "Ілля", age: 12, parent: "Юлія", phone: "+380 97 222 42 15", status: "Очікує групу", source: "Instagram", trialResult: "completed", recommendedLevel: "Середній" },
+  { id: 8, child: "Марта", age: 9, parent: "Андрій", phone: "+380 67 700 10 08", status: "Зарахований", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
+  { id: 9, child: "Назар", age: 10, parent: "Олена", phone: "+380 95 700 10 09", status: "Зарахований", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
 ];
 
 const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне заплановано", "Пробне пройдено", "Очікує групу", "Зарахований"];
@@ -46,8 +58,16 @@ function App() {
   const [active, setActive] = useState("Дашборд");
   const [leads, setLeads] = useState(initialLeads);
   const [groups, setGroups] = useState<GroupItem[]>([
-    { id: 1, name: "FPV Start 8–10", ages: "8–10", schedule: "Пн / Ср · 17:00", location: "Основна локація", capacity: 8, members: [] },
+    { id: 1, name: "FPV Start 8–10", ages: "8–10", schedule: "Пн / Ср · 17:00", location: "Основна локація", capacity: 8, members: [8, 9] },
   ]);
+  const [lessons, setLessons] = useState<LessonItem[]>([
+    { id: 1, groupId: 1, startsAt: "2026-09-30T17:00", duration: 60, topic: "FPV: траса в симуляторі" },
+    { id: 2, groupId: 1, startsAt: "2026-10-05T17:00", duration: 60, topic: "Whoop: базове керування" },
+  ]);
+  const [selectedLessonId, setSelectedLessonId] = useState(1);
+  const [attendance, setAttendance] = useState<Record<number, Record<number, AttendanceValue>>>({
+    1: { 8: "present", 9: "late" },
+  });
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [studentStates, setStudentStates] = useState<Record<number, "Активний" | "Пауза" | "Архів">>({});
@@ -62,6 +82,9 @@ function App() {
   const [groupSchedule, setGroupSchedule] = useState("Пн / Ср · 17:00");
   const [groupCapacity, setGroupCapacity] = useState(8);
   const [showGroupForm, setShowGroupForm] = useState(false);
+  const [newLessonGroupId, setNewLessonGroupId] = useState(1);
+  const [newLessonAt, setNewLessonAt] = useState("2026-10-07T17:00");
+  const [newLessonTopic, setNewLessonTopic] = useState("FPV / електроніка");
   const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedStudent = leads.find((lead) => lead.id === selectedStudentId) ?? null;
   const activeStudents = leads.filter((lead) => lead.status === "Зарахований");
@@ -149,6 +172,38 @@ function App() {
     setStudentStates((states) => ({ ...states, [id]: state }));
   };
 
+  const selectedLesson = lessons.find((lesson) => lesson.id === selectedLessonId) ?? lessons[0];
+  const lessonGroup = selectedLesson ? groups.find((group) => group.id === selectedLesson.groupId) : undefined;
+  const lessonStudents = lessonGroup ? leads.filter((lead) => lessonGroup.members.includes(lead.id)) : [];
+
+  const markAttendance = (studentId: number, value: AttendanceValue) => {
+    if (!selectedLesson) return;
+    setAttendance((all) => ({
+      ...all,
+      [selectedLesson.id]: { ...(all[selectedLesson.id] ?? {}), [studentId]: value },
+    }));
+  };
+
+  const markAllPresent = () => {
+    if (!selectedLesson) return;
+    const next: Record<number, AttendanceValue> = {};
+    lessonStudents.forEach((student) => { next[student.id] = "present"; });
+    setAttendance((all) => ({ ...all, [selectedLesson.id]: next }));
+  };
+
+  const createLesson = () => {
+    const nextId = Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1;
+    setLessons((items) => [...items, {
+      id: nextId,
+      groupId: newLessonGroupId,
+      startsAt: newLessonAt,
+      duration: 60,
+      topic: newLessonTopic.trim() || "Заняття",
+    }]);
+    setSelectedLessonId(nextId);
+    setActive("Відвідування");
+  };
+
   return (
     <div className="shell">
       <aside>
@@ -227,6 +282,68 @@ function App() {
           </aside>
         </section>}
 
+        {active === "Розклад" && <section className="scheduleLayout">
+          <article className="panel schedulePanel">
+            <div className="panelHead"><div><p className="eyebrow">Тиждень</p><h2>Розклад груп</h2></div><span className="counter">{groups.length}</span></div>
+            <div className="weekGrid">
+              {["Пн","Вт","Ср","Чт","Пт","Сб"].map((day) => <div className="dayColumn" key={day}>
+                <b>{day}</b>
+                {groups.flatMap((group) => scheduleSlots(group).filter((slot) => slot.day === day).map((slot) =>
+                  <button className="scheduleCard" key={group.id + day} onClick={() => setActive("Групи")}>
+                    <time>{slot.time}</time><strong>{group.name}</strong><span>{group.location}</span><small>{group.members.length}/{group.capacity} учнів</small>
+                  </button>
+                ))}
+              </div>)}
+            </div>
+          </article>
+          <aside className="panel lessonCreate">
+            <p className="eyebrow">Нове заняття</p><h2>Додати заняття</h2>
+            <label>Група<select value={newLessonGroupId} onChange={(e) => setNewLessonGroupId(Number(e.target.value))}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
+            <label>Дата і час<input type="datetime-local" value={newLessonAt} onChange={(e) => setNewLessonAt(e.target.value)} /></label>
+            <label>Тема<input value={newLessonTopic} onChange={(e) => setNewLessonTopic(e.target.value)} /></label>
+            <button className="primary full" onClick={createLesson}>Створити заняття</button>
+          </aside>
+        </section>}
+
+        {active === "Відвідування" && <section className="attendanceLayout">
+          <article className="panel lessonListPanel">
+            <div className="panelHead"><div><p className="eyebrow">Заняття</p><h2>Журнал</h2></div><span className="counter">{lessons.length}</span></div>
+            <div className="lessonList">
+              {lessons.map((lesson) => {
+                const group = groups.find((g) => g.id === lesson.groupId);
+                const marked = Object.keys(attendance[lesson.id] ?? {}).length;
+                return <button className={"lessonRow " + (lesson.id === selectedLessonId ? "active" : "")} key={lesson.id} onClick={() => setSelectedLessonId(lesson.id)}>
+                  <time>{new Date(lesson.startsAt).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })}<small>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</small></time>
+                  <span><b>{group?.name ?? "Група"}</b><small>{lesson.topic}</small></span>
+                  <i>{marked}/{group?.members.length ?? 0}</i>
+                </button>;
+              })}
+            </div>
+          </article>
+          <article className="panel attendancePanel">
+            {selectedLesson && <>
+              <div className="panelHead"><div><p className="eyebrow">Відвідування</p><h2>{lessonGroup?.name}</h2><p className="lessonMeta">{new Date(selectedLesson.startsAt).toLocaleString("uk-UA")} · {selectedLesson.duration} хв</p></div><button className="search" onClick={markAllPresent}>Усі присутні</button></div>
+              <div className="topicBox"><span>Тема заняття</span><b>{selectedLesson.topic}</b></div>
+              <div className="attendanceTable">
+                {lessonStudents.map((student) => {
+                  const value = attendance[selectedLesson.id]?.[student.id] ?? "present";
+                  return <div className="attendanceRow" key={student.id}>
+                    <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років</small></b></span>
+                    <div className="attendanceButtons">
+                      <button className={value === "present" ? "active present" : ""} onClick={() => markAttendance(student.id, "present")}>✓ Був</button>
+                      <button className={value === "late" ? "active late" : ""} onClick={() => markAttendance(student.id, "late")}>Запізнився</button>
+                      <button className={value === "absent" ? "active absent" : ""} onClick={() => markAttendance(student.id, "absent")}>Відсутній</button>
+                      <button className={value === "excused" ? "active excused" : ""} onClick={() => markAttendance(student.id, "excused")}>Поважна</button>
+                    </div>
+                  </div>;
+                })}
+                {lessonStudents.length === 0 && <div className="emptyState">У цій групі поки немає активних учнів.</div>}
+              </div>
+              <div className="attendanceFooter"><span>Позначено: <b>{Object.keys(attendance[selectedLesson.id] ?? {}).length}/{lessonStudents.length}</b></span><button className="primary">Зберегти відвідування</button></div>
+            </>}
+          </article>
+        </section>}
+
         {active === "Групи" && <section className="groupsLayout">
           <article className="panel">
             <div className="panelHead"><div><p className="eyebrow">Waiting list</p><h2>Очікують групу</h2></div><span className="counter">{waiting.length}</span></div>
@@ -265,7 +382,7 @@ function App() {
           </div>
         </section>}
 
-        {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && <section className="panel placeholder">
+        {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && active !== "Розклад" && active !== "Відвідування" && <section className="panel placeholder">
           <p className="eyebrow">Наступний модуль</p>
           <h2>{active}</h2>
           <p>Каркас модуля вже передбачений у навігації. Реалізуємо після завершення наскрізного сценарію «заявка → пробне → група → учень».</p>
@@ -383,6 +500,12 @@ function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: number) => v
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span></div>
     {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{lead.source}</span><span className="pill">{lead.status}</span></button>)}
   </div>;
+}
+
+function scheduleSlots(group: GroupItem) {
+  const [daysPart, timePart] = group.schedule.split("·").map((x) => x.trim());
+  const time = timePart || "—";
+  return (daysPart || "").split("/").map((day) => ({ day: day.trim(), time })).filter((item) => item.day);
 }
 
 function ageRange(items: Lead[]) {
