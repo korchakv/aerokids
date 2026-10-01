@@ -767,3 +767,21 @@ def create_membership(db: Session, org_id: UUID, data):
     db.commit()
     db.refresh(membership)
     return membership, user
+
+
+def update_location(db: Session, org_id: UUID, location_id: UUID, data) -> Location:
+    item = scoped_get(db, Location, org_id, location_id)
+    payload = data.model_dump(exclude_unset=True)
+    if "name" in payload and payload["name"]:
+        duplicate = db.scalar(select(Location).where(
+            Location.organization_id == org_id,
+            Location.name == payload["name"],
+            Location.id != location_id,
+        ))
+        if duplicate:
+            raise HTTPException(status_code=409, detail="Location name already exists")
+    for key, value in payload.items():
+        setattr(item, key, value)
+    db.commit()
+    db.refresh(item)
+    return item
