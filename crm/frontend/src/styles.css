@@ -28,3 +28,5 @@
 .scheduleSide{display:grid;gap:14px;align-content:start}.lessonCreate .search.full{margin-top:14px}
 
 .historyEmpty{padding:12px 0;color:#7892a3;font-size:13px}
+
+.searchModal{width:min(620px,100%)}.globalSearchInput{font-size:16px!important;padding:13px 14px!important}.searchHint{padding:22px 4px;color:#7892a3;text-align:center}.searchResults{display:grid;gap:6px;margin-top:18px}.searchResults h3{margin:0 0 4px;color:#8aa1af;font-size:12px;text-transform:uppercase;letter-spacing:.07em}.searchResults button{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;width:100%;padding:11px 10px;border:1px solid #19394b;border-radius:11px;background:#091a28;color:#edf7fa;text-align:left;cursor:pointer}.searchResults button:hover{border-color:#2b7180;background:#0e2938}.searchResults button span{display:grid;gap:2px}.searchResults button small{color:#7f98a8}.searchResults button i{font-style:normal;color:#65dfe7;font-size:12px}
