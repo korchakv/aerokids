@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_org_id
-from app.models.core import Organization
-from app.schemas import AttendanceBulkUpdate, AttendanceRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentTransfer, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
+from app.models.core import Organization, PaymentStatus
+from app.schemas import AttendanceBulkUpdate, AttendanceRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentSummary, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
 from app.services import crm
 
 router = APIRouter()
@@ -185,3 +185,43 @@ def update_attendance(session_id: UUID, data: AttendanceBulkUpdate, org_id: UUID
 @router.get("/lesson-sessions/{session_id}/attendance", response_model=list[AttendanceRead])
 def attendance(session_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
     return crm.list_attendance(db, org_id, session_id)
+
+
+@router.post("/subscription-plans", response_model=SubscriptionPlanRead, status_code=201)
+def create_subscription_plan(data: SubscriptionPlanCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.create_subscription_plan(db, org_id, data)
+
+
+@router.get("/subscription-plans", response_model=list[SubscriptionPlanRead])
+def subscription_plans(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.list_subscription_plans(db, org_id)
+
+
+@router.post("/student-subscriptions", response_model=StudentSubscriptionRead, status_code=201)
+def create_student_subscription(data: StudentSubscriptionCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.create_student_subscription(db, org_id, data)
+
+
+@router.get("/student-subscriptions", response_model=list[StudentSubscriptionRead])
+def student_subscriptions(student_id: UUID | None = None, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.list_student_subscriptions(db, org_id, student_id)
+
+
+@router.post("/payments", response_model=PaymentRead, status_code=201)
+def create_payment(data: PaymentCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.create_payment(db, org_id, data)
+
+
+@router.get("/payments", response_model=list[PaymentRead])
+def payments(student_id: UUID | None = None, status: PaymentStatus | None = None, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.list_payments(db, org_id, student_id, status)
+
+
+@router.patch("/payments/{payment_id}/paid", response_model=PaymentRead)
+def mark_payment_paid(payment_id: UUID, data: PaymentMarkPaid, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.mark_payment_paid(db, org_id, payment_id, data.method, data.paid_at)
+
+
+@router.get("/payments-summary", response_model=PaymentSummary)
+def payments_summary(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.payment_summary(db, org_id)
