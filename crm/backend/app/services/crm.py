@@ -47,6 +47,29 @@ def list_audit_events(
 
 
 
+def ensure_group_capacity(db: Session, org_id: UUID, group: Group, student_id: UUID | None = None) -> None:
+    if group.capacity is None:
+        return
+    already_enrolled = False
+    if student_id is not None:
+        already_enrolled = db.scalar(select(Enrollment.id).where(
+            Enrollment.organization_id == org_id,
+            Enrollment.student_id == student_id,
+            Enrollment.group_id == group.id,
+            Enrollment.status == EnrollmentStatus.ACTIVE,
+        )) is not None
+    if already_enrolled:
+        return
+
+    occupied = db.scalar(select(func.count(Enrollment.id)).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.group_id == group.id,
+        Enrollment.status == EnrollmentStatus.ACTIVE,
+    )) or 0
+    if occupied >= group.capacity:
+        raise HTTPException(status_code=409, detail="Group has no available seats")
+
+
 def normalize_phone(value: str) -> str:
     digits = re.sub(r"\D", "", value)
     if digits.startswith("380") and len(digits) == 12:
@@ -181,7 +204,8 @@ def list_groups(db: Session, org_id: UUID) -> list[Group]:
 
 def create_enrollment(db: Session, org_id: UUID, data: EnrollmentCreate) -> Enrollment:
     scoped_get(db, Student, org_id, data.student_id)
-    scoped_get(db, Group, org_id, data.group_id)
+    group = scoped_get(db, Group, org_id, data.group_id)
+    ensure_group_capacity(db, org_id, group, data.student_id)
     payload = data.model_dump()
     if payload["started_at"] is None:
         payload["started_at"] = date.today()
@@ -380,6 +404,7 @@ def update_student_lifecycle(db: Session, org_id: UUID, student_id: UUID, status
 def transfer_student(db: Session, org_id: UUID, student_id: UUID, to_group_id: UUID, started_at: date | None = None) -> Enrollment:
     student = scoped_get(db, Student, org_id, student_id)
     target = scoped_get(db, Group, org_id, to_group_id)
+    ensure_group_capacity(db, org_id, target, student_id)
 
     active_enrollments = list(db.scalars(select(Enrollment).where(
         Enrollment.organization_id == org_id,
