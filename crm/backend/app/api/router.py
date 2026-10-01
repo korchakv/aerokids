@@ -21,6 +21,12 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/ready")
+def ready(db: Session = Depends(get_db)) -> dict[str, str]:
+    db.execute(select(1))
+    return {"status": "ready", "database": "ok"}
+
+
 @router.get("/auth/bootstrap-status", response_model=BootstrapStatus)
 def auth_bootstrap_status(db: Session = Depends(get_db)):
     exists = db.scalar(select(Organization.id).limit(1))
