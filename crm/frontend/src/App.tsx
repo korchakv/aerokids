@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadOperations, loadSession, loadTeaching, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadOperations, loadOverviewReport, loadSession, loadTeaching, loadWorkspace, login, refreshMe, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -101,6 +101,7 @@ function App() {
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
+  const [overviewReport, setOverviewReport] = useState<OverviewReport | null>(null);
   const [active, setActive] = useState("Дашборд");
   const [leads, setLeads] = useState(initialLeads);
   const [groups, setGroups] = useState<GroupItem[]>([
@@ -187,14 +188,16 @@ function App() {
     setWorkspaceLoading(true);
     setWorkspaceError("");
     try {
-      const [bundle, operations, teaching] = await Promise.all([
+      const [bundle, operations, teaching, report] = await Promise.all([
         loadWorkspace(currentSession),
         loadOperations(currentSession),
         loadTeaching(currentSession),
+        loadOverviewReport(currentSession),
       ]);
       applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
       applyOperations(operations, setLocations, setStaff, setPlans, setPayments);
       applyTeaching(teaching, setLessons, setGroups);
+      setOverviewReport(report);
       setSelectedLessonId((current) => teaching.lessons.some((item) => item.id === current) ? current : (teaching.lessons[0]?.id ?? ""));
       setWorkspaceLoaded(true);
     } catch (error) {
@@ -582,11 +585,12 @@ function App() {
     absent: attendanceValues.filter((x) => x === "absent").length,
     excused: attendanceValues.filter((x) => x === "excused").length,
   };
-  const attendanceRate = attendanceValues.length
+  const localAttendanceRate = attendanceValues.length
     ? Math.round((attendanceStats.present + attendanceStats.late) / attendanceValues.length * 100)
     : 0;
-  const totalCapacity = groups.reduce((sum, group) => sum + group.capacity, 0);
-  const occupiedSeats = groups.reduce((sum, group) => sum + group.members.length, 0);
+  const attendanceRate = overviewReport?.attendance.attendance_rate ?? localAttendanceRate;
+  const totalCapacity = overviewReport?.group_capacity ?? groups.reduce((sum, group) => sum + group.capacity, 0);
+  const occupiedSeats = overviewReport?.enrolled_students ?? groups.reduce((sum, group) => sum + group.members.length, 0);
   const occupancy = totalCapacity ? Math.round(occupiedSeats / totalCapacity * 100) : 0;
 
   const selectedStaff = staff.find((item) => item.id === selectedStaffId) ?? null;
@@ -978,7 +982,7 @@ function App() {
             <article><span>Конверсія в учні</span><strong>{leads.length ? Math.round(activeStudents.length / leads.length * 100) : 0}%</strong><small>{activeStudents.length} з {leads.length} записів</small></article>
             <article><span>Заповненість груп</span><strong>{occupancy}%</strong><small>{occupiedSeats} з {totalCapacity} місць</small></article>
             <article><span>Відвідуваність</span><strong>{attendanceRate}%</strong><small>{attendanceValues.length} відміток</small></article>
-            <article><span>Сплачено</span><strong>{formatMoney(paymentTotals.paid)}</strong><small>зафіксовані платежі</small></article>
+            <article><span>Сплачено</span><strong>{formatMoney(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}</strong><small>зафіксовані платежі</small></article>
           </section>
 
           <section className="reportsGrid">
@@ -1001,29 +1005,29 @@ function App() {
             <article className="panel">
               <div className="panelHead"><div><p className="eyebrow">Навчання</p><h2>Відвідування</h2></div><strong className="reportBig">{attendanceRate}%</strong></div>
               <div className="attendanceSummary">
-                <span><i className="dot present"></i>Був <b>{attendanceStats.present}</b></span>
-                <span><i className="dot late"></i>Запізнився <b>{attendanceStats.late}</b></span>
-                <span><i className="dot absent"></i>Відсутній <b>{attendanceStats.absent}</b></span>
-                <span><i className="dot excused"></i>Поважна <b>{attendanceStats.excused}</b></span>
+                <span><i className="dot present"></i>Був <b>{overviewReport?.attendance.present ?? attendanceStats.present}</b></span>
+                <span><i className="dot late"></i>Запізнився <b>{overviewReport?.attendance.late ?? attendanceStats.late}</b></span>
+                <span><i className="dot absent"></i>Відсутній <b>{overviewReport?.attendance.absent ?? attendanceStats.absent}</b></span>
+                <span><i className="dot excused"></i>Поважна <b>{overviewReport?.attendance.excused ?? attendanceStats.excused}</b></span>
               </div>
             </article>
 
             <article className="panel">
               <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати</h2></div></div>
               <div className="financeRows">
-                <span><i>Сплачено</i><b>{formatMoney(paymentTotals.paid)}</b></span>
-                <span><i>Очікується</i><b>{formatMoney(paymentTotals.pending)}</b></span>
-                <span><i>Прострочено</i><b>{formatMoney(paymentTotals.overdue)}</b></span>
+                <span><i>Сплачено</i><b>{formatMoney(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}</b></span>
+                <span><i>Очікується</i><b>{formatMoney(overviewReport ? overviewReport.payments.pending_minor / 100 : paymentTotals.pending)}</b></span>
+                <span><i>Прострочено</i><b>{formatMoney(overviewReport ? overviewReport.payments.overdue_minor / 100 : paymentTotals.overdue)}</b></span>
               </div>
             </article>
 
             <article className="panel">
               <div className="panelHead"><div><p className="eyebrow">Масштаб</p><h2>Організація</h2></div></div>
               <div className="organizationReport">
-                <span><strong>{locations.filter((x) => x.isActive).length}</strong><small>локацій</small></span>
-                <span><strong>{staff.filter((x) => x.isActive).length}</strong><small>працівників</small></span>
-                <span><strong>{groups.length}</strong><small>груп</small></span>
-                <span><strong>{activeStudents.length}</strong><small>учнів</small></span>
+                <span><strong>{overviewReport?.active_locations ?? locations.filter((x) => x.isActive).length}</strong><small>локацій</small></span>
+                <span><strong>{overviewReport?.active_staff ?? staff.filter((x) => x.isActive).length}</strong><small>працівників</small></span>
+                <span><strong>{overviewReport?.active_groups ?? groups.length}</strong><small>груп</small></span>
+                <span><strong>{overviewReport?.active_students ?? activeStudents.length}</strong><small>учнів</small></span>
               </div>
             </article>
           </section>
