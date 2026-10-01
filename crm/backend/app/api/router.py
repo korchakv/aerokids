@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_org_id
 from app.models.core import Organization
-from app.schemas import ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupRead, IntakeCreate, IntakeResult, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, StudentContactCreate, StudentCreate, StudentDetail, StudentRead, StudentStatusUpdate, TrialLessonComplete, TrialLessonCreate, TrialLessonRead
+from app.schemas import ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, IntakeCreate, IntakeResult, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, StudentContactCreate, StudentCreate, StudentDetail, StudentRead, StudentStatusUpdate, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
 from app.services import crm
 
 router = APIRouter()
@@ -115,3 +115,17 @@ def update_student_status(student_id: UUID, data: StudentStatusUpdate, org_id: U
 @router.patch("/trial-lessons/{trial_id}/complete", response_model=TrialLessonRead)
 def complete_trial(trial_id: UUID, data: TrialLessonComplete, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
     return crm.complete_trial(db, org_id, trial_id, data.status, data.recommended_level, data.teacher_notes)
+
+
+@router.get("/waiting-list", response_model=list[WaitingCandidate])
+def waiting_list(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.list_waiting_candidates(db, org_id)
+
+
+@router.post("/groups/form", response_model=GroupFormationResult, status_code=201)
+def form_group(data: GroupFormationCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    group, student_ids = crm.form_group(db, org_id, data)
+    return GroupFormationResult(
+        group=GroupRead.model_validate(group),
+        enrolled_student_ids=student_ids,
+    )
