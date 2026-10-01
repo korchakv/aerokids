@@ -8,7 +8,7 @@ from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, ge
 from app.models.core import Organization, PaymentStatus, StaffRole, User
 from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LeadListItem, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentSummary, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
 from app.auth import service as auth_service
-from app.auth.schemas import AcceptInvitationCreate, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult
+from app.auth.schemas import AcceptInvitationCreate, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
 from app.services import crm
@@ -74,6 +74,32 @@ def create_organization_invitation(
 @router.post("/auth/accept-invite", response_model=AuthTokenResponse)
 def accept_organization_invitation(data: AcceptInvitationCreate, db: Session = Depends(get_db)):
     user, token, user_info = auth_service.accept_invitation(db, data.invite_token, data.full_name, data.password)
+    return AuthTokenResponse(access_token=token, user=user_info)
+
+
+@router.post("/password-reset-links", response_model=PasswordResetLinkResult, status_code=201)
+def create_password_reset_link(
+    data: PasswordResetLinkCreate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    user, reset, raw_token = auth_service.create_password_reset_link(
+        db,
+        access.organization_id,
+        access.user_id,
+        access.role,
+        data.email,
+    )
+    return PasswordResetLinkResult(
+        email=user.email,
+        reset_token=raw_token,
+        expires_at=reset.expires_at.isoformat(),
+    )
+
+
+@router.post("/auth/reset-password", response_model=AuthTokenResponse)
+def reset_password(data: PasswordResetComplete, db: Session = Depends(get_db)):
+    user, token, user_info = auth_service.complete_password_reset(db, data.reset_token, data.password)
     return AuthTokenResponse(access_token=token, user=user_info)
 
 
