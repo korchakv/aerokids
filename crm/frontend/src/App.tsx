@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadOperations, loadSession, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadOperations, loadSession, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -138,6 +138,10 @@ function App() {
   ]);
   const [selectedStaffId, setSelectedStaffId] = useState<EntityId | null>(null);
   const [showStaffForm, setShowStaffForm] = useState(false);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<StaffRoleDemo>("Викладач");
+  const [inviteLink, setInviteLink] = useState("");
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [staffName, setStaffName] = useState("");
   const [staffRole, setStaffRole] = useState<StaffRoleDemo>("Викладач");
@@ -531,6 +535,21 @@ function App() {
     setShowStaffForm(false);
   };
 
+  const createInvitation = async () => {
+    if (!session || !inviteEmail.trim()) return;
+    try {
+      const result = await apiPost<{ invite_token: string }>("/organization-invitations", {
+        email: inviteEmail.trim(),
+        role: staffRoleValue(inviteRole),
+      }, session);
+      const url = new URL(window.location.href);
+      url.searchParams.set("invite", result.invite_token);
+      setInviteLink(url.toString());
+    } catch {
+      return;
+    }
+  };
+
   const createLocationDemo = async () => {
     if (!locationName.trim()) return;
     if (apiEnabled && session) {
@@ -807,7 +826,7 @@ function App() {
           <article className="panel staffPanel">
             <div className="panelHead">
               <div><p className="eyebrow">Команда</p><h2>Працівники</h2></div>
-              <button className="primary" onClick={() => setShowStaffForm(true)}>+ Додати працівника</button>
+              <div className="staffActions"><button className="search" onClick={() => { setInviteLink(""); setShowInviteForm(true); }}>Запросити в CRM</button><button className="primary" onClick={() => setShowStaffForm(true)}>+ Працівник</button></div>
             </div>
             <div className="staffTable">
               <div className="staffRow staffHead"><span>Працівник</span><span>Роль</span><span>Локації</span><span>Групи</span><span>Статус</span></div>
@@ -949,7 +968,22 @@ function App() {
         </section>}
       </main>
 
-      {showStaffForm && <div className="modalBackdrop" onClick={() => setShowStaffForm(false)}>
+      {showInviteForm && <div className="modalBackdrop" onClick={() => setShowInviteForm(false)}>
+        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => setShowInviteForm(false)}>×</button>
+          <p className="eyebrow">Доступ до CRM</p><h2>Запросити працівника</h2>
+          {!inviteLink ? <>
+            <label>Email<input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="teacher@example.com" /></label>
+            <label>Роль<select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as StaffRoleDemo)}>{["Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+            <button className="primary full" disabled={!inviteEmail.trim()} onClick={createInvitation}>Створити запрошення</button>
+          </> : <>
+            <div className="inviteSuccess"><b>Запрошення готове</b><p>Надішліть це посилання працівнику. Воно одноразове та діє 7 днів.</p><code>{inviteLink}</code></div>
+            <button className="primary full" onClick={() => navigator.clipboard?.writeText(inviteLink)}>Копіювати посилання</button>
+          </>}
+        </div>
+      </div>}
+
+            {showStaffForm && <div className="modalBackdrop" onClick={() => setShowStaffForm(false)}>
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowStaffForm(false)}>×</button>
           <p className="eyebrow">Команда</p><h2>Новий працівник</h2>
@@ -1292,6 +1326,8 @@ function ageLabel(min: number | null, max: number | null) {
 }
 
 function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
+  const inviteToken = new URLSearchParams(window.location.search).get("invite");
+  const [inviteName, setInviteName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -1303,6 +1339,10 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
   const [ownerName, setOwnerName] = useState("");
 
   useEffect(() => {
+    if (inviteToken) {
+      setCheckingBootstrap(false);
+      return;
+    }
     getBootstrapStatus()
       .then(setBootstrapAvailable)
       .catch(() => setBootstrapAvailable(false))
@@ -1317,6 +1357,26 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
       onAuthenticated(await login(email, password));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не вдалося увійти");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const acceptInvitation = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!inviteToken) return;
+    setError("");
+    setLoading(true);
+    try {
+      const nextSession = await acceptInvite({
+        invite_token: inviteToken,
+        full_name: inviteName.trim(),
+        password,
+      });
+      window.history.replaceState({}, "", window.location.pathname);
+      onAuthenticated(nextSession);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не вдалося прийняти запрошення");
     } finally {
       setLoading(false);
     }
@@ -1345,7 +1405,17 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
     <div className="loginCard">
       <div className="loginBrand"><span className="mark">✦</span><div><b>School CRM</b><small>Керування школою в одному місці</small></div></div>
 
-      {checkingBootstrap ? <div className="loginChecking">Перевіряємо CRM…</div> : bootstrapAvailable ? <>
+      {inviteToken ? <>
+        <p className="eyebrow">Запрошення</p>
+        <h1>Створіть свій доступ</h1>
+        <p className="loginIntro">Вкажіть ім’я та пароль. Роль і організація вже задані запрошенням.</p>
+        <form onSubmit={acceptInvitation}>
+          <label>Ваше ім’я<input autoComplete="name" value={inviteName} onChange={(e) => setInviteName(e.target.value)} required /></label>
+          <label>Пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          {error && <div className="loginError">{error}</div>}
+          <button className="primary full" disabled={loading}>{loading ? "Створюємо доступ…" : "Прийняти запрошення"}</button>
+        </form>
+      </> : checkingBootstrap ? <div className="loginChecking">Перевіряємо CRM…</div> : bootstrapAvailable ? <>
         <p className="eyebrow">Перший запуск</p>
         <h1>Створіть першу організацію</h1>
         <p className="loginIntro">Це виконується один раз. Після цього ви станете власником організації та зможете запрошувати команду.</p>
