@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { apiEnabled, changeOrganization, clearSession, loadSession, loadWorkspace, login, refreshMe, type Session, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
@@ -902,9 +902,9 @@ function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) =>
 
 function applyWorkspace(
   bundle: WorkspaceBundle,
-  setLeads: React.Dispatch<React.SetStateAction<Lead[]>>,
-  setGroups: React.Dispatch<React.SetStateAction<GroupItem[]>>,
-  setStudentStates: React.Dispatch<React.SetStateAction<Record<EntityId, "Активний" | "Пауза" | "Архів">>>,
+  setLeads: Dispatch<SetStateAction<Lead[]>>,
+  setGroups: Dispatch<SetStateAction<GroupItem[]>>,
+  setStudentStates: Dispatch<SetStateAction<Record<EntityId, "Активний" | "Пауза" | "Архів">>>,
 ) {
   const prospects: Lead[] = bundle.leads.map((item) => ({
     id: item.student_id,
