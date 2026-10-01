@@ -68,7 +68,6 @@ class StudentRead(ORMModel):
     birth_date: date | None
     age_at_inquiry: int | None
     source: str | None
-    comment: str | None
     crm_status: CrmStatus
     student_status: StudentStatus
     notes: str | None
@@ -454,6 +453,7 @@ class LeadListItem(BaseModel):
     last_name: str | None
     age: int | None
     source: str | None
+    comment: str | None
     crm_status: CrmStatus
     contact_name: str | None
     contact_phone: str | None
