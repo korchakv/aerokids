@@ -21,7 +21,12 @@ Branch: `crm-v1`
 - student subscriptions;
 - payments and payment summary;
 - staff, locations and group assignments;
-- tenant-scoped reports.
+- tenant-scoped reports;
+- organization timezone / currency / locale settings;
+- preferred student location and structured weekly availability;
+- schedule compatibility hints while forming groups;
+- audit history with authenticated actor identity;
+- duplicate-intake protection and international E.164-style phone support.
 
 ## Roles
 
@@ -50,9 +55,11 @@ Without it, the React UI keeps demo data for visual development.
 
 ## Before public beta
 
-1. Run the whole stack against PostgreSQL for a longer smoke test.
-2. Add audit/event log for important mutations.
-3. Add production rate limiting / anti-spam to public intake.
-4. Add password recovery.
-5. Add date filters/pagination where lists can grow large.
-6. Move AeroKiDS website form from Formspree to the public intake endpoint only after the CRM deployment is stable.
+1. Deploy a private beta stack with managed PostgreSQL and HTTPS.
+2. Add production rate limiting / anti-spam to public intake.
+3. Add password recovery / transactional email delivery.
+4. Add date filters and pagination where lists can grow large.
+5. Add backup/restore and production observability.
+6. Move AeroKiDS website form from Formspree to the public intake endpoint only after the private beta is stable.
+
+CI now runs the full backend test suite on both SQLite and PostgreSQL, verifies Alembic migrations, builds the React frontend, and validates both Docker images.
