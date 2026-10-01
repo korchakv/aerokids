@@ -285,3 +285,38 @@ export async function apiDelete(path: string, session: Session): Promise<void> {
     throw new Error(message);
   }
 }
+
+
+export async function getBootstrapStatus(): Promise<boolean> {
+  const result = await request<{ available: boolean }>("/auth/bootstrap-status");
+  return result.available;
+}
+
+export async function bootstrapOwner(input: {
+  organization_name: string;
+  organization_slug: string;
+  full_name: string;
+  email: string;
+  password: string;
+}): Promise<Session> {
+  const result = await request<{
+    organization_id: string;
+    user_id: string;
+    access_token: string;
+    token_type: string;
+  }>("/auth/bootstrap", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+  const user = await request<AuthUser>("/auth/me", {
+    headers: { Authorization: `Bearer ${result.access_token}` },
+  });
+  const session: Session = {
+    accessToken: result.access_token,
+    user,
+    organizationId: result.organization_id,
+  };
+  saveSession(session);
+  return session;
+}
