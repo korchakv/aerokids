@@ -43,3 +43,22 @@ class BootstrapOwnerResult(BaseModel):
     user_id: UUID
     access_token: str
     token_type: str = "bearer"
+
+
+class OrganizationInvitationCreate(BaseModel):
+    email: str = Field(min_length=5, max_length=255)
+    role: StaffRole
+
+
+class OrganizationInvitationResult(BaseModel):
+    invitation_id: UUID
+    email: str
+    role: StaffRole
+    invite_token: str
+    expires_at: str
+
+
+class AcceptInvitationCreate(BaseModel):
+    invite_token: str = Field(min_length=20, max_length=300)
+    full_name: str = Field(min_length=2, max_length=160)
+    password: str = Field(min_length=10, max_length=200)
