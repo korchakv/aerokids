@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_org_id
 from app.models.core import Organization
-from app.schemas import ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, IntakeCreate, IntakeResult, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, StudentContactCreate, StudentCreate, StudentDetail, StudentRead, StudentStatusUpdate, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
+from app.schemas import ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, IntakeCreate, IntakeResult, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentTransfer, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
 from app.services import crm
 
 router = APIRouter()
@@ -129,3 +129,24 @@ def form_group(data: GroupFormationCreate, org_id: UUID = Depends(get_org_id), d
         group=GroupRead.model_validate(group),
         enrolled_student_ids=student_ids,
     )
+
+
+@router.get("/students/{student_id}/profile", response_model=StudentProfile)
+def get_student_profile(student_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    student, contacts, trials, groups = crm.student_profile(db, org_id, student_id)
+    return StudentProfile(
+        **StudentRead.model_validate(student).model_dump(),
+        contacts=[ContactRead.model_validate(item) for item in contacts],
+        trial_lessons=[TrialLessonRead.model_validate(item) for item in trials],
+        groups=[StudentGroupInfo(**item) for item in groups],
+    )
+
+
+@router.patch("/students/{student_id}/status", response_model=StudentRead)
+def update_student_lifecycle(student_id: UUID, data: StudentLifecycleUpdate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.update_student_lifecycle(db, org_id, student_id, data.student_status)
+
+
+@router.post("/students/{student_id}/transfer", response_model=EnrollmentRead)
+def transfer_student(student_id: UUID, data: StudentTransfer, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.transfer_student(db, org_id, student_id, data.to_group_id, data.started_at)
