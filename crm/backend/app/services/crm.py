@@ -580,6 +580,7 @@ def create_payment(db: Session, org_id: UUID, data) -> Payment:
     db.add(item)
     db.commit()
     db.refresh(item)
+    item.plan_id = subscription.plan_id if data.subscription_id is not None else None
     return item
 
 
@@ -590,7 +591,14 @@ def list_payments(db: Session, org_id: UUID, student_id: UUID | None = None, sta
         stmt = stmt.where(Payment.student_id == student_id)
     if status is not None:
         stmt = stmt.where(Payment.status == status)
-    return list(db.scalars(stmt.order_by(Payment.created_at.desc())))
+    rows = list(db.scalars(stmt.order_by(Payment.created_at.desc())))
+    for row in rows:
+        if row.subscription_id is not None:
+            subscription = scoped_get(db, StudentSubscription, org_id, row.subscription_id)
+            row.plan_id = subscription.plan_id
+        else:
+            row.plan_id = None
+    return rows
 
 
 def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: PaymentMethod, paid_at: datetime | None = None) -> Payment:
@@ -602,6 +610,11 @@ def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: Payme
     payment.paid_at = paid_at or datetime.now(timezone.utc)
     db.commit()
     db.refresh(payment)
+    if payment.subscription_id is not None:
+        subscription = scoped_get(db, StudentSubscription, org_id, payment.subscription_id)
+        payment.plan_id = subscription.plan_id
+    else:
+        payment.plan_id = None
     return payment
 
 
