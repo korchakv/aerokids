@@ -438,6 +438,20 @@ def form_group(db: Session, org_id: UUID, data) -> tuple[Group, list[UUID]]:
     db.add(group)
     try:
         db.flush()
+        schedule_keys: set[tuple[int, str]] = set()
+        for slot in data.schedule_slots:
+            key = (slot.weekday, slot.start_time)
+            if key in schedule_keys:
+                raise HTTPException(status_code=422, detail="Duplicate group schedule slots are not allowed")
+            schedule_keys.add(key)
+            db.add(GroupSchedule(
+                organization_id=org_id,
+                group_id=group.id,
+                weekday=slot.weekday,
+                start_time=time.fromisoformat(slot.start_time),
+                duration_minutes=slot.duration_minutes,
+            ))
+
         for student in students:
             db.add(Enrollment(
                 organization_id=org_id,
@@ -448,7 +462,11 @@ def form_group(db: Session, org_id: UUID, data) -> tuple[Group, list[UUID]]:
             student.crm_status = CrmStatus.ENROLLED
             student.student_status = StudentStatus.ACTIVE
             record_audit(db, org_id, "student", student.id, "student.enrolled", {"group_id": str(group.id), "group_name": group.name})
-        record_audit(db, org_id, "group", group.id, "group.created", {"name": group.name, "student_count": len(students)})
+        record_audit(db, org_id, "group", group.id, "group.created", {
+            "name": group.name,
+            "student_count": len(students),
+            "schedule_slots": len(data.schedule_slots),
+        })
         db.commit()
     except IntegrityError as exc:
         db.rollback()
