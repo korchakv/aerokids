@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { apiEnabled, apiPatch, apiPost, changeOrganization, clearSession, loadOperations, loadSession, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type WorkspaceBundle } from "./api";
+import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, clearSession, loadOperations, loadSession, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -520,19 +520,48 @@ function App() {
     setShowLocationForm(false);
   };
 
-  const toggleStaffLocation = (staffId: EntityId, locationId: EntityId) => {
-    setStaff((items) => items.map((item) => item.id !== staffId ? item : {
-      ...item,
-      locationIds: item.locationIds.includes(locationId)
-        ? item.locationIds.filter((id) => id !== locationId)
-        : [...item.locationIds, locationId],
-    }));
+  const toggleStaffLocation = async (staffId: EntityId, locationId: EntityId) => {
+    const member = staff.find((item) => item.id === staffId);
+    if (!member) return;
+    const nextIds = member.locationIds.includes(locationId)
+      ? member.locationIds.filter((id) => id !== locationId)
+      : [...member.locationIds, locationId];
+
+    if (apiEnabled && session) {
+      try {
+        await apiPut(`/staff/${staffId}/locations`, { location_ids: nextIds }, session);
+        await syncWorkspace(session);
+        return;
+      } catch {
+        return;
+      }
+    }
+
+    setStaff((items) => items.map((item) => item.id !== staffId ? item : { ...item, locationIds: nextIds }));
   };
 
-  const toggleStaffGroup = (staffId: EntityId, groupId: EntityId) => {
+  const toggleStaffGroup = async (staffId: EntityId, groupId: EntityId) => {
+    const member = staff.find((item) => item.id === staffId);
+    if (!member) return;
+    const hasGroup = member.groupIds.includes(groupId);
+
+    if (apiEnabled && session) {
+      try {
+        if (hasGroup) {
+          await apiDelete(`/staff/${staffId}/groups/${groupId}`, session);
+        } else {
+          await apiPost(`/staff/${staffId}/groups`, { group_id: groupId, is_primary: false }, session);
+        }
+        await syncWorkspace(session);
+        return;
+      } catch {
+        return;
+      }
+    }
+
     setStaff((items) => items.map((item) => item.id !== staffId ? item : {
       ...item,
-      groupIds: item.groupIds.includes(groupId)
+      groupIds: hasGroup
         ? item.groupIds.filter((id) => id !== groupId)
         : [...item.groupIds, groupId],
     }));
@@ -909,7 +938,18 @@ function App() {
           <div className="contactCard"><span>Контакти</span><b>{selectedStaff.email || "Email не вказано"}</b><a href={"tel:" + selectedStaff.phone.replace(/\s/g,"")}>{selectedStaff.phone || "Телефон не вказано"}</a></div>
           <div className="studentSection"><h3>Локації</h3><div className="assignmentList">{locations.map((location) => <label key={location.id}><input type="checkbox" checked={selectedStaff.locationIds.includes(location.id)} onChange={() => toggleStaffLocation(selectedStaff.id, location.id)} /><span>{location.name}<small>{location.address}</small></span></label>)}</div></div>
           <div className="studentSection"><h3>Групи</h3><div className="assignmentList">{groups.map((group) => <label key={group.id}><input type="checkbox" checked={selectedStaff.groupIds.includes(group.id)} onChange={() => toggleStaffGroup(selectedStaff.id, group.id)} /><span>{group.name}<small>{group.schedule}</small></span></label>)}</div></div>
-          <div className="studentSection"><h3>Статус</h3><button className="search full" onClick={() => setStaff((items) => items.map((item) => item.id === selectedStaff.id ? {...item,isActive:!item.isActive} : item))}>{selectedStaff.isActive ? "Деактивувати працівника" : "Активувати працівника"}</button></div>
+          <div className="studentSection"><h3>Статус</h3><button className="search full" onClick={async () => {
+            if (apiEnabled && session) {
+              try {
+                await apiPatch(`/staff/${selectedStaff.id}`, { is_active: !selectedStaff.isActive }, session);
+                await syncWorkspace(session);
+                return;
+              } catch {
+                return;
+              }
+            }
+            setStaff((items) => items.map((item) => item.id === selectedStaff.id ? {...item,isActive:!item.isActive} : item));
+          }}>{selectedStaff.isActive ? "Деактивувати працівника" : "Активувати працівника"}</button></div>
         </aside>
       </div>}
 
