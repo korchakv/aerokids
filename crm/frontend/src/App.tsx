@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadOperations, loadOverviewReport, loadSession, loadTeaching, loadWorkspace, login, refreshMe, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadOperations, loadOverviewReport, loadSession, loadTeaching, loadWorkspace, login, refreshMe, type ApiAuditEvent, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -102,6 +102,8 @@ function App() {
   const [workspaceError, setWorkspaceError] = useState("");
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [overviewReport, setOverviewReport] = useState<OverviewReport | null>(null);
+  const [entityEvents, setEntityEvents] = useState<ApiAuditEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [active, setActive] = useState("Дашборд");
   const [leads, setLeads] = useState(initialLeads);
   const [groups, setGroups] = useState<GroupItem[]>([
@@ -218,6 +220,34 @@ function App() {
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedStudent = leads.find((lead) => lead.id === selectedStudentId) ?? null;
   const activeStudents = leads.filter((lead) => lead.status === "Зарахований");
+
+  useEffect(() => {
+    const entityId = selected?.id ?? selectedStudent?.id;
+    if (!entityId || !apiEnabled || !session) {
+      setEntityEvents([]);
+      return;
+    }
+    const role = session.user.memberships.find((item) => item.organization_id === session.organizationId)?.role;
+    if (!["owner", "admin", "manager"].includes(role ?? "")) {
+      setEntityEvents([]);
+      return;
+    }
+
+    let cancelled = false;
+    setHistoryLoading(true);
+    loadAuditEvents("student", entityId, session)
+      .then((events) => {
+        if (!cancelled) setEntityEvents(events);
+      })
+      .catch(() => {
+        if (!cancelled) setEntityEvents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [selected?.id, selectedStudent?.id, session?.accessToken, session?.organizationId]);
   const studentGroup = (studentId: EntityId) => groups.find((group) => group.members.includes(studentId));
 
   const waiting = useMemo(() => leads.filter((x) => x.status === "Очікує групу"), [leads]);
@@ -1196,11 +1226,11 @@ function App() {
             </div>
           </>}
 
-          <div className="history">
+          {apiEnabled ? <AuditHistory title="Історія учня" events={entityEvents} loading={historyLoading} /> : <div className="history">
             <h3>Історія учня</h3>
             <div><i></i><p><b>Пробне заняття</b><span>{selectedStudent.recommendedLevel ?? "Рівень не вказано"}</span></p></div>
             <div><i></i><p><b>Зараховано</b><span>{studentGroup(selectedStudent.id)?.name ?? "Групу не вказано"}</span></p></div>
-          </div>
+          </div>}
         </aside>
       </div>}
 
@@ -1259,13 +1289,13 @@ function App() {
 
           {selected.trialResult === "completed" && <div className="resultCard"><span>Пробне завершено</span><b>{selected.recommendedLevel ?? "Рівень не вказано"}</b>{selected.teacherNotes && <p>{selected.teacherNotes}</p>}<small>Дитина автоматично перейшла в «Очікує групу».</small></div>}
 
-          <div className="history">
+          {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} /> : <div className="history">
             <h3>Історія</h3>
             <div><i></i><p><b>Заявка створена</b><span>Джерело: {selected.source}</span></p></div>
             {selected.trialAt && <div><i></i><p><b>Пробне заплановано</b><span>{new Date(selected.trialAt).toLocaleString("uk-UA")}</span></p></div>}
             {selected.trialResult === "completed" && <div><i></i><p><b>Пробне пройдено</b><span>Рівень: {selected.recommendedLevel ?? "не вказано"}</span></p></div>}
             {selected.status !== "Нова" && <div><i></i><p><b>Поточний статус</b><span>{selected.status}</span></p></div>}
-          </div>
+          </div>}
         </aside>
       </div>}
     </div>
@@ -1481,6 +1511,48 @@ function ageLabel(min: number | null, max: number | null) {
   if (min == null && max == null) return "—";
   if (min != null && max != null) return min === max ? String(min) : `${min}–${max}`;
   return String(min ?? max);
+}
+
+function AuditHistory({ title, events, loading }: { title: string; events: ApiAuditEvent[]; loading: boolean }) {
+  return <div className="history">
+    <h3>{title}</h3>
+    {loading && <div className="historyEmpty">Завантажуємо історію…</div>}
+    {!loading && events.length === 0 && <div className="historyEmpty">Подій поки немає.</div>}
+    {!loading && events.map((event) => <div key={event.id}>
+      <i></i>
+      <p>
+        <b>{auditEventLabel(event.event_type)}</b>
+        <span>{auditEventDetail(event)} · {new Date(event.created_at).toLocaleString("uk-UA")}</span>
+      </p>
+    </div>)}
+  </div>;
+}
+
+function auditEventLabel(type: string) {
+  const labels: Record<string, string> = {
+    "lead.created": "Заявка створена",
+    "student.crm_status_changed": "Статус заявки змінено",
+    "trial.scheduled": "Пробне заплановано",
+    "trial.completed": "Пробне пройдено",
+    "trial.no_show": "Не прийшов на пробне",
+    "student.enrolled": "Зараховано до групи",
+    "student.transferred": "Переведено в іншу групу",
+    "student.status_changed": "Статус учня змінено",
+    "payment.created": "Створено нарахування",
+    "payment.paid": "Оплату отримано",
+  };
+  return labels[type] ?? type;
+}
+
+function auditEventDetail(event: ApiAuditEvent) {
+  const payload = event.payload ?? {};
+  if (typeof payload["group_name"] === "string") return payload["group_name"];
+  if (typeof payload["to_group_name"] === "string") return payload["to_group_name"];
+  if (typeof payload["crm_status"] === "string") return String(payload["crm_status"]);
+  if (typeof payload["student_status"] === "string") return String(payload["student_status"]);
+  if (typeof payload["recommended_level"] === "string") return String(payload["recommended_level"]);
+  if (typeof payload["amount_minor"] === "number") return formatMoney(Number(payload["amount_minor"]) / 100);
+  return "CRM";
 }
 
 function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
