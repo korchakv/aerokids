@@ -153,10 +153,21 @@ export type WorkspaceBundle = {
 };
 
 export async function loadWorkspace(session: Session): Promise<WorkspaceBundle> {
-  const [leads, students, groups] = await Promise.all([
-    apiGet<WorkspaceLead[]>("/workspace/leads", session),
-    apiGet<WorkspaceStudent[]>("/workspace/students", session),
-    apiGet<WorkspaceGroup[]>("/workspace/groups", session),
-  ]);
+  const membership = session.user.memberships.find((item) => item.organization_id === session.organizationId);
+  const role = membership?.role;
+
+  const leadsPromise = role === "owner" || role === "admin" || role === "manager"
+    ? apiGet<WorkspaceLead[]>("/workspace/leads", session)
+    : Promise.resolve([]);
+
+  const studentsPromise = role === "accountant"
+    ? Promise.resolve([])
+    : apiGet<WorkspaceStudent[]>("/workspace/students", session);
+
+  const groupsPromise = role === "accountant"
+    ? Promise.resolve([])
+    : apiGet<WorkspaceGroup[]>("/workspace/groups", session);
+
+  const [leads, students, groups] = await Promise.all([leadsPromise, studentsPromise, groupsPromise]);
   return { leads, students, groups };
 }
