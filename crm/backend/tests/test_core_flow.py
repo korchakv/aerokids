@@ -1244,3 +1244,34 @@ def test_intake_accepts_explicit_international_phone_and_deduplicates_repeat(cli
     event_types = [item["event_type"] for item in events.json()]
     assert "lead.created" in event_types
     assert "lead.duplicate_intake" in event_types
+
+
+def test_organization_currency_is_used_for_payments_and_locked_after_first_payment(client):
+    org = create_org(client, "EUR School", "eur-school")
+    headers = {"X-Organization-Id": org["id"]}
+
+    updated = client.patch("/organization", headers=headers, json={"currency": "EUR"})
+    assert updated.status_code == 200, updated.text
+
+    student = client.post("/students", headers=headers, json={"first_name": "Anna"}).json()
+    payment = client.post(
+        "/payments",
+        headers=headers,
+        json={"student_id": student["id"], "amount_minor": 2500},
+    )
+    assert payment.status_code == 201, payment.text
+    assert payment.json()["currency"] == "EUR"
+
+    blocked = client.patch("/organization", headers=headers, json={"currency": "USD"})
+    assert blocked.status_code == 409
+    assert "cannot be changed" in blocked.json()["detail"]
+
+
+def test_organization_rejects_unknown_timezone(client):
+    org = create_org(client, "Timezone School", "timezone-school")
+    response = client.patch(
+        "/organization",
+        headers={"X-Organization-Id": org["id"]},
+        json={"timezone": "Mars/Olympus"},
+    )
+    assert response.status_code == 422
