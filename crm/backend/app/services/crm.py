@@ -107,7 +107,7 @@ def list_organizations(db: Session) -> list[Organization]:
     return list(db.scalars(select(Organization).order_by(Organization.name)))
 
 
-def update_organization(db: Session, org_id: UUID, data) -> Organization:
+def update_organization(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> Organization:
     item = require_organization(db, org_id)
     updates = data.model_dump(exclude_none=True)
 
@@ -124,7 +124,7 @@ def update_organization(db: Session, org_id: UUID, data) -> Organization:
 
     for key, value in updates.items():
         setattr(item, key, value)
-    record_audit(db, org_id, "organization", item.id, "organization.settings_updated", updates)
+    record_audit(db, org_id, "organization", item.id, "organization.settings_updated", updates, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(item)
     return item
@@ -200,7 +200,7 @@ def attach_contact(db: Session, org_id: UUID, student_id: UUID, contact_id: UUID
     return link
 
 
-def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate) -> TrialLesson:
+def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate, actor_user_id: UUID | None = None) -> TrialLesson:
     student = scoped_get(db, Student, org_id, data.student_id)
     if data.location_id:
         scoped_get(db, Location, org_id, data.location_id)
@@ -208,13 +208,13 @@ def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate) -> TrialLes
     db.add(item)
     db.flush()
     student.crm_status = CrmStatus.TRIAL_SCHEDULED
-    record_audit(db, org_id, "student", student.id, "trial.scheduled", {"trial_id": str(item.id), "starts_at": item.starts_at.isoformat()})
+    record_audit(db, org_id, "student", student.id, "trial.scheduled", {"trial_id": str(item.id), "starts_at": item.starts_at.isoformat()}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(item)
     return item
 
 
-def update_trial(db: Session, org_id: UUID, trial_id: UUID, starts_at: datetime | None, location_id: UUID | None) -> TrialLesson:
+def update_trial(db: Session, org_id: UUID, trial_id: UUID, starts_at: datetime | None, location_id: UUID | None, actor_user_id: UUID | None = None) -> TrialLesson:
     trial = scoped_get(db, TrialLesson, org_id, trial_id)
     if location_id is not None:
         scoped_get(db, Location, org_id, location_id)
@@ -227,7 +227,7 @@ def update_trial(db: Session, org_id: UUID, trial_id: UUID, starts_at: datetime 
         "trial_id": str(trial.id),
         "starts_at": trial.starts_at.isoformat(),
         "location_id": str(trial.location_id) if trial.location_id else None,
-    })
+    }, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(trial)
     return trial
@@ -272,7 +272,7 @@ def create_enrollment(db: Session, org_id: UUID, data: EnrollmentCreate) -> Enro
     return item
 
 
-def create_intake(db: Session, organization: Organization, data: IntakeCreate) -> tuple[Student, Contact]:
+def create_intake(db: Session, organization: Organization, data: IntakeCreate, actor_user_id: UUID | None = None) -> tuple[Student, Contact]:
     phone = normalize_phone(data.phone)
     contact = db.scalar(select(Contact).where(Contact.organization_id == organization.id, Contact.phone == phone))
     if contact is None:
@@ -307,6 +307,7 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate) -
             existing_student.id,
             "lead.duplicate_intake",
             {"source": data.source, "contact_id": str(contact.id)},
+            actor_user_id=actor_user_id,
         )
         db.commit()
         db.refresh(existing_student)
@@ -329,17 +330,17 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate) -
         relation="parent_or_guardian",
         is_primary=True,
     ))
-    record_audit(db, organization.id, "student", student.id, "lead.created", {"source": data.source, "contact_id": str(contact.id)})
+    record_audit(db, organization.id, "student", student.id, "lead.created", {"source": data.source, "contact_id": str(contact.id)}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(student)
     db.refresh(contact)
     return student, contact
 
 
-def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, status) -> Student:
+def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, status, actor_user_id: UUID | None = None) -> Student:
     student = scoped_get(db, Student, org_id, student_id)
     student.crm_status = status
-    record_audit(db, org_id, "student", student.id, "student.crm_status_changed", {"crm_status": status.value if hasattr(status, "value") else str(status)})
+    record_audit(db, org_id, "student", student.id, "student.crm_status_changed", {"crm_status": status.value if hasattr(status, "value") else str(status)}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(student)
     return student
@@ -365,7 +366,7 @@ def student_detail(db: Session, org_id: UUID, student_id: UUID) -> tuple[Student
     return student, contacts, trials
 
 
-def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommended_level: str | None, teacher_notes: str | None) -> TrialLesson:
+def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommended_level: str | None, teacher_notes: str | None, actor_user_id: UUID | None = None) -> TrialLesson:
     trial = scoped_get(db, TrialLesson, org_id, trial_id)
     trial.status = status
     trial.recommended_level = recommended_level
@@ -375,7 +376,7 @@ def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommende
         student.crm_status = CrmStatus.WAITING_FOR_GROUP
     elif status.value == "no_show":
         student.crm_status = CrmStatus.CONTACTED
-    record_audit(db, org_id, "student", student.id, f"trial.{status.value}", {"trial_id": str(trial.id), "recommended_level": recommended_level, "teacher_notes": teacher_notes})
+    record_audit(db, org_id, "student", student.id, f"trial.{status.value}", {"trial_id": str(trial.id), "recommended_level": recommended_level, "teacher_notes": teacher_notes}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(trial)
     return trial
@@ -409,7 +410,7 @@ def list_waiting_candidates(db: Session, org_id: UUID) -> list[dict]:
     return result
 
 
-def form_group(db: Session, org_id: UUID, data) -> tuple[Group, list[UUID]]:
+def form_group(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> tuple[Group, list[UUID]]:
     require_organization(db, org_id)
     if data.location_id:
         scoped_get(db, Location, org_id, data.location_id)
@@ -461,12 +462,12 @@ def form_group(db: Session, org_id: UUID, data) -> tuple[Group, list[UUID]]:
             ))
             student.crm_status = CrmStatus.ENROLLED
             student.student_status = StudentStatus.ACTIVE
-            record_audit(db, org_id, "student", student.id, "student.enrolled", {"group_id": str(group.id), "group_name": group.name})
+            record_audit(db, org_id, "student", student.id, "student.enrolled", {"group_id": str(group.id), "group_name": group.name}, actor_user_id=actor_user_id)
         record_audit(db, org_id, "group", group.id, "group.created", {
             "name": group.name,
             "student_count": len(students),
             "schedule_slots": len(data.schedule_slots),
-        })
+        }, actor_user_id=actor_user_id)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -499,10 +500,10 @@ def student_profile(db: Session, org_id: UUID, student_id: UUID):
     return student, contacts, trials, groups
 
 
-def update_student_lifecycle(db: Session, org_id: UUID, student_id: UUID, status: StudentStatus) -> Student:
+def update_student_lifecycle(db: Session, org_id: UUID, student_id: UUID, status: StudentStatus, actor_user_id: UUID | None = None) -> Student:
     student = scoped_get(db, Student, org_id, student_id)
     student.student_status = status
-    record_audit(db, org_id, "student", student.id, "student.status_changed", {"student_status": status.value})
+    record_audit(db, org_id, "student", student.id, "student.status_changed", {"student_status": status.value}, actor_user_id=actor_user_id)
     if status == StudentStatus.ARCHIVED:
         active_enrollments = list(db.scalars(select(Enrollment).where(
             Enrollment.organization_id == org_id,
@@ -517,7 +518,7 @@ def update_student_lifecycle(db: Session, org_id: UUID, student_id: UUID, status
     return student
 
 
-def transfer_student(db: Session, org_id: UUID, student_id: UUID, to_group_id: UUID, started_at: date | None = None) -> Enrollment:
+def transfer_student(db: Session, org_id: UUID, student_id: UUID, to_group_id: UUID, started_at: date | None = None, actor_user_id: UUID | None = None) -> Enrollment:
     student = scoped_get(db, Student, org_id, student_id)
     target = scoped_get(db, Group, org_id, to_group_id)
     ensure_group_capacity(db, org_id, target, student_id)
@@ -554,7 +555,7 @@ def transfer_student(db: Session, org_id: UUID, student_id: UUID, to_group_id: U
 
     student.crm_status = CrmStatus.ENROLLED
     student.student_status = StudentStatus.ACTIVE
-    record_audit(db, org_id, "student", student.id, "student.transferred", {"to_group_id": str(target.id), "to_group_name": target.name})
+    record_audit(db, org_id, "student", student.id, "student.transferred", {"to_group_id": str(target.id), "to_group_name": target.name}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(enrollment)
     return enrollment
@@ -750,7 +751,7 @@ def list_student_subscriptions(db: Session, org_id: UUID, student_id: UUID | Non
     return list(db.scalars(stmt.order_by(StudentSubscription.starts_on.desc())))
 
 
-def create_payment(db: Session, org_id: UUID, data) -> Payment:
+def create_payment(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> Payment:
     organization = require_organization(db, org_id)
     student = scoped_get(db, Student, org_id, data.student_id)
     if data.subscription_id is not None:
@@ -768,7 +769,7 @@ def create_payment(db: Session, org_id: UUID, data) -> Payment:
     )
     db.add(item)
     db.flush()
-    record_audit(db, org_id, "student", student.id, "payment.created", {"payment_id": str(item.id), "amount_minor": item.amount_minor, "due_date": item.due_date.isoformat() if item.due_date else None})
+    record_audit(db, org_id, "student", student.id, "payment.created", {"payment_id": str(item.id), "amount_minor": item.amount_minor, "due_date": item.due_date.isoformat() if item.due_date else None}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(item)
     item.plan_id = subscription.plan_id if data.subscription_id is not None else None
@@ -792,14 +793,14 @@ def list_payments(db: Session, org_id: UUID, student_id: UUID | None = None, sta
     return rows
 
 
-def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: PaymentMethod, paid_at: datetime | None = None) -> Payment:
+def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: PaymentMethod, paid_at: datetime | None = None, actor_user_id: UUID | None = None) -> Payment:
     payment = scoped_get(db, Payment, org_id, payment_id)
     if payment.status == PaymentStatus.CANCELLED:
         raise HTTPException(status_code=409, detail="Cancelled payment cannot be marked as paid")
     payment.status = PaymentStatus.PAID
     payment.method = method
     payment.paid_at = paid_at or datetime.now(timezone.utc)
-    record_audit(db, org_id, "student", payment.student_id, "payment.paid", {"payment_id": str(payment.id), "amount_minor": payment.amount_minor, "method": method.value})
+    record_audit(db, org_id, "student", payment.student_id, "payment.paid", {"payment_id": str(payment.id), "amount_minor": payment.amount_minor, "method": method.value}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(payment)
     if payment.subscription_id is not None:
@@ -1118,7 +1119,7 @@ def student_preferences(db: Session, org_id: UUID, student_id: UUID) -> dict:
     }
 
 
-def replace_student_preferences(db: Session, org_id: UUID, student_id: UUID, data) -> dict:
+def replace_student_preferences(db: Session, org_id: UUID, student_id: UUID, data, actor_user_id: UUID | None = None) -> dict:
     student = scoped_get(db, Student, org_id, student_id)
     if data.preferred_location_id is not None:
         scoped_get(db, Location, org_id, data.preferred_location_id)
@@ -1147,7 +1148,7 @@ def replace_student_preferences(db: Session, org_id: UUID, student_id: UUID, dat
     record_audit(db, org_id, "student", student.id, "student.preferences_updated", {
         "preferred_location_id": str(data.preferred_location_id) if data.preferred_location_id else None,
         "availability_count": len(data.availability),
-    })
+    }, actor_user_id=actor_user_id)
     db.commit()
     return student_preferences(db, org_id, student_id)
 
