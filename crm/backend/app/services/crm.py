@@ -1,3 +1,39 @@
+def record_audit(
+    db: Session,
+    org_id: UUID,
+    entity_type: str,
+    entity_id: UUID | None,
+    event_type: str,
+    payload: dict | None = None,
+    actor_user_id: UUID | None = None,
+) -> AuditEvent:
+    item = AuditEvent(
+        organization_id=org_id,
+        actor_user_id=actor_user_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        event_type=event_type,
+        payload=payload,
+    )
+    db.add(item)
+    return item
+
+
+def list_audit_events(
+    db: Session,
+    org_id: UUID,
+    entity_type: str | None = None,
+    entity_id: UUID | None = None,
+    limit: int = 100,
+) -> list[AuditEvent]:
+    stmt = select(AuditEvent).where(AuditEvent.organization_id == org_id)
+    if entity_type:
+        stmt = stmt.where(AuditEvent.entity_type == entity_type)
+    if entity_id:
+        stmt = stmt.where(AuditEvent.entity_id == entity_id)
+    return list(db.scalars(stmt.order_by(AuditEvent.created_at.desc()).limit(limit)))
+
+
 import re
 from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
@@ -7,7 +43,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Attendance, AttendanceStatus, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, Staff, StaffLocation, StaffRole, Student, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
+from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, Staff, StaffLocation, StaffRole, Student, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 
 
@@ -115,6 +151,7 @@ def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate) -> TrialLes
     item = TrialLesson(organization_id=org_id, **data.model_dump())
     db.add(item)
     student.crm_status = CrmStatus.TRIAL_SCHEDULED
+    record_audit(db, org_id, "student", student.id, "trial.scheduled", {"trial_id": str(item.id), "starts_at": item.starts_at.isoformat()})
     db.commit()
     db.refresh(item)
     return item
@@ -169,6 +206,7 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate) -
     db.add(student)
     db.flush()
     db.add(StudentContact(organization_id=organization.id, student_id=student.id, contact_id=contact.id, relation="parent_or_guardian", is_primary=True))
+    record_audit(db, organization.id, "student", student.id, "lead.created", {"source": data.source, "contact_id": str(contact.id)})
     db.commit()
     db.refresh(student)
     db.refresh(contact)
@@ -178,6 +216,7 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate) -
 def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, status) -> Student:
     student = scoped_get(db, Student, org_id, student_id)
     student.crm_status = status
+    record_audit(db, org_id, "student", student.id, "student.crm_status_changed", {"crm_status": status.value if hasattr(status, "value") else str(status)})
     db.commit()
     db.refresh(student)
     return student
@@ -213,6 +252,7 @@ def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommende
         student.crm_status = CrmStatus.WAITING_FOR_GROUP
     elif status.value == "no_show":
         student.crm_status = CrmStatus.CONTACTED
+    record_audit(db, org_id, "student", student.id, f"trial.{status.value}", {"trial_id": str(trial.id), "recommended_level": recommended_level, "teacher_notes": teacher_notes})
     db.commit()
     db.refresh(trial)
     return trial
@@ -284,6 +324,8 @@ def form_group(db: Session, org_id: UUID, data) -> tuple[Group, list[UUID]]:
             ))
             student.crm_status = CrmStatus.ENROLLED
             student.student_status = StudentStatus.ACTIVE
+            record_audit(db, org_id, "student", student.id, "student.enrolled", {"group_id": str(group.id), "group_name": group.name})
+        record_audit(db, org_id, "group", group.id, "group.created", {"name": group.name, "student_count": len(students)})
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -319,6 +361,7 @@ def student_profile(db: Session, org_id: UUID, student_id: UUID):
 def update_student_lifecycle(db: Session, org_id: UUID, student_id: UUID, status: StudentStatus) -> Student:
     student = scoped_get(db, Student, org_id, student_id)
     student.student_status = status
+    record_audit(db, org_id, "student", student.id, "student.status_changed", {"student_status": status.value})
     if status == StudentStatus.ARCHIVED:
         active_enrollments = list(db.scalars(select(Enrollment).where(
             Enrollment.organization_id == org_id,
@@ -369,6 +412,7 @@ def transfer_student(db: Session, org_id: UUID, student_id: UUID, to_group_id: U
 
     student.crm_status = CrmStatus.ENROLLED
     student.student_status = StudentStatus.ACTIVE
+    record_audit(db, org_id, "student", student.id, "student.transferred", {"to_group_id": str(target.id), "to_group_name": target.name})
     db.commit()
     db.refresh(enrollment)
     return enrollment
@@ -495,6 +539,7 @@ def mark_attendance_bulk(db: Session, org_id: UUID, session_id: UUID, items, use
     if roster_ids and roster_ids.issubset(set(submitted_ids)):
         session.status = LessonStatus.COMPLETED
 
+    record_audit(db, org_id, "lesson_session", session.id, "attendance.saved", {"marked_count": len(result), "group_id": str(session.group_id)}, actor_user_id=user_id)
     db.commit()
     for row in result:
         db.refresh(row)
@@ -578,6 +623,8 @@ def create_payment(db: Session, org_id: UUID, data) -> Payment:
         note=data.note,
     )
     db.add(item)
+    db.flush()
+    record_audit(db, org_id, "student", student.id, "payment.created", {"payment_id": str(item.id), "amount_minor": item.amount_minor, "due_date": item.due_date.isoformat() if item.due_date else None})
     db.commit()
     db.refresh(item)
     item.plan_id = subscription.plan_id if data.subscription_id is not None else None
@@ -608,6 +655,7 @@ def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: Payme
     payment.status = PaymentStatus.PAID
     payment.method = method
     payment.paid_at = paid_at or datetime.now(timezone.utc)
+    record_audit(db, org_id, "student", payment.student_id, "payment.paid", {"payment_id": str(payment.id), "amount_minor": payment.amount_minor, "method": method.value})
     db.commit()
     db.refresh(payment)
     if payment.subscription_id is not None:
