@@ -213,6 +213,7 @@ export type ApiPayment = {
   organization_id: string;
   student_id: string;
   subscription_id: string | null;
+  plan_id: string | null;
   amount_minor: number;
   currency: string;
   status: "pending" | "paid" | "refunded" | "cancelled";
