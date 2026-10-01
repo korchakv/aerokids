@@ -707,3 +707,116 @@ def test_bootstrap_is_single_use(client):
         },
     )
     assert second.status_code == 409
+
+
+def test_owner_can_invite_teacher_and_teacher_can_accept(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKiDS",
+            "organization_slug": "invite-school",
+            "full_name": "Owner",
+            "email": "owner-invite@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    owner_headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    invite = client.post(
+        "/organization-invitations",
+        headers=owner_headers,
+        json={"email": "teacher-invite@example.com", "role": "teacher"},
+    )
+    assert invite.status_code == 201, invite.text
+    token = invite.json()["invite_token"]
+
+    accepted = client.post(
+        "/auth/accept-invite",
+        json={
+            "invite_token": token,
+            "full_name": "Teacher User",
+            "password": "teacher-secure-password",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["user"]["memberships"][0]["role"] == "teacher"
+
+    teacher_token = accepted.json()["access_token"]
+    me = client.get("/auth/me", headers={"Authorization": f"Bearer {teacher_token}"})
+    assert me.status_code == 200
+    assert me.json()["email"] == "teacher-invite@example.com"
+
+
+def test_teacher_cannot_use_owner_admin_staff_endpoint(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKiDS",
+            "organization_slug": "role-denied-school",
+            "full_name": "Owner",
+            "email": "owner-denied@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    owner_headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+    invite = client.post(
+        "/organization-invitations",
+        headers=owner_headers,
+        json={"email": "teacher-denied@example.com", "role": "teacher"},
+    ).json()
+    accepted = client.post(
+        "/auth/accept-invite",
+        json={
+            "invite_token": invite["invite_token"],
+            "full_name": "Teacher",
+            "password": "teacher-secure-password",
+        },
+    ).json()
+
+    teacher_headers = {
+        "Authorization": f"Bearer {accepted['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+    denied = client.post(
+        "/staff",
+        headers=teacher_headers,
+        json={"full_name": "Should Fail", "role": "teacher"},
+    )
+    assert denied.status_code == 403
+
+
+def test_invitation_is_single_use(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKiDS",
+            "organization_slug": "single-invite",
+            "full_name": "Owner",
+            "email": "owner-single@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+    invite = client.post(
+        "/organization-invitations",
+        headers=headers,
+        json={"email": "single-teacher@example.com", "role": "teacher"},
+    ).json()
+
+    payload = {
+        "invite_token": invite["invite_token"],
+        "full_name": "Teacher",
+        "password": "teacher-secure-password",
+    }
+    assert client.post("/auth/accept-invite", json=payload).status_code == 200
+    assert client.post("/auth/accept-invite", json=payload).status_code == 400
