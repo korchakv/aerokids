@@ -81,7 +81,7 @@ type StaffDemo = {
   isActive: boolean;
 };
 
-const allNav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти"];
+const allNav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти", "Налаштування"];
 
 const initialLeads: Lead[] = [
   { id: "1", child: "Максим", age: 9, parent: "Оксана", phone: "+380 67 123 45 67", status: "Очікує групу", source: "Сайт", comment: "Цікавиться FPV та симулятором.", trialResult: "completed", recommendedLevel: "Початковий" },
@@ -106,6 +106,11 @@ function App() {
   const [entityEvents, setEntityEvents] = useState<ApiAuditEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [active, setActive] = useState("Дашборд");
+  const [organizationName, setOrganizationName] = useState("");
+  const [organizationTimezone, setOrganizationTimezone] = useState("Europe/Kyiv");
+  const [organizationCurrency, setOrganizationCurrency] = useState("UAH");
+  const [organizationLocale, setOrganizationLocale] = useState("uk-UA");
+  const [organizationSaving, setOrganizationSaving] = useState(false);
   const [leadFilter, setLeadFilter] = useState<"all" | "new" | "trial" | "waiting">("all");
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateFilter, setCandidateFilter] = useState<"all" | "8-10" | "11-13" | "beginner">("all");
@@ -301,6 +306,26 @@ function App() {
     if (candidateFilter === "beginner") return item.recommendedLevel === "Початковий";
     return true;
   }), [waiting, candidateFilter]);
+
+  const saveOrganizationSettings = async () => {
+    if (!session || !organizationName.trim()) return;
+    setOrganizationSaving(true);
+    setWorkspaceError("");
+    try {
+      await apiPatch("/organization", {
+        name: organizationName.trim(),
+        timezone: organizationTimezone.trim(),
+        currency: organizationCurrency.trim().toUpperCase(),
+        locale: organizationLocale.trim(),
+      }, session);
+      const refreshed = await refreshMe(session);
+      setSession(refreshed);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти налаштування");
+    } finally {
+      setOrganizationSaving(false);
+    }
+  };
 
   const createManualLead = async () => {
     if (!leadChildName.trim() || !leadContactName.trim() || !leadPhone.trim()) return;
@@ -854,6 +879,11 @@ function App() {
   }
 
   const currentMembership = session?.user.memberships.find((item) => item.organization_id === session.organizationId);
+  const money = (value: number) => money(
+    value,
+    currentMembership?.organization_locale ?? "uk-UA",
+    currentMembership?.organization_currency ?? "UAH",
+  );
   const headerContext = locations[0]
     ? `${currentMembership?.organization_name ?? "School CRM"} · ${locations[0].name}`
     : currentMembership?.organization_name ?? "School CRM";
@@ -877,7 +907,15 @@ function App() {
     <div className="shell">
       <aside>
         <div className="brand"><span className="mark">✦</span><div><b>School CRM</b><small>{currentMembership?.organization_name ?? "AeroKiDS · demo tenant"}</small></div></div>
-        <nav>{navigation.map((item) => <button onClick={() => setActive(item)} className={active === item ? "active" : ""} key={item}>{item}</button>)}</nav>
+        <nav>{navigation.map((item) => <button onClick={() => {
+          if (item === "Налаштування" && currentMembership) {
+            setOrganizationName(currentMembership.organization_name);
+            setOrganizationTimezone(currentMembership.organization_timezone);
+            setOrganizationCurrency(currentMembership.organization_currency);
+            setOrganizationLocale(currentMembership.organization_locale);
+          }
+          setActive(item);
+        }} className={active === item ? "active" : ""} key={item}>{item}</button>)}</nav>
         <div className="asideFooter">MVP 1 · crm-v1</div>
       </aside>
 
@@ -1053,9 +1091,9 @@ function App() {
         {active === "Оплати" && <section className="paymentsLayout">
           <div className="paymentsMain">
             <section className="paymentStats">
-              <article><span>Сплачено</span><strong>{formatMoney(paymentTotals.paid)}</strong><small>{payments.filter((x) => x.status === "paid").length} платежів</small></article>
-              <article><span>Очікується</span><strong>{formatMoney(paymentTotals.pending)}</strong><small>{payments.filter((x) => x.status === "pending").length} рахунків</small></article>
-              <article><span>Прострочено</span><strong>{formatMoney(paymentTotals.overdue)}</strong><small>{payments.filter((x) => x.status === "overdue").length} боргів</small></article>
+              <article><span>Сплачено</span><strong>{money(paymentTotals.paid)}</strong><small>{payments.filter((x) => x.status === "paid").length} платежів</small></article>
+              <article><span>Очікується</span><strong>{money(paymentTotals.pending)}</strong><small>{payments.filter((x) => x.status === "pending").length} рахунків</small></article>
+              <article><span>Прострочено</span><strong>{money(paymentTotals.overdue)}</strong><small>{payments.filter((x) => x.status === "overdue").length} боргів</small></article>
             </section>
             <article className="panel paymentsPanel">
               <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати учнів</h2></div><button className="primary" onClick={() => setShowPaymentForm(true)}>+ Нарахування</button></div>
@@ -1067,7 +1105,7 @@ function App() {
                   return <div className="paymentRow" key={payment.id}>
                     <span><b>{student?.child ?? "Учень"}</b><small>{student?.parent}</small></span>
                     <span>{plan?.name ?? "—"}</span>
-                    <span><b>{formatMoney(payment.amount)}</b></span>
+                    <span><b>{money(payment.amount)}</b></span>
                     <span>{new Date(payment.dueDate).toLocaleDateString("uk-UA")}</span>
                     <span className={"paymentStatus " + payment.status}>{payment.status === "paid" ? "Сплачено" : payment.status === "overdue" ? "Прострочено" : "Очікується"}</span>
                     <span>{payment.status !== "paid" ? <button className="link payAction" onClick={() => markPaymentPaid(payment.id)}>Позначити сплачено</button> : <small>{payment.method}</small>}</span>
@@ -1079,7 +1117,7 @@ function App() {
           <aside className="paymentsSide">
             <article className="panel">
               <div className="panelHead"><div><p className="eyebrow">Тарифи</p><h2>Абонементи</h2></div><div className="miniActions"><span className="counter">{plans.length}</span><button className="link" onClick={() => setShowPlanForm(true)}>+ Тариф</button></div></div>
-              <div className="planCards">{plans.map((plan) => <div className="planCard" key={plan.id}><div><b>{plan.name}</b><span>{plan.lessons ? plan.lessons + " занять" : "Гнучкі умови"}</span></div><strong>{plan.price ? formatMoney(plan.price) : "Індивідуально"}</strong></div>)}</div>
+              <div className="planCards">{plans.map((plan) => <div className="planCard" key={plan.id}><div><b>{plan.name}</b><span>{plan.lessons ? plan.lessons + " занять" : "Гнучкі умови"}</span></div><strong>{plan.price ? money(plan.price) : "Індивідуально"}</strong></div>)}</div>
             </article>
             <article className="panel financeHint"><p className="eyebrow">MVP</p><h2>Що вже враховано</h2><p>Оплата зберігається окремо від абонемента. Це дозволить пізніше підключити LiqPay, WayForPay чи інший еквайринг без зміни ядра.</p></article>
           </aside>
@@ -1130,12 +1168,32 @@ function App() {
           </div>
         </section>}
 
-                {active === "Звіти" && <section className="reportsPage">
+                {active === "Налаштування" && <section className="settingsLayout">
+          <article className="panel settingsPanel">
+            <div className="panelHead"><div><p className="eyebrow">Організація</p><h2>Основні налаштування</h2></div></div>
+            <p className="settingsIntro">Ці значення належать конкретній школі або гуртку й не впливають на інші організації в CRM.</p>
+            <label>Назва організації<input value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} /></label>
+            <div className="formTwo">
+              <label>Часовий пояс<input value={organizationTimezone} onChange={(e) => setOrganizationTimezone(e.target.value)} placeholder="Europe/Kyiv" /></label>
+              <label>Валюта<input value={organizationCurrency} maxLength={3} onChange={(e) => setOrganizationCurrency(e.target.value.toUpperCase())} placeholder="UAH" /></label>
+            </div>
+            <label>Локаль<input value={organizationLocale} onChange={(e) => setOrganizationLocale(e.target.value)} placeholder="uk-UA" /></label>
+            <button className="primary" disabled={organizationSaving || !organizationName.trim()} onClick={saveOrganizationSettings}>{organizationSaving ? "Зберігаємо…" : "Зберегти налаштування"}</button>
+          </article>
+          <aside className="panel settingsHelp">
+            <p className="eyebrow">SaaS</p><h2>Налаштування tenant</h2>
+            <p>Часовий пояс використовується для дат і розкладу, валюта — для фінансів, локаль — для форматування чисел та дат.</p>
+            <div className="summaryMetric"><span>Slug</span><strong>{currentMembership?.organization_slug ?? "—"}</strong></div>
+            <div className="summaryMetric"><span>Ваша роль</span><strong>{roleLabel(currentMembership?.role)}</strong></div>
+          </aside>
+        </section>}
+
+        {active === "Звіти" && <section className="reportsPage">
           <section className="reportStats">
             <article><span>Конверсія в учні</span><strong>{leads.length ? Math.round(activeStudents.length / leads.length * 100) : 0}%</strong><small>{activeStudents.length} з {leads.length} записів</small></article>
             <article><span>Заповненість груп</span><strong>{occupancy}%</strong><small>{occupiedSeats} з {totalCapacity} місць</small></article>
             <article><span>Відвідуваність</span><strong>{attendanceRate}%</strong><small>{overviewReport?.attendance.total ?? attendanceValues.length} відміток</small></article>
-            <article><span>Сплачено</span><strong>{formatMoney(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}</strong><small>зафіксовані платежі</small></article>
+            <article><span>Сплачено</span><strong>{money(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}</strong><small>зафіксовані платежі</small></article>
           </section>
 
           <section className="reportsGrid">
@@ -1168,9 +1226,9 @@ function App() {
             <article className="panel">
               <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати</h2></div></div>
               <div className="financeRows">
-                <span><i>Сплачено</i><b>{formatMoney(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}</b></span>
-                <span><i>Очікується</i><b>{formatMoney(overviewReport ? overviewReport.payments.pending_minor / 100 : paymentTotals.pending)}</b></span>
-                <span><i>Прострочено</i><b>{formatMoney(overviewReport ? overviewReport.payments.overdue_minor / 100 : paymentTotals.overdue)}</b></span>
+                <span><i>Сплачено</i><b>{money(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}</b></span>
+                <span><i>Очікується</i><b>{money(overviewReport ? overviewReport.payments.pending_minor / 100 : paymentTotals.pending)}</b></span>
+                <span><i>Прострочено</i><b>{money(overviewReport ? overviewReport.payments.overdue_minor / 100 : paymentTotals.overdue)}</b></span>
               </div>
             </article>
 
@@ -1364,7 +1422,7 @@ function App() {
           <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
           <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
           <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(e.target.value)}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · {student.parent}</option>)}</select></label>
-          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {plan.price ? formatMoney(plan.price) : "індивідуально"}</option>)}</select></label>
+          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {plan.price ? money(plan.price) : "індивідуально"}</option>)}</select></label>
           <label>Оплатити до<input type="date" value={paymentDueDate} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
           <button className="primary full" onClick={createPayment}>Створити нарахування</button>
         </div>
@@ -1893,8 +1951,8 @@ function toLocalDateTimeInput(value: string) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("uk-UA", { style: "currency", currency: "UAH", maximumFractionDigits: 0 }).format(value);
+function formatMoney(value: number, locale = "uk-UA", currency = "UAH") {
+  return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
 }
 
 function scheduleSlots(group: GroupItem) {
