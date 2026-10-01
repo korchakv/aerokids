@@ -863,3 +863,110 @@ def overview_report(db: Session, org_id: UUID) -> dict:
         },
         "payments": payment_summary(db, org_id),
     }
+
+
+def _primary_contact_for_student(db: Session, org_id: UUID, student_id: UUID) -> Contact | None:
+    return db.scalar(
+        select(Contact)
+        .join(StudentContact, StudentContact.contact_id == Contact.id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == student_id,
+            Contact.organization_id == org_id,
+        )
+        .order_by(StudentContact.is_primary.desc(), Contact.created_at)
+        .limit(1)
+    )
+
+
+def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
+    students = list(db.scalars(
+        select(Student)
+        .where(Student.organization_id == org_id, Student.student_status == StudentStatus.PROSPECT)
+        .order_by(Student.created_at.desc())
+    ))
+    result = []
+    for student in students:
+        contact = _primary_contact_for_student(db, org_id, student.id)
+        trial = db.scalar(
+            select(TrialLesson)
+            .where(TrialLesson.organization_id == org_id, TrialLesson.student_id == student.id)
+            .order_by(TrialLesson.starts_at.desc())
+            .limit(1)
+        )
+        result.append({
+            "student_id": student.id,
+            "first_name": student.first_name,
+            "last_name": student.last_name,
+            "age": student.age_at_inquiry,
+            "source": student.source,
+            "crm_status": student.crm_status,
+            "contact_name": contact.full_name if contact else None,
+            "contact_phone": contact.phone if contact else None,
+            "latest_trial_at": trial.starts_at if trial else None,
+            "recommended_level": trial.recommended_level if trial else None,
+        })
+    return result
+
+
+def list_student_overview(db: Session, org_id: UUID) -> list[dict]:
+    students = list(db.scalars(
+        select(Student)
+        .where(Student.organization_id == org_id, Student.student_status != StudentStatus.PROSPECT)
+        .order_by(Student.first_name, Student.last_name)
+    ))
+    result = []
+    for student in students:
+        contact = _primary_contact_for_student(db, org_id, student.id)
+        row = db.execute(
+            select(Enrollment, Group)
+            .join(Group, Group.id == Enrollment.group_id)
+            .where(
+                Enrollment.organization_id == org_id,
+                Enrollment.student_id == student.id,
+                Enrollment.status == EnrollmentStatus.ACTIVE,
+                Group.organization_id == org_id,
+            )
+            .limit(1)
+        ).first()
+        enrollment, group = row if row else (None, None)
+        result.append({
+            "student_id": student.id,
+            "first_name": student.first_name,
+            "last_name": student.last_name,
+            "age": student.age_at_inquiry,
+            "source": student.source,
+            "student_status": student.student_status,
+            "contact_name": contact.full_name if contact else None,
+            "contact_phone": contact.phone if contact else None,
+            "group_id": group.id if group else None,
+            "group_name": group.name if group else None,
+        })
+    return result
+
+
+def list_group_overview(db: Session, org_id: UUID) -> list[dict]:
+    groups = list(db.scalars(
+        select(Group)
+        .where(Group.organization_id == org_id, Group.is_active.is_(True))
+        .order_by(Group.name)
+    ))
+    result = []
+    for group in groups:
+        enrolled_count = db.scalar(select(func.count(Enrollment.id)).where(
+            Enrollment.organization_id == org_id,
+            Enrollment.group_id == group.id,
+            Enrollment.status == EnrollmentStatus.ACTIVE,
+        )) or 0
+        location = scoped_get(db, Location, org_id, group.location_id) if group.location_id else None
+        result.append({
+            "group_id": group.id,
+            "name": group.name,
+            "location_id": group.location_id,
+            "location_name": location.name if location else None,
+            "capacity": group.capacity,
+            "enrolled_count": int(enrolled_count),
+            "min_age": group.min_age,
+            "max_age": group.max_age,
+        })
+    return result
