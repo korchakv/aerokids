@@ -393,16 +393,21 @@ def create_group_schedule(db: Session, org_id: UUID, data) -> GroupSchedule:
     return item
 
 
-def list_group_schedules(db: Session, org_id: UUID, group_id: UUID | None = None) -> list[GroupSchedule]:
+def list_group_schedules(db: Session, org_id: UUID, group_id: UUID | None = None, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[GroupSchedule]:
+    allowed = assigned_group_ids_for_user(db, org_id, user_id, role)
     stmt = select(GroupSchedule).where(GroupSchedule.organization_id == org_id, GroupSchedule.is_active.is_(True))
     if group_id is not None:
-        scoped_get(db, Group, org_id, group_id)
+        ensure_group_access(db, org_id, user_id, role, group_id)
         stmt = stmt.where(GroupSchedule.group_id == group_id)
+    elif allowed is not None:
+        if not allowed:
+            return []
+        stmt = stmt.where(GroupSchedule.group_id.in_(allowed))
     return list(db.scalars(stmt.order_by(GroupSchedule.weekday, GroupSchedule.start_time)))
 
 
-def group_roster(db: Session, org_id: UUID, group_id: UUID) -> list[dict]:
-    scoped_get(db, Group, org_id, group_id)
+def group_roster(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[dict]:
+    ensure_group_access(db, org_id, user_id, role, group_id)
     rows = db.execute(
         select(Student)
         .join(Enrollment, Enrollment.student_id == Student.id)
@@ -423,8 +428,8 @@ def group_roster(db: Session, org_id: UUID, group_id: UUID) -> list[dict]:
     } for student in rows]
 
 
-def create_lesson_session(db: Session, org_id: UUID, data) -> LessonSession:
-    group = scoped_get(db, Group, org_id, data.group_id)
+def create_lesson_session(db: Session, org_id: UUID, data, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> LessonSession:
+    group = ensure_group_access(db, org_id, user_id, role, data.group_id)
     location_id = data.location_id if data.location_id is not None else group.location_id
     if location_id is not None:
         scoped_get(db, Location, org_id, location_id)
@@ -443,17 +448,23 @@ def create_lesson_session(db: Session, org_id: UUID, data) -> LessonSession:
     return item
 
 
-def list_lesson_sessions(db: Session, org_id: UUID, group_id: UUID | None = None) -> list[LessonSession]:
+def list_lesson_sessions(db: Session, org_id: UUID, group_id: UUID | None = None, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[LessonSession]:
+    allowed = assigned_group_ids_for_user(db, org_id, user_id, role)
     stmt = select(LessonSession).where(LessonSession.organization_id == org_id)
     if group_id is not None:
-        scoped_get(db, Group, org_id, group_id)
+        ensure_group_access(db, org_id, user_id, role, group_id)
         stmt = stmt.where(LessonSession.group_id == group_id)
+    elif allowed is not None:
+        if not allowed:
+            return []
+        stmt = stmt.where(LessonSession.group_id.in_(allowed))
     return list(db.scalars(stmt.order_by(LessonSession.starts_at)))
 
 
-def mark_attendance_bulk(db: Session, org_id: UUID, session_id: UUID, items) -> list[Attendance]:
+def mark_attendance_bulk(db: Session, org_id: UUID, session_id: UUID, items, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[Attendance]:
     session = scoped_get(db, LessonSession, org_id, session_id)
-    roster_ids = {item["student_id"] for item in group_roster(db, org_id, session.group_id)}
+    ensure_group_access(db, org_id, user_id, role, session.group_id)
+    roster_ids = {item["student_id"] for item in group_roster(db, org_id, session.group_id, user_id, role)}
     submitted_ids = [item.student_id for item in items]
     if len(set(submitted_ids)) != len(submitted_ids):
         raise HTTPException(status_code=422, detail="Duplicate students in attendance payload")
@@ -490,8 +501,9 @@ def mark_attendance_bulk(db: Session, org_id: UUID, session_id: UUID, items) -> 
     return result
 
 
-def list_attendance(db: Session, org_id: UUID, session_id: UUID) -> list[Attendance]:
-    scoped_get(db, LessonSession, org_id, session_id)
+def list_attendance(db: Session, org_id: UUID, session_id: UUID, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[Attendance]:
+    session = scoped_get(db, LessonSession, org_id, session_id)
+    ensure_group_access(db, org_id, user_id, role, session.group_id)
     return list(db.scalars(
         select(Attendance)
         .where(Attendance.organization_id == org_id, Attendance.session_id == session_id)
