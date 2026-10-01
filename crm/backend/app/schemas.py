@@ -13,12 +13,25 @@ class ORMModel(BaseModel):
 class OrganizationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     slug: str = Field(pattern=r"^[a-z0-9-]+$", min_length=2, max_length=100)
+    timezone: str = Field(default="Europe/Kyiv", min_length=2, max_length=64)
+    currency: str = Field(default="UAH", pattern=r"^[A-Z]{3}$")
+    locale: str = Field(default="uk-UA", min_length=2, max_length=20)
+
+
+class OrganizationUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=160)
+    timezone: str | None = Field(default=None, min_length=2, max_length=64)
+    currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
+    locale: str | None = Field(default=None, min_length=2, max_length=20)
 
 
 class OrganizationRead(ORMModel):
     id: UUID
     name: str
     slug: str
+    timezone: str
+    currency: str
+    locale: str
     created_at: datetime
 
 
