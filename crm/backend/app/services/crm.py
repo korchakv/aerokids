@@ -923,7 +923,7 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
 
 
 def list_student_overview(db: Session, org_id: UUID, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[dict]:
-    allowed_groups = assigned_group_ids_for_user(db, org_id, user_id, role)
+    allowed_groups = None if role == StaffRole.ACCOUNTANT else assigned_group_ids_for_user(db, org_id, user_id, role)
     students = list(db.scalars(
         select(Student)
         .where(Student.organization_id == org_id, Student.student_status != StudentStatus.PROSPECT)
