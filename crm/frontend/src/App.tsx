@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { apiEnabled, changeOrganization, clearSession, loadSession, login, refreshMe, type Session } from "./api";
+import { apiEnabled, changeOrganization, clearSession, loadSession, loadWorkspace, login, refreshMe, type Session, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
+type EntityId = string;
+
 type Lead = {
-  id: number;
+  id: EntityId;
   child: string;
   age: number;
   parent: string;
@@ -20,20 +22,20 @@ type Lead = {
 };
 
 type GroupItem = {
-  id: number;
+  id: EntityId;
   name: string;
   ages: string;
   schedule: string;
   location: string;
   capacity: number;
-  members: number[];
+  members: EntityId[];
 };
 
 type AttendanceValue = "present" | "absent" | "late" | "excused";
 
 type LessonItem = {
   id: number;
-  groupId: number;
+  groupId: EntityId;
   startsAt: string;
   duration: number;
   topic: string;
@@ -48,7 +50,7 @@ type PlanDemo = {
 
 type PaymentDemo = {
   id: number;
-  studentId: number;
+  studentId: EntityId;
   planId: number;
   amount: number;
   dueDate: string;
@@ -72,22 +74,22 @@ type StaffDemo = {
   email: string;
   phone: string;
   locationIds: number[];
-  groupIds: number[];
+  groupIds: EntityId[];
   isActive: boolean;
 };
 
 const nav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти"];
 
 const initialLeads: Lead[] = [
-  { id: 1, child: "Максим", age: 9, parent: "Оксана", phone: "+380 67 123 45 67", status: "Очікує групу", source: "Сайт", comment: "Цікавиться FPV та симулятором.", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: 2, child: "Артем", age: 10, parent: "Ірина", phone: "+380 50 222 14 09", status: "Пробне заплановано", source: "Instagram", trialAt: "2026-10-05T17:00", trialLocation: "Основна локація", trialResult: "scheduled" },
-  { id: 3, child: "Софія", age: 11, parent: "Марина", phone: "+380 96 411 28 60", status: "Очікує групу", source: "Сайт", comment: "Після пробного готова продовжувати.", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: 4, child: "Данило", age: 8, parent: "Олег", phone: "+380 93 701 44 31", status: "Очікує групу", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: 5, child: "Анна", age: 9, parent: "Наталія", phone: "+380 68 555 11 20", status: "Очікує групу", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: 6, child: "Олег", age: 10, parent: "Вікторія", phone: "+380 95 100 23 44", status: "Очікує групу", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: 7, child: "Ілля", age: 12, parent: "Юлія", phone: "+380 97 222 42 15", status: "Очікує групу", source: "Instagram", trialResult: "completed", recommendedLevel: "Середній" },
-  { id: 8, child: "Марта", age: 9, parent: "Андрій", phone: "+380 67 700 10 08", status: "Зарахований", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: 9, child: "Назар", age: 10, parent: "Олена", phone: "+380 95 700 10 09", status: "Зарахований", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
+  { id: "1", child: "Максим", age: 9, parent: "Оксана", phone: "+380 67 123 45 67", status: "Очікує групу", source: "Сайт", comment: "Цікавиться FPV та симулятором.", trialResult: "completed", recommendedLevel: "Початковий" },
+  { id: "2", child: "Артем", age: 10, parent: "Ірина", phone: "+380 50 222 14 09", status: "Пробне заплановано", source: "Instagram", trialAt: "2026-10-05T17:00", trialLocation: "Основна локація", trialResult: "scheduled" },
+  { id: "3", child: "Софія", age: 11, parent: "Марина", phone: "+380 96 411 28 60", status: "Очікує групу", source: "Сайт", comment: "Після пробного готова продовжувати.", trialResult: "completed", recommendedLevel: "Початковий" },
+  { id: "4", child: "Данило", age: 8, parent: "Олег", phone: "+380 93 701 44 31", status: "Очікує групу", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
+  { id: "5", child: "Анна", age: 9, parent: "Наталія", phone: "+380 68 555 11 20", status: "Очікує групу", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
+  { id: "6", child: "Олег", age: 10, parent: "Вікторія", phone: "+380 95 100 23 44", status: "Очікує групу", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
+  { id: "7", child: "Ілля", age: 12, parent: "Юлія", phone: "+380 97 222 42 15", status: "Очікує групу", source: "Instagram", trialResult: "completed", recommendedLevel: "Середній" },
+  { id: "8", child: "Марта", age: 9, parent: "Андрій", phone: "+380 67 700 10 08", status: "Зарахований", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
+  { id: "9", child: "Назар", age: 10, parent: "Олена", phone: "+380 95 700 10 09", status: "Зарахований", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
 ];
 
 const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне заплановано", "Пробне пройдено", "Очікує групу", "Зарахований"];
@@ -97,14 +99,14 @@ function App() {
   const [active, setActive] = useState("Дашборд");
   const [leads, setLeads] = useState(initialLeads);
   const [groups, setGroups] = useState<GroupItem[]>([
-    { id: 1, name: "FPV Start 8–10", ages: "8–10", schedule: "Пн / Ср · 17:00", location: "Основна локація", capacity: 8, members: [8, 9] },
+    { id: "1", name: "FPV Start 8–10", ages: "8–10", schedule: "Пн / Ср · 17:00", location: "Основна локація", capacity: 8, members: ["8", "9"] },
   ]);
   const [lessons, setLessons] = useState<LessonItem[]>([
-    { id: 1, groupId: 1, startsAt: "2026-09-30T17:00", duration: 60, topic: "FPV: траса в симуляторі" },
-    { id: 2, groupId: 1, startsAt: "2026-10-05T17:00", duration: 60, topic: "Whoop: базове керування" },
+    { id: 1, groupId: "1", startsAt: "2026-09-30T17:00", duration: 60, topic: "FPV: траса в симуляторі" },
+    { id: 2, groupId: "1", startsAt: "2026-10-05T17:00", duration: 60, topic: "Whoop: базове керування" },
   ]);
   const [selectedLessonId, setSelectedLessonId] = useState(1);
-  const [attendance, setAttendance] = useState<Record<number, Record<number, AttendanceValue>>>({
+  const [attendance, setAttendance] = useState<Record<number, Record<EntityId, AttendanceValue>>>({
     1: { 8: "present", 9: "late" },
   });
   const [plans] = useState<PlanDemo[]>([
@@ -112,11 +114,11 @@ function App() {
     { id: 2, name: "Індивідуальний", price: 0, lessons: null },
   ]);
   const [payments, setPayments] = useState<PaymentDemo[]>([
-    { id: 1, studentId: 8, planId: 1, amount: 1800, dueDate: "2026-10-05", status: "pending" },
-    { id: 2, studentId: 9, planId: 1, amount: 1800, dueDate: "2026-09-28", status: "paid", method: "Картка" },
+    { id: 1, studentId: "8", planId: 1, amount: 1800, dueDate: "2026-10-05", status: "pending" },
+    { id: 2, studentId: "9", planId: 1, amount: 1800, dueDate: "2026-09-28", status: "paid", method: "Картка" },
   ]);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [paymentStudentId, setPaymentStudentId] = useState(8);
+  const [paymentStudentId, setPaymentStudentId] = useState<EntityId>("8");
   const [paymentPlanId, setPaymentPlanId] = useState(1);
   const [paymentDueDate, setPaymentDueDate] = useState("2026-10-31");
   const [locations, setLocations] = useState<LocationDemo[]>([
@@ -135,21 +137,21 @@ function App() {
   const [staffPhone, setStaffPhone] = useState("");
   const [locationName, setLocationName] = useState("");
   const [locationAddress, setLocationAddress] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
-  const [studentStates, setStudentStates] = useState<Record<number, "Активний" | "Пауза" | "Архів">>({});
-  const [transferGroupId, setTransferGroupId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<EntityId | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<EntityId | null>(null);
+  const [studentStates, setStudentStates] = useState<Record<EntityId, "Активний" | "Пауза" | "Архів">>({});
+  const [transferGroupId, setTransferGroupId] = useState<EntityId | null>(null);
   const [trialMode, setTrialMode] = useState<"schedule" | "complete" | null>(null);
   const [trialAt, setTrialAt] = useState("2026-10-05T17:00");
   const [trialLocation, setTrialLocation] = useState("Основна локація");
   const [recommendedLevel, setRecommendedLevel] = useState("Початковий");
   const [teacherNotes, setTeacherNotes] = useState("");
-  const [selectedCandidates, setSelectedCandidates] = useState<number[]>([]);
+  const [selectedCandidates, setSelectedCandidates] = useState<EntityId[]>([]);
   const [groupName, setGroupName] = useState("FPV Start 8–10");
   const [groupSchedule, setGroupSchedule] = useState("Пн / Ср · 17:00");
   const [groupCapacity, setGroupCapacity] = useState(8);
   const [showGroupForm, setShowGroupForm] = useState(false);
-  const [newLessonGroupId, setNewLessonGroupId] = useState(1);
+  const [newLessonGroupId, setNewLessonGroupId] = useState<EntityId>("1");
   const [newLessonAt, setNewLessonAt] = useState("2026-10-07T17:00");
   const [newLessonTopic, setNewLessonTopic] = useState("FPV / електроніка");
   useEffect(() => {
@@ -165,7 +167,7 @@ function App() {
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedStudent = leads.find((lead) => lead.id === selectedStudentId) ?? null;
   const activeStudents = leads.filter((lead) => lead.status === "Зарахований");
-  const studentGroup = (studentId: number) => groups.find((group) => group.members.includes(studentId));
+  const studentGroup = (studentId: EntityId) => groups.find((group) => group.members.includes(studentId));
 
   const waiting = useMemo(() => leads.filter((x) => x.status === "Очікує групу"), [leads]);
   const stats = useMemo(() => ({
@@ -175,7 +177,7 @@ function App() {
     activeStudents: leads.filter((x) => x.status === "Зарахований").length,
   }), [leads, waiting]);
 
-  const updateStatus = (id: number, status: LeadStatus) => {
+  const updateStatus = (id: EntityId, status: LeadStatus) => {
     setLeads((items) => items.map((item) => item.id === id ? { ...item, status } : item));
   };
 
@@ -203,7 +205,7 @@ function App() {
     setTrialMode(null);
   };
 
-  const openLead = (id: number) => {
+  const openLead = (id: EntityId) => {
     setSelectedId(id);
     setTrialMode(null);
     const lead = leads.find((item) => item.id === id);
@@ -213,13 +215,13 @@ function App() {
     setTeacherNotes(lead?.teacherNotes ?? "");
   };
 
-  const toggleCandidate = (id: number) => {
+  const toggleCandidate = (id: EntityId) => {
     setSelectedCandidates((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   };
 
   const createGroupFromCandidates = () => {
     if (!selectedCandidates.length || !groupName.trim()) return;
-    const nextId = Math.max(0, ...groups.map((g) => g.id)) + 1;
+    const nextId = crypto.randomUUID();
     setGroups((items) => [...items, {
       id: nextId,
       name: groupName.trim(),
@@ -245,7 +247,7 @@ function App() {
     setTransferGroupId(null);
   };
 
-  const setStudentLifecycle = (id: number, state: "Активний" | "Пауза" | "Архів") => {
+  const setStudentLifecycle = (id: EntityId, state: "Активний" | "Пауза" | "Архів") => {
     setStudentStates((states) => ({ ...states, [id]: state }));
   };
 
@@ -253,7 +255,7 @@ function App() {
   const lessonGroup = selectedLesson ? groups.find((group) => group.id === selectedLesson.groupId) : undefined;
   const lessonStudents = lessonGroup ? leads.filter((lead) => lessonGroup.members.includes(lead.id)) : [];
 
-  const markAttendance = (studentId: number, value: AttendanceValue) => {
+  const markAttendance = (studentId: EntityId, value: AttendanceValue) => {
     if (!selectedLesson) return;
     setAttendance((all) => ({
       ...all,
@@ -263,7 +265,7 @@ function App() {
 
   const markAllPresent = () => {
     if (!selectedLesson) return;
-    const next: Record<number, AttendanceValue> = {};
+    const next: Record<EntityId, AttendanceValue> = {};
     lessonStudents.forEach((student) => { next[student.id] = "present"; });
     setAttendance((all) => ({ ...all, [selectedLesson.id]: next }));
   };
@@ -364,7 +366,7 @@ function App() {
     }));
   };
 
-  const toggleStaffGroup = (staffId: number, groupId: number) => {
+  const toggleStaffGroup = (staffId: number, groupId: EntityId) => {
     setStaff((items) => items.map((item) => item.id !== staffId ? item : {
       ...item,
       groupIds: item.groupIds.includes(groupId)
@@ -483,7 +485,7 @@ function App() {
           </article>
           <aside className="panel lessonCreate">
             <p className="eyebrow">Нове заняття</p><h2>Додати заняття</h2>
-            <label>Група<select value={newLessonGroupId} onChange={(e) => setNewLessonGroupId(Number(e.target.value))}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
+            <label>Група<select value={newLessonGroupId} onChange={(e) => setNewLessonGroupId(e.target.value)}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
             <label>Дата і час<input type="datetime-local" value={newLessonAt} onChange={(e) => setNewLessonAt(e.target.value)} /></label>
             <label>Тема<input value={newLessonTopic} onChange={(e) => setNewLessonTopic(e.target.value)} /></label>
             <button className="primary full" onClick={createLesson}>Створити заняття</button>
@@ -747,7 +749,7 @@ function App() {
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
           <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
-          <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(Number(e.target.value))}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · {student.parent}</option>)}</select></label>
+          <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(e.target.value)}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · {student.parent}</option>)}</select></label>
           <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(Number(e.target.value))}>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {plan.price ? formatMoney(plan.price) : "індивідуально"}</option>)}</select></label>
           <label>Оплатити до<input type="date" value={paymentDueDate} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
           <button className="primary full" onClick={createPayment}>Створити нарахування</button>
@@ -777,7 +779,7 @@ function App() {
 
           <div className="studentSection">
             <h3>Перевести в іншу групу</h3>
-            <select className="transferSelect" value={transferGroupId ?? ""} onChange={(e) => setTransferGroupId(Number(e.target.value))}>
+            <select className="transferSelect" value={transferGroupId ?? ""} onChange={(e) => setTransferGroupId(e.target.value || null)}>
               <option value="">Оберіть групу</option>
               {groups.map((group) => <option value={group.id} key={group.id}>{group.name} · {group.members.length}/{group.capacity}</option>)}
             </select>
@@ -860,7 +862,7 @@ function App() {
   );
 }
 
-function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: number) => void }) {
+function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) => void }) {
   return <div className="table">
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span></div>
     {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{lead.source}</span><span className="pill">{lead.status}</span></button>)}
