@@ -446,6 +446,8 @@ export type ApiAuditEvent = {
   id: string;
   organization_id: string;
   actor_user_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
   entity_type: string;
   entity_id: string | null;
   event_type: string;
