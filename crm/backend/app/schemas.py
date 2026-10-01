@@ -560,6 +560,8 @@ class AuditEventRead(ORMModel):
     id: UUID
     organization_id: UUID
     actor_user_id: UUID | None
+    actor_name: str | None = None
+    actor_email: str | None = None
     entity_type: str
     entity_id: UUID | None
     event_type: str
