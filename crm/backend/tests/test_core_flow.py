@@ -1040,3 +1040,48 @@ def test_authenticated_manual_intake_creates_real_lead(client):
     assert leads.json()[0]["first_name"] == "Софія"
     assert leads.json()[0]["contact_name"] == "Марина"
     assert leads.json()[0]["source"] == "phone"
+
+
+def test_group_capacity_blocks_extra_enrollment_and_transfer(client):
+    org = create_org(client, "AeroKiDS", "capacity-school")
+    headers = {"X-Organization-Id": org["id"]}
+
+    first = client.post("/students", headers=headers, json={"first_name": "Перший"}).json()
+    second = client.post("/students", headers=headers, json={"first_name": "Другий"}).json()
+    for student in (first, second):
+        client.patch(
+            f"/students/{student['id']}/crm-status",
+            headers=headers,
+            json={"crm_status": "waiting_for_group"},
+        )
+
+    full_group = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Full Group", "capacity": 1, "student_ids": [first["id"]]},
+    )
+    assert full_group.status_code == 201, full_group.text
+    full_group_id = full_group.json()["group"]["id"]
+
+    other_group = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Other Group", "capacity": 8, "student_ids": [second["id"]]},
+    )
+    assert other_group.status_code == 201, other_group.text
+
+    transfer = client.post(
+        f"/students/{second['id']}/transfer",
+        headers=headers,
+        json={"to_group_id": full_group_id},
+    )
+    assert transfer.status_code == 409
+    assert "available seats" in transfer.json()["detail"]
+
+    third = client.post("/students", headers=headers, json={"first_name": "Третій"}).json()
+    enrollment = client.post(
+        "/enrollments",
+        headers=headers,
+        json={"student_id": third["id"], "group_id": full_group_id},
+    )
+    assert enrollment.status_code == 409
