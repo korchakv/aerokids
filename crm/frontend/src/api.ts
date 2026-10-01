@@ -169,3 +169,94 @@ export async function loadWorkspace(session: Session): Promise<WorkspaceBundle> 
   const [leads, students, groups] = await Promise.all([leadsPromise, studentsPromise, groupsPromise]);
   return { leads, students, groups };
 }
+
+
+export type ApiLocation = {
+  id: string;
+  organization_id: string;
+  name: string;
+  address: string | null;
+  is_active: boolean;
+};
+
+export type ApiStaff = {
+  id: string;
+  organization_id: string;
+  user_id: string | null;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  role: "owner" | "admin" | "manager" | "teacher" | "accountant";
+  is_active: boolean;
+  notes: string | null;
+};
+
+export type ApiStaffProfile = ApiStaff & {
+  assignments: {
+    location_ids: string[];
+    group_ids: string[];
+  };
+};
+
+export type ApiSubscriptionPlan = {
+  id: string;
+  organization_id: string;
+  name: string;
+  price_minor: number;
+  period_days: number;
+  lessons_included: number | null;
+  is_active: boolean;
+};
+
+export type ApiPayment = {
+  id: string;
+  organization_id: string;
+  student_id: string;
+  subscription_id: string | null;
+  amount_minor: number;
+  currency: string;
+  status: "pending" | "paid" | "refunded" | "cancelled";
+  method: "cash" | "card" | "bank" | "other" | null;
+  due_date: string | null;
+  paid_at: string | null;
+  note: string | null;
+};
+
+export type OperationsBundle = {
+  locations: ApiLocation[];
+  staff: ApiStaffProfile[];
+  plans: ApiSubscriptionPlan[];
+  payments: ApiPayment[];
+};
+
+export async function loadOperations(session: Session): Promise<OperationsBundle> {
+  const membership = session.user.memberships.find((item) => item.organization_id === session.organizationId);
+  const role = membership?.role;
+
+  const locationsPromise = role === "owner" || role === "admin" || role === "manager"
+    ? apiGet<ApiLocation[]>("/locations", session)
+    : Promise.resolve([]);
+
+  const staffPromise = role === "owner" || role === "admin"
+    ? apiGet<ApiStaff[]>("/staff", session).then(async (items) => Promise.all(
+        items.map((item) => apiGet<ApiStaffProfile>(`/staff/${item.id}/profile`, session))
+      ))
+    : Promise.resolve([]);
+
+  const plansPromise = role === "owner" || role === "admin" || role === "accountant"
+    ? apiGet<ApiSubscriptionPlan[]>("/subscription-plans", session)
+    : Promise.resolve([]);
+
+  const paymentsPromise = role === "owner" || role === "admin" || role === "accountant"
+    ? apiGet<ApiPayment[]>("/payments", session)
+    : Promise.resolve([]);
+
+  const [locations, staff, plans, payments] = await Promise.all([
+    locationsPromise,
+    staffPromise,
+    plansPromise,
+    paymentsPromise,
+  ]);
+
+  return { locations, staff, plans, payments };
+}
