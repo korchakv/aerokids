@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_org_id
 from app.models.core import Organization
-from app.schemas import ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, IntakeCreate, IntakeResult, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentTransfer, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
+from app.schemas import AttendanceBulkUpdate, AttendanceRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentTransfer, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
 from app.services import crm
 
 router = APIRouter()
@@ -150,3 +150,38 @@ def update_student_lifecycle(student_id: UUID, data: StudentLifecycleUpdate, org
 @router.post("/students/{student_id}/transfer", response_model=EnrollmentRead)
 def transfer_student(student_id: UUID, data: StudentTransfer, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
     return crm.transfer_student(db, org_id, student_id, data.to_group_id, data.started_at)
+
+
+@router.post("/group-schedules", response_model=GroupScheduleRead, status_code=201)
+def create_group_schedule(data: GroupScheduleCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.create_group_schedule(db, org_id, data)
+
+
+@router.get("/group-schedules", response_model=list[GroupScheduleRead])
+def group_schedules(group_id: UUID | None = None, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.list_group_schedules(db, org_id, group_id)
+
+
+@router.get("/groups/{group_id}/roster", response_model=list[GroupRosterStudent])
+def roster(group_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.group_roster(db, org_id, group_id)
+
+
+@router.post("/lesson-sessions", response_model=LessonSessionRead, status_code=201)
+def create_lesson_session(data: LessonSessionCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.create_lesson_session(db, org_id, data)
+
+
+@router.get("/lesson-sessions", response_model=list[LessonSessionRead])
+def lesson_sessions(group_id: UUID | None = None, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.list_lesson_sessions(db, org_id, group_id)
+
+
+@router.put("/lesson-sessions/{session_id}/attendance", response_model=list[AttendanceRead])
+def update_attendance(session_id: UUID, data: AttendanceBulkUpdate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.mark_attendance_bulk(db, org_id, session_id, data.items)
+
+
+@router.get("/lesson-sessions/{session_id}/attendance", response_model=list[AttendanceRead])
+def attendance(session_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.list_attendance(db, org_id, session_id)
