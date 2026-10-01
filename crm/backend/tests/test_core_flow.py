@@ -1368,3 +1368,53 @@ def test_student_availability_rejects_invalid_time_range(client):
         },
     )
     assert response.status_code == 422
+
+
+def test_audit_event_records_authenticated_actor(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "Audit Actor School",
+            "organization_slug": "audit-actor-school",
+            "full_name": "Owner",
+            "email": "audit-owner@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    owner_id = bootstrap.json()["user_id"]
+    headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    intake = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Іван",
+            "child_age": 9,
+            "contact_name": "Олена",
+            "phone": "0675554433",
+            "source": "phone",
+        },
+    )
+    assert intake.status_code == 201, intake.text
+    student_id = intake.json()["student_id"]
+
+    changed = client.patch(
+        f"/students/{student_id}/crm-status",
+        headers=headers,
+        json={"crm_status": "contacted"},
+    )
+    assert changed.status_code == 200, changed.text
+
+    events = client.get(
+        "/audit-events",
+        headers=headers,
+        params={"entity_type": "student", "entity_id": student_id},
+    )
+    assert events.status_code == 200, events.text
+    actor_events = [item for item in events.json() if item["event_type"] in {"lead.created", "student.crm_status_changed"}]
+    assert actor_events
+    assert all(item["actor_user_id"] == owner_id for item in actor_events)
