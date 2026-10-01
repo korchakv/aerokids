@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db, get_org_id, require_org_roles
+from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, get_org_id, require_org_roles
 from app.models.core import Organization, PaymentStatus, StaffRole, User
 from app.schemas import AttendanceBulkUpdate, AttendanceRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LeadListItem, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OverviewReport, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentSummary, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
 from app.auth import service as auth_service
@@ -94,7 +94,7 @@ def create_contact(data: ContactCreate, org_id: UUID = Depends(get_org_id), db: 
 
 
 @router.get("/contacts", response_model=list[ContactRead])
-def contacts(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def contacts(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.list_contacts(db, org_id)
 
 
@@ -104,7 +104,7 @@ def create_student(data: StudentCreate, org_id: UUID = Depends(get_org_id), db: 
 
 
 @router.get("/students", response_model=list[StudentRead])
-def students(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def students(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.list_students(db, org_id)
 
 
@@ -120,7 +120,7 @@ def create_trial(data: TrialLessonCreate, org_id: UUID = Depends(get_org_id), db
 
 
 @router.get("/trial-lessons", response_model=list[TrialLessonRead])
-def trials(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def trials(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.list_trials(db, org_id)
 
 
@@ -149,7 +149,7 @@ def public_intake(organization_slug: str, data: IntakeCreate, db: Session = Depe
 
 
 @router.get("/students/{student_id}", response_model=StudentDetail)
-def get_student(student_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def get_student(student_id: UUID, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     student, contacts, trials = crm.student_detail(db, org_id, student_id)
     return StudentDetail(
         **StudentRead.model_validate(student).model_dump(),
@@ -169,7 +169,7 @@ def complete_trial(trial_id: UUID, data: TrialLessonComplete, org_id: UUID = Dep
 
 
 @router.get("/waiting-list", response_model=list[WaitingCandidate])
-def waiting_list(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def waiting_list(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.list_waiting_candidates(db, org_id)
 
 
@@ -183,7 +183,7 @@ def form_group(data: GroupFormationCreate, org_id: UUID = Depends(get_org_id), d
 
 
 @router.get("/students/{student_id}/profile", response_model=StudentProfile)
-def get_student_profile(student_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def get_student_profile(student_id: UUID, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     student, contacts, trials, groups = crm.student_profile(db, org_id, student_id)
     return StudentProfile(
         **StudentRead.model_validate(student).model_dump(),
@@ -338,15 +338,15 @@ def report_overview(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, St
 
 
 @router.get("/workspace/leads", response_model=list[LeadListItem])
-def workspace_leads(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+def workspace_leads(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.list_lead_overview(db, org_id)
 
 
 @router.get("/workspace/students", response_model=list[StudentOverviewItem])
-def workspace_students(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.list_student_overview(db, org_id)
+def workspace_students(access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)):
+    return crm.list_student_overview(db, access.organization_id, access.user_id, access.role)
 
 
 @router.get("/workspace/groups", response_model=list[GroupOverviewItem])
-def workspace_groups(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.list_group_overview(db, org_id)
+def workspace_groups(access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)):
+    return crm.list_group_overview(db, access.organization_id, access.user_id, access.role)
