@@ -425,3 +425,20 @@ export async function loadOverviewReport(session: Session): Promise<OverviewRepo
   if (membership?.role === "teacher") return null;
   return apiGet<OverviewReport>("/reports/overview", session);
 }
+
+
+export type ApiAuditEvent = {
+  id: string;
+  organization_id: string;
+  actor_user_id: string | null;
+  entity_type: string;
+  entity_id: string | null;
+  event_type: string;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export function loadAuditEvents(entityType: string, entityId: string, session: Session) {
+  const query = new URLSearchParams({ entity_type: entityType, entity_id: entityId, limit: "100" });
+  return apiGet<ApiAuditEvent[]>(`/audit-events?${query.toString()}`, session);
+}
