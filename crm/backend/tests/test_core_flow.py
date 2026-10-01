@@ -1085,3 +1085,41 @@ def test_group_capacity_blocks_extra_enrollment_and_transfer(client):
         json={"student_id": third["id"], "group_id": full_group_id},
     )
     assert enrollment.status_code == 409
+
+
+def test_trial_can_be_rescheduled_without_creating_duplicate(client):
+    org = create_org(client, "AeroKiDS", "trial-reschedule")
+    headers = {"X-Organization-Id": org["id"]}
+    location = client.post("/locations", headers=headers, json={"name": "Центр"}).json()
+    student = client.post("/students", headers=headers, json={"first_name": "Марко"}).json()
+
+    trial = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={"student_id": student["id"], "starts_at": "2026-10-12T17:00:00+03:00"},
+    )
+    assert trial.status_code == 201, trial.text
+    trial_id = trial.json()["id"]
+
+    updated = client.patch(
+        f"/trial-lessons/{trial_id}",
+        headers=headers,
+        json={
+            "starts_at": "2026-10-13T18:30:00+03:00",
+            "location_id": location["id"],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["id"] == trial_id
+    assert updated.json()["location_id"] == location["id"]
+
+    trials = client.get("/trial-lessons", headers=headers)
+    assert trials.status_code == 200
+    assert len(trials.json()) == 1
+
+    events = client.get(
+        "/audit-events",
+        headers=headers,
+        params={"entity_type": "student", "entity_id": student["id"]},
+    )
+    assert any(item["event_type"] == "trial.rescheduled" for item in events.json())
