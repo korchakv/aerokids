@@ -150,6 +150,7 @@ def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate) -> TrialLes
         scoped_get(db, Location, org_id, data.location_id)
     item = TrialLesson(organization_id=org_id, **data.model_dump())
     db.add(item)
+    db.flush()
     student.crm_status = CrmStatus.TRIAL_SCHEDULED
     record_audit(db, org_id, "student", student.id, "trial.scheduled", {"trial_id": str(item.id), "starts_at": item.starts_at.isoformat()})
     db.commit()
