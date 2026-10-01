@@ -8,7 +8,7 @@ from app.api.deps import get_current_user, get_db, get_org_id, require_org_roles
 from app.models.core import Organization, PaymentStatus, StaffRole, User
 from app.schemas import AttendanceBulkUpdate, AttendanceRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OverviewReport, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentSummary, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, WaitingCandidate
 from app.auth import service as auth_service
-from app.auth.schemas import AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, LoginCreate
+from app.auth.schemas import AcceptInvitationCreate, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult
 from app.core.security import auth_is_required
 from app.services import crm
 
@@ -39,6 +39,29 @@ def auth_login(data: LoginCreate, db: Session = Depends(get_db)):
 @router.get("/auth/me", response_model=AuthUserInfo)
 def auth_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return auth_service.auth_user_info(db, user)
+
+
+@router.post("/organization-invitations", response_model=OrganizationInvitationResult, status_code=201)
+def create_organization_invitation(
+    data: OrganizationInvitationCreate,
+    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    invitation, raw_token = auth_service.create_invitation(db, org_id, user.id, data.email, data.role)
+    return OrganizationInvitationResult(
+        invitation_id=invitation.id,
+        email=invitation.email,
+        role=invitation.role,
+        invite_token=raw_token,
+        expires_at=invitation.expires_at.isoformat(),
+    )
+
+
+@router.post("/auth/accept-invite", response_model=AuthTokenResponse)
+def accept_organization_invitation(data: AcceptInvitationCreate, db: Session = Depends(get_db)):
+    user, token, user_info = auth_service.accept_invitation(db, data.invite_token, data.full_name, data.password)
+    return AuthTokenResponse(access_token=token, user=user_info)
 
 
 @router.post("/organizations", response_model=OrganizationRead, status_code=201)
