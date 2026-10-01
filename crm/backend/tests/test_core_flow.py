@@ -1123,3 +1123,77 @@ def test_trial_can_be_rescheduled_without_creating_duplicate(client):
         params={"entity_type": "student", "entity_id": student["id"]},
     )
     assert any(item["event_type"] == "trial.rescheduled" for item in events.json())
+
+
+def test_organization_settings_are_editable_and_tenant_scoped(client):
+    org_a = create_org(client, "School A", "org-settings-a")
+    org_b = create_org(client, "School B", "org-settings-b")
+    a_headers = {"X-Organization-Id": org_a["id"]}
+    b_headers = {"X-Organization-Id": org_b["id"]}
+
+    current = client.get("/organization", headers=a_headers)
+    assert current.status_code == 200, current.text
+    assert current.json()["timezone"] == "Europe/Kyiv"
+    assert current.json()["currency"] == "UAH"
+    assert current.json()["locale"] == "uk-UA"
+
+    updated = client.patch(
+        "/organization",
+        headers=a_headers,
+        json={
+            "name": "School A International",
+            "timezone": "Europe/Warsaw",
+            "currency": "EUR",
+            "locale": "pl-PL",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["name"] == "School A International"
+    assert updated.json()["timezone"] == "Europe/Warsaw"
+    assert updated.json()["currency"] == "EUR"
+    assert updated.json()["locale"] == "pl-PL"
+
+    foreign = client.get("/organization", headers=b_headers)
+    assert foreign.status_code == 200, foreign.text
+    assert foreign.json()["name"] == "School B"
+    assert foreign.json()["currency"] == "UAH"
+
+    events = client.get(
+        "/audit-events",
+        headers=a_headers,
+        params={"entity_type": "organization", "entity_id": org_a["id"]},
+    )
+    assert events.status_code == 200, events.text
+    assert any(item["event_type"] == "organization.settings_updated" for item in events.json())
+
+
+def test_auth_membership_returns_organization_locale_settings(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "Locale School",
+            "organization_slug": "locale-school",
+            "full_name": "Owner",
+            "email": "locale-owner@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    updated = client.patch(
+        "/organization",
+        headers=headers,
+        json={"timezone": "Europe/Prague", "currency": "CZK", "locale": "cs-CZ"},
+    )
+    assert updated.status_code == 200, updated.text
+
+    me = client.get("/auth/me", headers={"Authorization": headers["Authorization"]})
+    assert me.status_code == 200, me.text
+    membership = me.json()["memberships"][0]
+    assert membership["organization_timezone"] == "Europe/Prague"
+    assert membership["organization_currency"] == "CZK"
+    assert membership["organization_locale"] == "cs-CZ"
