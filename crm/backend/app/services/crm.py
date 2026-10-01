@@ -1,5 +1,5 @@
 import re
-from datetime import date, time
+from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Attendance, AttendanceStatus, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, LessonSession, LessonStatus, Location, Organization, Student, StudentContact, StudentStatus, TrialLesson
+from app.models.core import Attendance, AttendanceStatus, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, LessonSession, LessonStatus, Location, Organization, Payment, PaymentMethod, PaymentStatus, Student, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 
 
@@ -497,3 +497,113 @@ def list_attendance(db: Session, org_id: UUID, session_id: UUID) -> list[Attenda
         .where(Attendance.organization_id == org_id, Attendance.session_id == session_id)
         .order_by(Attendance.student_id)
     ))
+
+
+def create_subscription_plan(db: Session, org_id: UUID, data) -> SubscriptionPlan:
+    require_organization(db, org_id)
+    item = SubscriptionPlan(organization_id=org_id, **data.model_dump())
+    db.add(item)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Subscription plan name already exists") from exc
+    db.refresh(item)
+    return item
+
+
+def list_subscription_plans(db: Session, org_id: UUID) -> list[SubscriptionPlan]:
+    return list(db.scalars(
+        select(SubscriptionPlan)
+        .where(SubscriptionPlan.organization_id == org_id, SubscriptionPlan.is_active.is_(True))
+        .order_by(SubscriptionPlan.name)
+    ))
+
+
+def create_student_subscription(db: Session, org_id: UUID, data) -> StudentSubscription:
+    student = scoped_get(db, Student, org_id, data.student_id)
+    plan = scoped_get(db, SubscriptionPlan, org_id, data.plan_id)
+    price_minor = data.price_minor if data.price_minor is not None else plan.price_minor
+    if data.discount_minor > price_minor:
+        raise HTTPException(status_code=422, detail="Discount cannot exceed subscription price")
+    ends_on = data.starts_on + timedelta(days=plan.period_days - 1)
+    item = StudentSubscription(
+        organization_id=org_id,
+        student_id=student.id,
+        plan_id=plan.id,
+        starts_on=data.starts_on,
+        ends_on=ends_on,
+        price_minor=price_minor,
+        discount_minor=data.discount_minor,
+        discount_label=data.discount_label,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def list_student_subscriptions(db: Session, org_id: UUID, student_id: UUID | None = None) -> list[StudentSubscription]:
+    stmt = select(StudentSubscription).where(StudentSubscription.organization_id == org_id)
+    if student_id is not None:
+        scoped_get(db, Student, org_id, student_id)
+        stmt = stmt.where(StudentSubscription.student_id == student_id)
+    return list(db.scalars(stmt.order_by(StudentSubscription.starts_on.desc())))
+
+
+def create_payment(db: Session, org_id: UUID, data) -> Payment:
+    student = scoped_get(db, Student, org_id, data.student_id)
+    if data.subscription_id is not None:
+        subscription = scoped_get(db, StudentSubscription, org_id, data.subscription_id)
+        if subscription.student_id != student.id:
+            raise HTTPException(status_code=409, detail="Subscription belongs to another student")
+    item = Payment(
+        organization_id=org_id,
+        student_id=student.id,
+        subscription_id=data.subscription_id,
+        amount_minor=data.amount_minor,
+        due_date=data.due_date,
+        note=data.note,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def list_payments(db: Session, org_id: UUID, student_id: UUID | None = None, status: PaymentStatus | None = None) -> list[Payment]:
+    stmt = select(Payment).where(Payment.organization_id == org_id)
+    if student_id is not None:
+        scoped_get(db, Student, org_id, student_id)
+        stmt = stmt.where(Payment.student_id == student_id)
+    if status is not None:
+        stmt = stmt.where(Payment.status == status)
+    return list(db.scalars(stmt.order_by(Payment.created_at.desc())))
+
+
+def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: PaymentMethod, paid_at: datetime | None = None) -> Payment:
+    payment = scoped_get(db, Payment, org_id, payment_id)
+    if payment.status == PaymentStatus.CANCELLED:
+        raise HTTPException(status_code=409, detail="Cancelled payment cannot be marked as paid")
+    payment.status = PaymentStatus.PAID
+    payment.method = method
+    payment.paid_at = paid_at or datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+def payment_summary(db: Session, org_id: UUID) -> dict:
+    rows = list(db.scalars(select(Payment).where(Payment.organization_id == org_id)))
+    today = date.today()
+    paid = [row for row in rows if row.status == PaymentStatus.PAID]
+    pending = [row for row in rows if row.status == PaymentStatus.PENDING]
+    overdue = [row for row in pending if row.due_date is not None and row.due_date < today]
+    return {
+        "paid_minor": sum(row.amount_minor for row in paid),
+        "pending_minor": sum(row.amount_minor for row in pending),
+        "overdue_minor": sum(row.amount_minor for row in overdue),
+        "paid_count": len(paid),
+        "pending_count": len(pending),
+        "overdue_count": len(overdue),
+    }
