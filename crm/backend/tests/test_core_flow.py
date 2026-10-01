@@ -1309,3 +1309,62 @@ def test_group_formation_persists_recurring_schedule(client):
         (0, "17:00:00"),
         (2, "17:00:00"),
     ]
+
+
+def test_student_preferences_and_availability_are_tenant_scoped(client):
+    org_a = create_org(client, "AeroKiDS A", "prefs-a")
+    org_b = create_org(client, "AeroKiDS B", "prefs-b")
+    a_headers = {"X-Organization-Id": org_a["id"]}
+    b_headers = {"X-Organization-Id": org_b["id"]}
+
+    location = client.post("/locations", headers=a_headers, json={"name": "Центр"}).json()
+    student = client.post("/students", headers=a_headers, json={"first_name": "Марко", "age_at_inquiry": 9}).json()
+
+    saved = client.put(
+        f"/students/{student['id']}/preferences",
+        headers=a_headers,
+        json={
+            "preferred_location_id": location["id"],
+            "availability": [
+                {"weekday": 0, "start_time": "16:00", "end_time": "20:00"},
+                {"weekday": 2, "start_time": "16:00", "end_time": "20:00"},
+            ],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["preferred_location_name"] == "Центр"
+    assert len(saved.json()["availability"]) == 2
+
+    loaded = client.get(f"/students/{student['id']}/preferences", headers=a_headers)
+    assert loaded.status_code == 200, loaded.text
+    assert loaded.json()["availability"][0]["weekday"] == 0
+
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=a_headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    leads = client.get("/workspace/leads", headers=a_headers)
+    lead = next(item for item in leads.json() if item["student_id"] == student["id"])
+    assert lead["preferred_location_name"] == "Центр"
+    assert len(lead["availability"]) == 2
+
+    foreign = client.get(f"/students/{student['id']}/preferences", headers=b_headers)
+    assert foreign.status_code == 404
+
+
+def test_student_availability_rejects_invalid_time_range(client):
+    org = create_org(client, "Availability School", "availability-invalid")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Оля"}).json()
+
+    response = client.put(
+        f"/students/{student['id']}/preferences",
+        headers=headers,
+        json={
+            "availability": [
+                {"weekday": 1, "start_time": "20:00", "end_time": "16:00"},
+            ],
+        },
+    )
+    assert response.status_code == 422
