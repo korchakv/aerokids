@@ -119,6 +119,8 @@ export type WorkspaceLead = {
   contact_phone: string | null;
   latest_trial_id: string | null;
   latest_trial_at: string | null;
+  trial_location_id: string | null;
+  trial_location_name: string | null;
   recommended_level: string | null;
 };
 
