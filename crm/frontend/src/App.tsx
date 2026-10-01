@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadOperations, loadOverviewReport, loadSession, loadTeaching, loadWorkspace, login, refreshMe, type ApiAuditEvent, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadOperations, loadOverviewReport, loadSession, loadTeaching, loadWorkspace, login, refreshMe, resetPassword, type ApiAuditEvent, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -175,6 +175,7 @@ function App() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<StaffRoleDemo>("Викладач");
   const [inviteLink, setInviteLink] = useState("");
+  const [staffResetLink, setStaffResetLink] = useState("");
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [staffName, setStaffName] = useState("");
   const [staffRole, setStaffRole] = useState<StaffRoleDemo>("Викладач");
@@ -210,6 +211,10 @@ function App() {
   const [scheduleGroupId, setScheduleGroupId] = useState<EntityId>("1");
   const [scheduleWeekday, setScheduleWeekday] = useState(0);
   const [scheduleTime, setScheduleTime] = useState("17:00");
+  useEffect(() => {
+    setStaffResetLink("");
+  }, [selectedStaffId]);
+
   useEffect(() => {
     if (!apiEnabled || !session) return;
     refreshMe(session).then(setSession).catch(() => {
@@ -830,6 +835,21 @@ function App() {
     setShowStaffForm(false);
   };
 
+  const createStaffPasswordReset = async () => {
+    if (!session || !selectedStaff?.email) return;
+    try {
+      const result = await apiPost<{ reset_token: string }>("/password-reset-links", {
+        email: selectedStaff.email,
+      }, session);
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.searchParams.set("reset", result.reset_token);
+      setStaffResetLink(url.toString());
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити посилання для скидання пароля");
+    }
+  };
+
   const createInvitation = async () => {
     if (!session || !inviteEmail.trim()) return;
     try {
@@ -1448,6 +1468,15 @@ function App() {
             }
             setStaff((items) => items.map((item) => item.id === selectedStaff.id ? {...item,isActive:!item.isActive} : item));
           }}>{selectedStaff.isActive ? "Деактивувати працівника" : "Активувати працівника"}</button></div>
+          {apiEnabled && selectedStaff.email && <div className="studentSection">
+            <h3>Доступ до CRM</h3>
+            {!staffResetLink ? <button className="search full" onClick={createStaffPasswordReset}>Створити посилання для нового пароля</button> : <div className="inviteSuccess">
+              <b>Посилання готове</b>
+              <p>Воно одноразове та діє 1 годину. Надішліть його працівнику приватно.</p>
+              <code>{staffResetLink}</code>
+              <button className="primary full" onClick={() => navigator.clipboard?.writeText(staffResetLink)}>Копіювати посилання</button>
+            </div>}
+          </div>}
         </aside>
       </div>}
 
@@ -1883,7 +1912,9 @@ function auditEventDetail(event: ApiAuditEvent) {
 }
 
 function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
-  const inviteToken = new URLSearchParams(window.location.search).get("invite");
+  const params = new URLSearchParams(window.location.search);
+  const inviteToken = params.get("invite");
+  const resetToken = params.get("reset");
   const [inviteName, setInviteName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1896,7 +1927,7 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
   const [ownerName, setOwnerName] = useState("");
 
   useEffect(() => {
-    if (inviteToken) {
+    if (inviteToken || resetToken) {
       setCheckingBootstrap(false);
       return;
     }
@@ -1939,6 +1970,25 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
     }
   };
 
+  const completePasswordReset = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!resetToken) return;
+    setError("");
+    setLoading(true);
+    try {
+      const nextSession = await resetPassword({
+        reset_token: resetToken,
+        password,
+      });
+      window.history.replaceState({}, "", window.location.pathname);
+      onAuthenticated(nextSession);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не вдалося змінити пароль");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const setup = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
@@ -1962,7 +2012,16 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
     <div className="loginCard">
       <div className="loginBrand"><span className="mark">✦</span><div><b>School CRM</b><small>Керування школою в одному місці</small></div></div>
 
-      {inviteToken ? <>
+      {resetToken ? <>
+        <p className="eyebrow">Новий пароль</p>
+        <h1>Створіть новий пароль</h1>
+        <p className="loginIntro">Посилання одноразове. Після збереження ви одразу ввійдете у CRM.</p>
+        <form onSubmit={completePasswordReset}>
+          <label>Новий пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          {error && <div className="loginError">{error}</div>}
+          <button className="primary full" disabled={loading}>{loading ? "Зберігаємо…" : "Змінити пароль"}</button>
+        </form>
+      </> : inviteToken ? <>
         <p className="eyebrow">Запрошення</p>
         <h1>Створіть свій доступ</h1>
         <p className="loginIntro">Вкажіть ім’я та пароль. Роль і організація вже задані запрошенням.</p>
