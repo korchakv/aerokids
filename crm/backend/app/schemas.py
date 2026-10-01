@@ -478,3 +478,14 @@ class GroupOverviewItem(BaseModel):
     enrolled_count: int
     min_age: int | None
     max_age: int | None
+
+
+class AuditEventRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    actor_user_id: UUID | None
+    entity_type: str
+    entity_id: UUID | None
+    event_type: str
+    payload: dict | None
+    created_at: datetime
