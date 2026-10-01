@@ -1464,3 +1464,70 @@ def test_readiness_checks_database(client):
     response = client.get("/ready")
     assert response.status_code == 200, response.text
     assert response.json() == {"status": "ready", "database": "ok"}
+
+
+def test_owner_can_create_single_use_password_reset_link_for_staff(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "Reset School",
+            "organization_slug": "reset-school",
+            "full_name": "Owner",
+            "email": "reset-owner@example.com",
+            "password": "owner-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    owner_headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    invite = client.post(
+        "/organization-invitations",
+        headers=owner_headers,
+        json={"email": "reset-teacher@example.com", "role": "teacher"},
+    )
+    assert invite.status_code == 201, invite.text
+    accepted = client.post(
+        "/auth/accept-invite",
+        json={
+            "invite_token": invite.json()["invite_token"],
+            "full_name": "Teacher",
+            "password": "teacher-old-password",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    reset_link = client.post(
+        "/password-reset-links",
+        headers=owner_headers,
+        json={"email": "reset-teacher@example.com"},
+    )
+    assert reset_link.status_code == 201, reset_link.text
+    reset_token = reset_link.json()["reset_token"]
+
+    changed = client.post(
+        "/auth/reset-password",
+        json={"reset_token": reset_token, "password": "teacher-new-password"},
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["user"]["email"] == "reset-teacher@example.com"
+
+    old_login = client.post(
+        "/auth/login",
+        json={"email": "reset-teacher@example.com", "password": "teacher-old-password"},
+    )
+    assert old_login.status_code == 401
+
+    new_login = client.post(
+        "/auth/login",
+        json={"email": "reset-teacher@example.com", "password": "teacher-new-password"},
+    )
+    assert new_login.status_code == 200, new_login.text
+
+    reused = client.post(
+        "/auth/reset-password",
+        json={"reset_token": reset_token, "password": "another-new-password"},
+    )
+    assert reused.status_code == 400
