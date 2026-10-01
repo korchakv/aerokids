@@ -43,16 +43,16 @@ type LessonItem = {
 };
 
 type PlanDemo = {
-  id: number;
+  id: EntityId;
   name: string;
   price: number;
   lessons: number | null;
 };
 
 type PaymentDemo = {
-  id: number;
+  id: EntityId;
   studentId: EntityId;
-  planId: number;
+  planId: EntityId;
   amount: number;
   dueDate: string;
   status: "pending" | "paid" | "overdue";
@@ -60,7 +60,7 @@ type PaymentDemo = {
 };
 
 type LocationDemo = {
-  id: number;
+  id: EntityId;
   name: string;
   address: string;
   isActive: boolean;
@@ -69,12 +69,12 @@ type LocationDemo = {
 type StaffRoleDemo = "Власник" | "Адміністратор" | "Менеджер" | "Викладач" | "Бухгалтер";
 
 type StaffDemo = {
-  id: number;
+  id: EntityId;
   fullName: string;
   role: StaffRoleDemo;
   email: string;
   phone: string;
-  locationIds: number[];
+  locationIds: EntityId[];
   groupIds: EntityId[];
   isActive: boolean;
 };
@@ -114,25 +114,25 @@ function App() {
     1: { 8: "present", 9: "late" },
   });
   const [plans] = useState<PlanDemo[]>([
-    { id: 1, name: "8 занять / 30 днів", price: 1800, lessons: 8 },
-    { id: 2, name: "Індивідуальний", price: 0, lessons: null },
+    { id: "1", name: "8 занять / 30 днів", price: 1800, lessons: 8 },
+    { id: "2", name: "Індивідуальний", price: 0, lessons: null },
   ]);
   const [payments, setPayments] = useState<PaymentDemo[]>([
-    { id: 1, studentId: "8", planId: 1, amount: 1800, dueDate: "2026-10-05", status: "pending" },
-    { id: 2, studentId: "9", planId: 1, amount: 1800, dueDate: "2026-09-28", status: "paid", method: "Картка" },
+    { id: "1", studentId: "8", planId: "1", amount: 1800, dueDate: "2026-10-05", status: "pending" },
+    { id: "2", studentId: "9", planId: "1", amount: 1800, dueDate: "2026-09-28", status: "paid", method: "Картка" },
   ]);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentStudentId, setPaymentStudentId] = useState<EntityId>("8");
-  const [paymentPlanId, setPaymentPlanId] = useState(1);
+  const [paymentPlanId, setPaymentPlanId] = useState<EntityId>("1");
   const [paymentDueDate, setPaymentDueDate] = useState("2026-10-31");
   const [locations, setLocations] = useState<LocationDemo[]>([
-    { id: 1, name: "Основна локація", address: "Івано-Франківськ", isActive: true },
+    { id: "1", name: "Основна локація", address: "Івано-Франківськ", isActive: true },
   ]);
   const [staff, setStaff] = useState<StaffDemo[]>([
-    { id: 1, fullName: "Іван Викладач", role: "Викладач", email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: [1], groupIds: ["1"], isActive: true },
-    { id: 2, fullName: "Адміністратор AeroKiDS", role: "Адміністратор", email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: [1], groupIds: [], isActive: true },
+    { id: "1", fullName: "Іван Викладач", role: "Викладач", email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: ["1"], groupIds: ["1"], isActive: true },
+    { id: "2", fullName: "Адміністратор AeroKiDS", role: "Адміністратор", email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: ["1"], groupIds: [], isActive: true },
   ]);
-  const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState<EntityId | null>(null);
   const [showStaffForm, setShowStaffForm] = useState(false);
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [staffName, setStaffName] = useState("");
@@ -384,14 +384,14 @@ function App() {
     setActive("Відвідування");
   };
 
-  const markPaymentPaid = (id: number) => {
+  const markPaymentPaid = (id: EntityId) => {
     setPayments((items) => items.map((item) => item.id === id ? { ...item, status: "paid", method: "Картка" } : item));
   };
 
   const createPayment = () => {
     const plan = plans.find((item) => item.id === paymentPlanId);
     if (!plan) return;
-    const nextId = Math.max(0, ...payments.map((item) => item.id)) + 1;
+    const nextId = crypto.randomUUID();
     setPayments((items) => [...items, {
       id: nextId,
       studentId: paymentStudentId,
@@ -427,7 +427,7 @@ function App() {
 
   const createStaffMember = () => {
     if (!staffName.trim()) return;
-    const nextId = Math.max(0, ...staff.map((item) => item.id)) + 1;
+    const nextId = crypto.randomUUID();
     setStaff((items) => [...items, {
       id: nextId,
       fullName: staffName.trim(),
@@ -446,7 +446,7 @@ function App() {
 
   const createLocationDemo = () => {
     if (!locationName.trim()) return;
-    const nextId = Math.max(0, ...locations.map((item) => item.id)) + 1;
+    const nextId = crypto.randomUUID();
     setLocations((items) => [...items, {
       id: nextId,
       name: locationName.trim(),
@@ -458,7 +458,7 @@ function App() {
     setShowLocationForm(false);
   };
 
-  const toggleStaffLocation = (staffId: number, locationId: number) => {
+  const toggleStaffLocation = (staffId: EntityId, locationId: EntityId) => {
     setStaff((items) => items.map((item) => item.id !== staffId ? item : {
       ...item,
       locationIds: item.locationIds.includes(locationId)
@@ -467,7 +467,7 @@ function App() {
     }));
   };
 
-  const toggleStaffGroup = (staffId: number, groupId: EntityId) => {
+  const toggleStaffGroup = (staffId: EntityId, groupId: EntityId) => {
     setStaff((items) => items.map((item) => item.id !== staffId ? item : {
       ...item,
       groupIds: item.groupIds.includes(groupId)
@@ -856,7 +856,7 @@ function App() {
           <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
           <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
           <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(e.target.value)}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · {student.parent}</option>)}</select></label>
-          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(Number(e.target.value))}>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {plan.price ? formatMoney(plan.price) : "індивідуально"}</option>)}</select></label>
+          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {plan.price ? formatMoney(plan.price) : "індивідуально"}</option>)}</select></label>
           <label>Оплатити до<input type="date" value={paymentDueDate} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
           <button className="primary full" onClick={createPayment}>Створити нарахування</button>
         </div>
