@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_org_id
 from app.models.core import Organization
-from app.schemas import ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupRead, IntakeCreate, IntakeResult, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, StudentContactCreate, StudentCreate, StudentRead, TrialLessonCreate, TrialLessonRead
+from app.schemas import ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupRead, IntakeCreate, IntakeResult, LocationCreate, LocationRead, OrganizationCreate, OrganizationRead, StudentContactCreate, StudentCreate, StudentDetail, StudentRead, StudentStatusUpdate, TrialLessonComplete, TrialLessonCreate, TrialLessonRead
 from app.services import crm
 
 router = APIRouter()
@@ -95,3 +95,23 @@ def public_intake(organization_slug: str, data: IntakeCreate, db: Session = Depe
         raise HTTPException(status_code=404, detail="Organization not found")
     student, contact = crm.create_intake(db, organization, data)
     return IntakeResult(student_id=student.id, contact_id=contact.id, crm_status=student.crm_status)
+
+
+@router.get("/students/{student_id}", response_model=StudentDetail)
+def get_student(student_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    student, contacts, trials = crm.student_detail(db, org_id, student_id)
+    return StudentDetail(
+        **StudentRead.model_validate(student).model_dump(),
+        contacts=[ContactRead.model_validate(item) for item in contacts],
+        trial_lessons=[TrialLessonRead.model_validate(item) for item in trials],
+    )
+
+
+@router.patch("/students/{student_id}/crm-status", response_model=StudentRead)
+def update_student_status(student_id: UUID, data: StudentStatusUpdate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.update_student_crm_status(db, org_id, student_id, data.crm_status)
+
+
+@router.patch("/trial-lessons/{trial_id}/complete", response_model=TrialLessonRead)
+def complete_trial(trial_id: UUID, data: TrialLessonComplete, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
+    return crm.complete_trial(db, org_id, trial_id, data.status, data.recommended_level, data.teacher_notes)
