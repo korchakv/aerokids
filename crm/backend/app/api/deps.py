@@ -1,4 +1,5 @@
 from collections.abc import Callable, Generator
+from dataclasses import dataclass
 from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException
@@ -13,6 +14,13 @@ from app.models.core import OrganizationMembership, StaffRole, User
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+@dataclass(frozen=True)
+class OrgAccess:
+    organization_id: UUID
+    user_id: UUID | None
+    role: StaffRole
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -44,7 +52,7 @@ def _membership_for_token(
     db: Session,
     org_id: UUID,
     credentials: HTTPAuthorizationCredentials,
-) -> OrganizationMembership:
+) -> tuple[OrganizationMembership, UUID]:
     user_id = decode_access_token(credentials.credentials)
     auth_service.get_user(db, user_id)
     membership = db.scalar(select(OrganizationMembership).where(
@@ -54,38 +62,32 @@ def _membership_for_token(
     ))
     if membership is None:
         raise HTTPException(status_code=403, detail="No access to this organization")
-    return membership
+    return membership, user_id
 
 
-def get_org_id(
+def get_org_access(
     x_organization_id: str = Header(..., alias="X-Organization-Id"),
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
-) -> UUID:
+) -> OrgAccess:
     org_id = parse_org_id(x_organization_id)
     if credentials is None:
         if auth_is_required():
             raise HTTPException(status_code=401, detail="Authentication required")
-        return org_id
-    _membership_for_token(db, org_id, credentials)
-    return org_id
+        return OrgAccess(organization_id=org_id, user_id=None, role=StaffRole.OWNER)
+
+    membership, user_id = _membership_for_token(db, org_id, credentials)
+    return OrgAccess(organization_id=org_id, user_id=user_id, role=membership.role)
+
+
+def get_org_id(access: OrgAccess = Depends(get_org_access)) -> UUID:
+    return access.organization_id
 
 
 def require_org_roles(*roles: StaffRole) -> Callable:
-    def dependency(
-        x_organization_id: str = Header(..., alias="X-Organization-Id"),
-        credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-        db: Session = Depends(get_db),
-    ) -> UUID:
-        org_id = parse_org_id(x_organization_id)
-        if credentials is None:
-            if auth_is_required():
-                raise HTTPException(status_code=401, detail="Authentication required")
-            return org_id
-
-        membership = _membership_for_token(db, org_id, credentials)
-        if membership.role not in roles:
+    def dependency(access: OrgAccess = Depends(get_org_access)) -> UUID:
+        if access.role not in roles:
             raise HTTPException(status_code=403, detail="Insufficient role for this action")
-        return org_id
+        return access.organization_id
 
     return dependency
