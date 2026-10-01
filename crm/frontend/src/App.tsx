@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadOperations, loadSession, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadOperations, loadSession, loadTeaching, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -35,11 +35,12 @@ type GroupItem = {
 type AttendanceValue = "present" | "absent" | "late" | "excused";
 
 type LessonItem = {
-  id: number;
+  id: EntityId;
   groupId: EntityId;
   startsAt: string;
   duration: number;
   topic: string;
+  status?: "scheduled" | "completed" | "cancelled";
 };
 
 type PlanDemo = {
@@ -106,13 +107,15 @@ function App() {
     { id: "1", name: "FPV Start 8–10", ages: "8–10", schedule: "Пн / Ср · 17:00", location: "Основна локація", capacity: 8, members: ["8", "9"] },
   ]);
   const [lessons, setLessons] = useState<LessonItem[]>([
-    { id: 1, groupId: "1", startsAt: "2026-09-30T17:00", duration: 60, topic: "FPV: траса в симуляторі" },
-    { id: 2, groupId: "1", startsAt: "2026-10-05T17:00", duration: 60, topic: "Whoop: базове керування" },
+    { id: "1", groupId: "1", startsAt: "2026-09-30T17:00", duration: 60, topic: "FPV: траса в симуляторі" },
+    { id: "2", groupId: "1", startsAt: "2026-10-05T17:00", duration: 60, topic: "Whoop: базове керування" },
   ]);
-  const [selectedLessonId, setSelectedLessonId] = useState(1);
-  const [attendance, setAttendance] = useState<Record<number, Record<EntityId, AttendanceValue>>>({
-    1: { 8: "present", 9: "late" },
+  const [selectedLessonId, setSelectedLessonId] = useState<EntityId>("1");
+  const [attendance, setAttendance] = useState<Record<EntityId, Record<EntityId, AttendanceValue>>>({
+    "1": { "8": "present", "9": "late" },
   });
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceSaving, setAttendanceSaving] = useState(false);
   const [plans, setPlans] = useState<PlanDemo[]>([
     { id: "1", name: "8 занять / 30 днів", price: 1800, lessons: 8 },
     { id: "2", name: "Індивідуальний", price: 0, lessons: null },
@@ -181,12 +184,15 @@ function App() {
     setWorkspaceLoading(true);
     setWorkspaceError("");
     try {
-      const [bundle, operations] = await Promise.all([
+      const [bundle, operations, teaching] = await Promise.all([
         loadWorkspace(currentSession),
         loadOperations(currentSession),
+        loadTeaching(currentSession),
       ]);
       applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
       applyOperations(operations, setLocations, setStaff, setPlans, setPayments);
+      applyTeaching(teaching, setLessons, setGroups);
+      setSelectedLessonId((current) => teaching.lessons.some((item) => item.id === current) ? current : (teaching.lessons[0]?.id ?? ""));
       setWorkspaceLoaded(true);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити дані CRM");
@@ -368,6 +374,26 @@ function App() {
   const lessonGroup = selectedLesson ? groups.find((group) => group.id === selectedLesson.groupId) : undefined;
   const lessonStudents = lessonGroup ? leads.filter((lead) => lessonGroup.members.includes(lead.id)) : [];
 
+  useEffect(() => {
+    if (!apiEnabled || !session || !selectedLesson?.id) return;
+    let cancelled = false;
+    setAttendanceLoading(true);
+    loadAttendance(selectedLesson.id, session)
+      .then((rows) => {
+        if (cancelled) return;
+        const mapped: Record<EntityId, AttendanceValue> = {};
+        rows.forEach((row) => { mapped[row.student_id] = row.status; });
+        setAttendance((all) => ({ ...all, [selectedLesson.id]: mapped }));
+      })
+      .catch((error) => {
+        if (!cancelled) setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити відвідування");
+      })
+      .finally(() => {
+        if (!cancelled) setAttendanceLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedLesson?.id, session?.accessToken, session?.organizationId]);
+
   const markAttendance = (studentId: EntityId, value: AttendanceValue) => {
     if (!selectedLesson) return;
     setAttendance((all) => ({
@@ -383,8 +409,25 @@ function App() {
     setAttendance((all) => ({ ...all, [selectedLesson.id]: next }));
   };
 
-  const createLesson = () => {
-    const nextId = Math.max(0, ...lessons.map((lesson) => lesson.id)) + 1;
+  const createLesson = async () => {
+    if (!newLessonGroupId) return;
+    if (apiEnabled && session) {
+      try {
+        const created = await apiPost<{ id: string }>("/lesson-sessions", {
+          group_id: newLessonGroupId,
+          starts_at: new Date(newLessonAt).toISOString(),
+          duration_minutes: 60,
+          topic: newLessonTopic.trim() || "Заняття",
+        }, session);
+        await syncWorkspace(session);
+        setSelectedLessonId(created.id);
+        setActive("Відвідування");
+        return;
+      } catch {
+        return;
+      }
+    }
+    const nextId = crypto.randomUUID();
     setLessons((items) => [...items, {
       id: nextId,
       groupId: newLessonGroupId,
@@ -394,6 +437,28 @@ function App() {
     }]);
     setSelectedLessonId(nextId);
     setActive("Відвідування");
+  };
+
+  const saveAttendance = async () => {
+    if (!selectedLesson) return;
+    const lessonMarks = attendance[selectedLesson.id] ?? {};
+    if (apiEnabled && session) {
+      setAttendanceSaving(true);
+      try {
+        await apiPut(`/lesson-sessions/${selectedLesson.id}/attendance`, {
+          items: lessonStudents.map((student) => ({
+            student_id: student.id,
+            status: lessonMarks[student.id] ?? "present",
+          })),
+        }, session);
+        await syncWorkspace(session);
+      } catch {
+        return;
+      } finally {
+        setAttendanceSaving(false);
+      }
+      return;
+    }
   };
 
   const markPaymentPaid = async (id: EntityId) => {
@@ -782,7 +847,7 @@ function App() {
                 })}
                 {lessonStudents.length === 0 && <div className="emptyState">У цій групі поки немає активних учнів.</div>}
               </div>
-              <div className="attendanceFooter"><span>Позначено: <b>{Object.keys(attendance[selectedLesson.id] ?? {}).length}/{lessonStudents.length}</b></span><button className="primary">Зберегти відвідування</button></div>
+              <div className="attendanceFooter"><span>{attendanceLoading ? "Завантажуємо…" : <>Позначено: <b>{Object.keys(attendance[selectedLesson.id] ?? {}).length}/{lessonStudents.length}</b></>}</span><button className="primary" disabled={attendanceSaving || attendanceLoading} onClick={saveAttendance}>{attendanceSaving ? "Зберігаємо…" : "Зберегти відвідування"}</button></div>
             </>}
           </article>
         </section>}
@@ -1162,6 +1227,49 @@ function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) =>
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span></div>
     {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{lead.source}</span><span className="pill">{lead.status}</span></button>)}
   </div>;
+}
+
+function applyTeaching(
+  bundle: TeachingBundle,
+  setLessons: Dispatch<SetStateAction<LessonItem[]>>,
+  setGroups: Dispatch<SetStateAction<GroupItem[]>>,
+) {
+  setLessons(bundle.lessons.map((item) => ({
+    id: item.id,
+    groupId: item.group_id,
+    startsAt: item.starts_at,
+    duration: item.duration_minutes,
+    topic: item.topic ?? "Заняття",
+    status: item.status,
+  })));
+
+  const byGroup = new Map<EntityId, TeachingBundle["schedules"]>();
+  bundle.schedules.forEach((item) => {
+    const list = byGroup.get(item.group_id) ?? [];
+    list.push(item);
+    byGroup.set(item.group_id, list);
+  });
+
+  setGroups((items) => items.map((group) => {
+    const schedules = byGroup.get(group.id) ?? [];
+    return {
+      ...group,
+      schedule: schedules.length ? scheduleLabel(schedules) : "Розклад не задано",
+    };
+  }));
+}
+
+function scheduleLabel(items: TeachingBundle["schedules"]) {
+  const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+  const ordered = [...items].sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
+  const grouped = new Map<string, string[]>();
+  ordered.forEach((item) => {
+    const time = item.start_time.slice(0, 5);
+    const days = grouped.get(time) ?? [];
+    days.push(dayNames[item.weekday] ?? "?");
+    grouped.set(time, days);
+  });
+  return [...grouped.entries()].map(([time, days]) => `${days.join(" / ")} · ${time}`).join("; ");
 }
 
 function applyOperations(
