@@ -1,9 +1,9 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.core import CrmStatus, EnrollmentStatus, StudentStatus, TrialStatus
+from app.models.core import AttendanceStatus, CrmStatus, EnrollmentStatus, LessonStatus, StudentStatus, TrialStatus
 
 
 class ORMModel(BaseModel):
@@ -204,3 +204,67 @@ class StudentProfile(StudentDetail):
 class StudentTransfer(BaseModel):
     to_group_id: UUID
     started_at: date | None = None
+
+
+class GroupScheduleCreate(BaseModel):
+    group_id: UUID
+    weekday: int = Field(ge=0, le=6)
+    start_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    duration_minutes: int = Field(default=60, ge=15, le=360)
+
+
+class GroupScheduleRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    group_id: UUID
+    weekday: int
+    start_time: time
+    duration_minutes: int
+    is_active: bool
+
+
+class LessonSessionCreate(BaseModel):
+    group_id: UUID
+    location_id: UUID | None = None
+    starts_at: datetime
+    duration_minutes: int = Field(default=60, ge=15, le=360)
+    topic: str | None = Field(default=None, max_length=240)
+    notes: str | None = None
+
+
+class LessonSessionRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    group_id: UUID
+    location_id: UUID | None
+    starts_at: datetime
+    duration_minutes: int
+    topic: str | None
+    notes: str | None
+    status: LessonStatus
+
+
+class AttendanceMark(BaseModel):
+    student_id: UUID
+    status: AttendanceStatus
+    note: str | None = Field(default=None, max_length=300)
+
+
+class AttendanceBulkUpdate(BaseModel):
+    items: list[AttendanceMark] = Field(min_length=1)
+
+
+class AttendanceRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    session_id: UUID
+    student_id: UUID
+    status: AttendanceStatus
+    note: str | None
+
+
+class GroupRosterStudent(BaseModel):
+    student_id: UUID
+    first_name: str
+    last_name: str | None
+    age: int | None
