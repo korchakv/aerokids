@@ -350,18 +350,21 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
     elif not contact.full_name.strip() and data.contact_name.strip():
         contact.full_name = data.contact_name.strip()
 
-    existing_student = db.scalar(
+    candidate_students = list(db.scalars(
         select(Student)
         .join(StudentContact, StudentContact.student_id == Student.id)
         .where(
             Student.organization_id == organization.id,
             StudentContact.organization_id == organization.id,
             StudentContact.contact_id == contact.id,
-            func.lower(Student.first_name) == data.child_first_name.strip().lower(),
             Student.age_at_inquiry == data.child_age,
         )
         .order_by(Student.created_at.desc())
-        .limit(1)
+    ))
+    normalized_child_name = data.child_first_name.strip().casefold()
+    existing_student = next(
+        (student for student in candidate_students if student.first_name.strip().casefold() == normalized_child_name),
+        None,
     )
     if existing_student is not None:
         if data.comment and not existing_student.notes:
