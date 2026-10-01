@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, time
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Contact, CrmStatus, Enrollment, Group, Location, Organization, Student, StudentContact, StudentStatus, TrialLesson
+from app.models.core import Attendance, AttendanceStatus, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, LessonSession, LessonStatus, Location, Organization, Student, StudentContact, StudentStatus, TrialLesson
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 
 
@@ -372,3 +372,128 @@ def transfer_student(db: Session, org_id: UUID, student_id: UUID, to_group_id: U
     db.commit()
     db.refresh(enrollment)
     return enrollment
+
+
+def create_group_schedule(db: Session, org_id: UUID, data) -> GroupSchedule:
+    scoped_get(db, Group, org_id, data.group_id)
+    item = GroupSchedule(
+        organization_id=org_id,
+        group_id=data.group_id,
+        weekday=data.weekday,
+        start_time=time.fromisoformat(data.start_time),
+        duration_minutes=data.duration_minutes,
+    )
+    db.add(item)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This group already has the same schedule slot") from exc
+    db.refresh(item)
+    return item
+
+
+def list_group_schedules(db: Session, org_id: UUID, group_id: UUID | None = None) -> list[GroupSchedule]:
+    stmt = select(GroupSchedule).where(GroupSchedule.organization_id == org_id, GroupSchedule.is_active.is_(True))
+    if group_id is not None:
+        scoped_get(db, Group, org_id, group_id)
+        stmt = stmt.where(GroupSchedule.group_id == group_id)
+    return list(db.scalars(stmt.order_by(GroupSchedule.weekday, GroupSchedule.start_time)))
+
+
+def group_roster(db: Session, org_id: UUID, group_id: UUID) -> list[dict]:
+    scoped_get(db, Group, org_id, group_id)
+    rows = db.execute(
+        select(Student)
+        .join(Enrollment, Enrollment.student_id == Student.id)
+        .where(
+            Enrollment.organization_id == org_id,
+            Enrollment.group_id == group_id,
+            Enrollment.status == EnrollmentStatus.ACTIVE,
+            Student.organization_id == org_id,
+            Student.student_status == StudentStatus.ACTIVE,
+        )
+        .order_by(Student.first_name, Student.last_name)
+    ).scalars().all()
+    return [{
+        "student_id": student.id,
+        "first_name": student.first_name,
+        "last_name": student.last_name,
+        "age": student.age_at_inquiry,
+    } for student in rows]
+
+
+def create_lesson_session(db: Session, org_id: UUID, data) -> LessonSession:
+    group = scoped_get(db, Group, org_id, data.group_id)
+    location_id = data.location_id if data.location_id is not None else group.location_id
+    if location_id is not None:
+        scoped_get(db, Location, org_id, location_id)
+    item = LessonSession(
+        organization_id=org_id,
+        group_id=group.id,
+        location_id=location_id,
+        starts_at=data.starts_at,
+        duration_minutes=data.duration_minutes,
+        topic=data.topic,
+        notes=data.notes,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def list_lesson_sessions(db: Session, org_id: UUID, group_id: UUID | None = None) -> list[LessonSession]:
+    stmt = select(LessonSession).where(LessonSession.organization_id == org_id)
+    if group_id is not None:
+        scoped_get(db, Group, org_id, group_id)
+        stmt = stmt.where(LessonSession.group_id == group_id)
+    return list(db.scalars(stmt.order_by(LessonSession.starts_at)))
+
+
+def mark_attendance_bulk(db: Session, org_id: UUID, session_id: UUID, items) -> list[Attendance]:
+    session = scoped_get(db, LessonSession, org_id, session_id)
+    roster_ids = {item["student_id"] for item in group_roster(db, org_id, session.group_id)}
+    submitted_ids = [item.student_id for item in items]
+    if len(set(submitted_ids)) != len(submitted_ids):
+        raise HTTPException(status_code=422, detail="Duplicate students in attendance payload")
+    if not set(submitted_ids).issubset(roster_ids):
+        raise HTTPException(status_code=409, detail="Attendance can only be marked for active students in this group")
+
+    result: list[Attendance] = []
+    for mark in items:
+        row = db.scalar(select(Attendance).where(
+            Attendance.organization_id == org_id,
+            Attendance.session_id == session.id,
+            Attendance.student_id == mark.student_id,
+        ))
+        if row is None:
+            row = Attendance(
+                organization_id=org_id,
+                session_id=session.id,
+                student_id=mark.student_id,
+                status=mark.status,
+                note=mark.note,
+            )
+            db.add(row)
+        else:
+            row.status = mark.status
+            row.note = mark.note
+        result.append(row)
+
+    if roster_ids and roster_ids.issubset(set(submitted_ids)):
+        session.status = LessonStatus.COMPLETED
+
+    db.commit()
+    for row in result:
+        db.refresh(row)
+    return result
+
+
+def list_attendance(db: Session, org_id: UUID, session_id: UUID) -> list[Attendance]:
+    scoped_get(db, LessonSession, org_id, session_id)
+    return list(db.scalars(
+        select(Attendance)
+        .where(Attendance.organization_id == org_id, Attendance.session_id == session_id)
+        .order_by(Attendance.student_id)
+    ))
