@@ -449,3 +449,107 @@ def test_subscription_discount_cannot_exceed_price(client):
         },
     )
     assert response.status_code == 422
+
+
+def test_staff_locations_groups_and_membership_flow(client):
+    org = create_org(client, "AeroKiDS", "aerokids-staff")
+    headers = {"X-Organization-Id": org["id"]}
+
+    location = client.post(
+        "/locations",
+        headers=headers,
+        json={"name": "Центр", "address": "Івано-Франківськ"},
+    )
+    assert location.status_code == 201, location.text
+
+    group = client.post(
+        "/groups",
+        headers=headers,
+        json={"name": "FPV Start", "capacity": 8, "location_id": location.json()["id"]},
+    )
+    assert group.status_code == 201, group.text
+
+    staff = client.post(
+        "/staff",
+        headers=headers,
+        json={
+            "full_name": "Іван Викладач",
+            "email": "teacher@example.com",
+            "phone": "0671234567",
+            "role": "teacher",
+            "location_ids": [location.json()["id"]],
+        },
+    )
+    assert staff.status_code == 201, staff.text
+    staff_id = staff.json()["id"]
+
+    assigned = client.post(
+        f"/staff/{staff_id}/groups",
+        headers=headers,
+        json={"group_id": group.json()["id"], "is_primary": True},
+    )
+    assert assigned.status_code == 201, assigned.text
+    assert assigned.json()["is_primary"] is True
+
+    profile = client.get(f"/staff/{staff_id}/profile", headers=headers)
+    assert profile.status_code == 200, profile.text
+    assert profile.json()["assignments"]["location_ids"] == [location.json()["id"]]
+    assert profile.json()["assignments"]["group_ids"] == [group.json()["id"]]
+
+    membership = client.post(
+        "/organization-memberships",
+        headers=headers,
+        json={"email": "teacher@example.com", "full_name": "Іван Викладач", "role": "teacher"},
+    )
+    assert membership.status_code == 201, membership.text
+    assert membership.json()["role"] == "teacher"
+
+
+def test_staff_assignment_rejects_foreign_location_and_group(client):
+    org_a = create_org(client, "School A", "staff-scope-a")
+    org_b = create_org(client, "School B", "staff-scope-b")
+    a_headers = {"X-Organization-Id": org_a["id"]}
+    b_headers = {"X-Organization-Id": org_b["id"]}
+
+    foreign_location = client.post("/locations", headers=b_headers, json={"name": "Foreign"}).json()
+    staff = client.post(
+        "/staff",
+        headers=a_headers,
+        json={"full_name": "Manager A", "role": "manager"},
+    )
+    assert staff.status_code == 201
+
+    response = client.put(
+        f"/staff/{staff.json()['id']}/locations",
+        headers=a_headers,
+        json={"location_ids": [foreign_location["id"]]},
+    )
+    assert response.status_code == 404
+
+    foreign_group = client.post("/groups", headers=b_headers, json={"name": "Foreign Group", "capacity": 8}).json()
+    response_group = client.post(
+        f"/staff/{staff.json()['id']}/groups",
+        headers=a_headers,
+        json={"group_id": foreign_group["id"], "is_primary": True},
+    )
+    assert response_group.status_code == 404
+
+
+def test_same_user_can_have_memberships_in_multiple_organizations(client):
+    org_a = create_org(client, "School A", "membership-a")
+    org_b = create_org(client, "School B", "membership-b")
+
+    ma = client.post(
+        "/organization-memberships",
+        headers={"X-Organization-Id": org_a["id"]},
+        json={"email": "owner@example.com", "full_name": "Owner", "role": "owner"},
+    )
+    mb = client.post(
+        "/organization-memberships",
+        headers={"X-Organization-Id": org_b["id"]},
+        json={"email": "owner@example.com", "full_name": "Owner", "role": "admin"},
+    )
+    assert ma.status_code == 201, ma.text
+    assert mb.status_code == 201, mb.text
+    assert ma.json()["user_id"] == mb.json()["user_id"]
+    assert ma.json()["organization_id"] != mb.json()["organization_id"]
