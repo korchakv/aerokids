@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { apiEnabled, apiPatch, apiPost, changeOrganization, clearSession, loadSession, loadWorkspace, login, refreshMe, type Session, type WorkspaceBundle } from "./api";
+import { apiEnabled, apiPatch, apiPost, changeOrganization, clearSession, loadOperations, loadSession, loadWorkspace, login, refreshMe, type OperationsBundle, type Session, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
 
@@ -113,7 +113,7 @@ function App() {
   const [attendance, setAttendance] = useState<Record<number, Record<EntityId, AttendanceValue>>>({
     1: { 8: "present", 9: "late" },
   });
-  const [plans] = useState<PlanDemo[]>([
+  const [plans, setPlans] = useState<PlanDemo[]>([
     { id: "1", name: "8 занять / 30 днів", price: 1800, lessons: 8 },
     { id: "2", name: "Індивідуальний", price: 0, lessons: null },
   ]);
@@ -173,8 +173,12 @@ function App() {
     setWorkspaceLoading(true);
     setWorkspaceError("");
     try {
-      const bundle = await loadWorkspace(currentSession);
+      const [bundle, operations] = await Promise.all([
+        loadWorkspace(currentSession),
+        loadOperations(currentSession),
+      ]);
       applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
+      applyOperations(operations, setLocations, setStaff, setPlans, setPayments);
       setWorkspaceLoaded(true);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити дані CRM");
@@ -384,13 +388,37 @@ function App() {
     setActive("Відвідування");
   };
 
-  const markPaymentPaid = (id: EntityId) => {
+  const markPaymentPaid = async (id: EntityId) => {
+    if (apiEnabled && session) {
+      try {
+        await apiPatch(`/payments/${id}/paid`, { method: "card" }, session);
+        await syncWorkspace(session);
+        return;
+      } catch {
+        return;
+      }
+    }
     setPayments((items) => items.map((item) => item.id === id ? { ...item, status: "paid", method: "Картка" } : item));
   };
 
-  const createPayment = () => {
+  const createPayment = async () => {
     const plan = plans.find((item) => item.id === paymentPlanId);
     if (!plan) return;
+    if (apiEnabled && session) {
+      try {
+        await apiPost("/payments", {
+          student_id: paymentStudentId,
+          amount_minor: Math.round(plan.price * 100),
+          due_date: paymentDueDate || null,
+          note: plan.name,
+        }, session);
+        await syncWorkspace(session);
+        setShowPaymentForm(false);
+        return;
+      } catch {
+        return;
+      }
+    }
     const nextId = crypto.randomUUID();
     setPayments((items) => [...items, {
       id: nextId,
@@ -425,8 +453,27 @@ function App() {
 
   const selectedStaff = staff.find((item) => item.id === selectedStaffId) ?? null;
 
-  const createStaffMember = () => {
+  const createStaffMember = async () => {
     if (!staffName.trim()) return;
+    if (apiEnabled && session) {
+      try {
+        await apiPost("/staff", {
+          full_name: staffName.trim(),
+          role: staffRoleValue(staffRole),
+          email: staffEmail.trim() || null,
+          phone: staffPhone.trim() || null,
+          location_ids: locations[0] ? [locations[0].id] : [],
+        }, session);
+        await syncWorkspace(session);
+        setStaffName("");
+        setStaffEmail("");
+        setStaffPhone("");
+        setShowStaffForm(false);
+        return;
+      } catch {
+        return;
+      }
+    }
     const nextId = crypto.randomUUID();
     setStaff((items) => [...items, {
       id: nextId,
@@ -444,8 +491,23 @@ function App() {
     setShowStaffForm(false);
   };
 
-  const createLocationDemo = () => {
+  const createLocationDemo = async () => {
     if (!locationName.trim()) return;
+    if (apiEnabled && session) {
+      try {
+        await apiPost("/locations", {
+          name: locationName.trim(),
+          address: locationAddress.trim() || null,
+        }, session);
+        await syncWorkspace(session);
+        setLocationName("");
+        setLocationAddress("");
+        setShowLocationForm(false);
+        return;
+      } catch {
+        return;
+      }
+    }
     const nextId = crypto.randomUUID();
     setLocations((items) => [...items, {
       id: nextId,
@@ -973,6 +1035,84 @@ function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) =>
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span></div>
     {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{lead.source}</span><span className="pill">{lead.status}</span></button>)}
   </div>;
+}
+
+function applyOperations(
+  bundle: OperationsBundle,
+  setLocations: Dispatch<SetStateAction<LocationDemo[]>>,
+  setStaff: Dispatch<SetStateAction<StaffDemo[]>>,
+  setPlans: Dispatch<SetStateAction<PlanDemo[]>>,
+  setPayments: Dispatch<SetStateAction<PaymentDemo[]>>,
+) {
+  setLocations(bundle.locations.map((item) => ({
+    id: item.id,
+    name: item.name,
+    address: item.address ?? "",
+    isActive: item.is_active,
+  })));
+
+  setStaff(bundle.staff.map((item) => ({
+    id: item.id,
+    fullName: item.full_name,
+    role: staffRoleLabel(item.role),
+    email: item.email ?? "",
+    phone: item.phone ?? "",
+    locationIds: item.assignments.location_ids,
+    groupIds: item.assignments.group_ids,
+    isActive: item.is_active,
+  })));
+
+  setPlans(bundle.plans.map((item) => ({
+    id: item.id,
+    name: item.name,
+    price: item.price_minor / 100,
+    lessons: item.lessons_included,
+  })));
+
+  const today = new Date().toISOString().slice(0, 10);
+  setPayments(bundle.payments
+    .filter((item) => item.status === "pending" || item.status === "paid")
+    .map((item) => ({
+      id: item.id,
+      studentId: item.student_id,
+      planId: item.subscription_id ?? "",
+      amount: item.amount_minor / 100,
+      dueDate: item.due_date ?? "",
+      status: item.status === "paid" ? "paid" : item.due_date && item.due_date < today ? "overdue" : "pending",
+      method: paymentMethodLabel(item.method),
+    })));
+}
+
+function staffRoleLabel(role: string): StaffRoleDemo {
+  const labels: Record<string, StaffRoleDemo> = {
+    owner: "Власник",
+    admin: "Адміністратор",
+    manager: "Менеджер",
+    teacher: "Викладач",
+    accountant: "Бухгалтер",
+  };
+  return labels[role] ?? "Викладач";
+}
+
+function staffRoleValue(role: StaffRoleDemo) {
+  const values: Record<StaffRoleDemo, string> = {
+    "Власник": "owner",
+    "Адміністратор": "admin",
+    "Менеджер": "manager",
+    "Викладач": "teacher",
+    "Бухгалтер": "accountant",
+  };
+  return values[role];
+}
+
+function paymentMethodLabel(method: string | null | undefined): PaymentDemo["method"] {
+  const labels: Record<string, PaymentDemo["method"]> = {
+    cash: "Готівка",
+    card: "Картка",
+    bank: "Переказ",
+    other: "Переказ",
+  };
+  return method ? labels[method] : undefined;
 }
 
 function applyWorkspace(
