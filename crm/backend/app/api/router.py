@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, get_org_id, require_org_roles
+from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, get_org_id, require_org_access_roles, require_org_roles
 from app.models.core import Organization, PaymentStatus, StaffRole, User
 from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupFormationCreate, GroupFormationResult, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LeadListItem, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentSummary, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
 from app.auth import service as auth_service
@@ -92,10 +92,10 @@ def current_organization(org_id: UUID = Depends(get_org_id), db: Session = Depen
 @router.patch("/organization", response_model=OrganizationRead)
 def update_current_organization(
     data: OrganizationUpdate,
-    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)),
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    return crm.update_organization(db, org_id, data)
+    return crm.update_organization(db, access.organization_id, data, access.user_id)
 
 
 @router.post("/locations", response_model=LocationRead, status_code=201)
@@ -135,8 +135,8 @@ def add_student_contact(student_id: UUID, data: StudentContactCreate, org_id: UU
 
 
 @router.post("/trial-lessons", response_model=TrialLessonRead, status_code=201)
-def create_trial(data: TrialLessonCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.create_trial(db, org_id, data)
+def create_trial(data: TrialLessonCreate, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
+    return crm.create_trial(db, access.organization_id, data, access.user_id)
 
 
 @router.get("/trial-lessons", response_model=list[TrialLessonRead])
@@ -148,10 +148,10 @@ def trials(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.A
 def update_trial(
     trial_id: UUID,
     data: TrialLessonUpdate,
-    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    return crm.update_trial(db, org_id, trial_id, data.starts_at, data.location_id)
+    return crm.update_trial(db, access.organization_id, trial_id, data.starts_at, data.location_id, access.user_id)
 
 
 @router.post("/groups", response_model=GroupRead, status_code=201)
@@ -181,11 +181,11 @@ def public_intake(organization_slug: str, data: IntakeCreate, db: Session = Depe
 @router.post("/intake", response_model=IntakeResult, status_code=201)
 def internal_intake(
     data: IntakeCreate,
-    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    organization = crm.require_organization(db, org_id)
-    student, contact = crm.create_intake(db, organization, data)
+    organization = crm.require_organization(db, access.organization_id)
+    student, contact = crm.create_intake(db, organization, data, access.user_id)
     return IntakeResult(student_id=student.id, contact_id=contact.id, crm_status=student.crm_status)
 
 
@@ -200,13 +200,13 @@ def get_student(student_id: UUID, org_id: UUID = Depends(require_org_roles(Staff
 
 
 @router.patch("/students/{student_id}/crm-status", response_model=StudentRead)
-def update_student_status(student_id: UUID, data: StudentStatusUpdate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.update_student_crm_status(db, org_id, student_id, data.crm_status)
+def update_student_status(student_id: UUID, data: StudentStatusUpdate, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
+    return crm.update_student_crm_status(db, access.organization_id, student_id, data.crm_status, access.user_id)
 
 
 @router.patch("/trial-lessons/{trial_id}/complete", response_model=TrialLessonRead)
-def complete_trial(trial_id: UUID, data: TrialLessonComplete, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.complete_trial(db, org_id, trial_id, data.status, data.recommended_level, data.teacher_notes)
+def complete_trial(trial_id: UUID, data: TrialLessonComplete, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
+    return crm.complete_trial(db, access.organization_id, trial_id, data.status, data.recommended_level, data.teacher_notes, access.user_id)
 
 
 @router.get("/waiting-list", response_model=list[WaitingCandidate])
@@ -215,8 +215,8 @@ def waiting_list(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, Staff
 
 
 @router.post("/groups/form", response_model=GroupFormationResult, status_code=201)
-def form_group(data: GroupFormationCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    group, student_ids = crm.form_group(db, org_id, data)
+def form_group(data: GroupFormationCreate, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
+    group, student_ids = crm.form_group(db, access.organization_id, data, access.user_id)
     return GroupFormationResult(
         group=GroupRead.model_validate(group),
         enrolled_student_ids=student_ids,
@@ -247,20 +247,20 @@ def get_student_preferences(
 def update_student_preferences(
     student_id: UUID,
     data: StudentPreferencesUpdate,
-    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    return crm.replace_student_preferences(db, org_id, student_id, data)
+    return crm.replace_student_preferences(db, access.organization_id, student_id, data, access.user_id)
 
 
 @router.patch("/students/{student_id}/status", response_model=StudentRead)
-def update_student_lifecycle(student_id: UUID, data: StudentLifecycleUpdate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.update_student_lifecycle(db, org_id, student_id, data.student_status)
+def update_student_lifecycle(student_id: UUID, data: StudentLifecycleUpdate, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
+    return crm.update_student_lifecycle(db, access.organization_id, student_id, data.student_status, access.user_id)
 
 
 @router.post("/students/{student_id}/transfer", response_model=EnrollmentRead)
-def transfer_student(student_id: UUID, data: StudentTransfer, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.transfer_student(db, org_id, student_id, data.to_group_id, data.started_at)
+def transfer_student(student_id: UUID, data: StudentTransfer, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
+    return crm.transfer_student(db, access.organization_id, student_id, data.to_group_id, data.started_at, access.user_id)
 
 
 @router.post("/group-schedules", response_model=GroupScheduleRead, status_code=201)
@@ -319,8 +319,8 @@ def student_subscriptions(student_id: UUID | None = None, org_id: UUID = Depends
 
 
 @router.post("/payments", response_model=PaymentRead, status_code=201)
-def create_payment(data: PaymentCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
-    return crm.create_payment(db, org_id, data)
+def create_payment(data: PaymentCreate, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
+    return crm.create_payment(db, access.organization_id, data, access.user_id)
 
 
 @router.get("/payments", response_model=list[PaymentRead])
@@ -329,8 +329,8 @@ def payments(student_id: UUID | None = None, status: PaymentStatus | None = None
 
 
 @router.patch("/payments/{payment_id}/paid", response_model=PaymentRead)
-def mark_payment_paid(payment_id: UUID, data: PaymentMarkPaid, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
-    return crm.mark_payment_paid(db, org_id, payment_id, data.method, data.paid_at)
+def mark_payment_paid(payment_id: UUID, data: PaymentMarkPaid, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
+    return crm.mark_payment_paid(db, access.organization_id, payment_id, data.method, data.paid_at, access.user_id)
 
 
 @router.get("/payments-summary", response_model=PaymentSummary)
