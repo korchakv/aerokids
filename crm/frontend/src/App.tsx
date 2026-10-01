@@ -79,7 +79,7 @@ type StaffDemo = {
   isActive: boolean;
 };
 
-const nav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти"];
+const allNav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти"];
 
 const initialLeads: Lead[] = [
   { id: "1", child: "Максим", age: 9, parent: "Оксана", phone: "+380 67 123 45 67", status: "Очікує групу", source: "Сайт", comment: "Цікавиться FPV та симулятором.", trialResult: "completed", recommendedLevel: "Початковий" },
@@ -481,12 +481,13 @@ function App() {
   }
 
   const currentMembership = session?.user.memberships.find((item) => item.organization_id === session.organizationId);
+  const navigation = visibleNavigation(currentMembership?.role);
 
   return (
     <div className="shell">
       <aside>
         <div className="brand"><span className="mark">✦</span><div><b>School CRM</b><small>{currentMembership?.organization_name ?? "AeroKiDS · demo tenant"}</small></div></div>
-        <nav>{nav.map((item) => <button onClick={() => setActive(item)} className={active === item ? "active" : ""} key={item}>{item}</button>)}</nav>
+        <nav>{navigation.map((item) => <button onClick={() => setActive(item)} className={active === item ? "active" : ""} key={item}>{item}</button>)}</nav>
         <div className="asideFooter">MVP 1 · crm-v1</div>
       </aside>
 
@@ -495,7 +496,7 @@ function App() {
           <div><p className="eyebrow">Івано-Франківськ · основна локація</p><h1>{active}</h1></div>
           <div className="headerActions">
             {session && <div className="orgSwitcher">
-              <select value={session.organizationId} onChange={(e) => setSession(changeOrganization(session, e.target.value))}>
+              <select value={session.organizationId} onChange={(e) => { setSession(changeOrganization(session, e.target.value)); setActive("Дашборд"); }}>
                 {session.user.memberships.map((membership) => <option value={membership.organization_id} key={membership.organization_id}>{membership.organization_name}</option>)}
               </select>
               <span>{roleLabel(currentMembership?.role)}</span>
@@ -1091,6 +1092,18 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
       <small className="loginNote">Доступ визначається роллю в конкретній організації.</small>
     </div>
   </div>;
+}
+
+function visibleNavigation(role?: string) {
+  if (!apiEnabled || !role) return allNav;
+  const byRole: Record<string, string[]> = {
+    owner: allNav,
+    admin: allNav,
+    manager: ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Локації", "Звіти"],
+    teacher: ["Дашборд", "Учні", "Групи", "Розклад", "Відвідування"],
+    accountant: ["Дашборд", "Оплати", "Звіти"],
+  };
+  return byRole[role] ?? ["Дашборд"];
 }
 
 function roleLabel(role?: string) {
