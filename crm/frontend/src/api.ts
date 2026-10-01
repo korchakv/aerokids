@@ -2,6 +2,9 @@ export type Membership = {
   organization_id: string;
   organization_name: string;
   organization_slug: string;
+  organization_timezone: string;
+  organization_currency: string;
+  organization_locale: string;
   role: "owner" | "admin" | "manager" | "teacher" | "accountant";
 };
 
