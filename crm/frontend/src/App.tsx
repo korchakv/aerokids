@@ -5,6 +5,12 @@ type LeadStatus = "Нова" | "Зв'язались" | "Пробне запла�
 
 type EntityId = string;
 
+type AvailabilitySlot = {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+};
+
 type Lead = {
   id: EntityId;
   child: string;
@@ -14,6 +20,9 @@ type Lead = {
   source: string;
   status: LeadStatus;
   comment?: string;
+  preferredLocationId?: string;
+  preferredLocationName?: string;
+  availability?: AvailabilitySlot[];
   trialId?: string;
   trialAt?: string;
   trialLocationId?: string;
@@ -178,6 +187,12 @@ function App() {
   const [studentStates, setStudentStates] = useState<Record<EntityId, "Активний" | "Пауза" | "Архів">>({});
   const [transferGroupId, setTransferGroupId] = useState<EntityId | null>(null);
   const [trialMode, setTrialMode] = useState<"schedule" | "complete" | null>(null);
+  const [preferenceMode, setPreferenceMode] = useState(false);
+  const [preferenceLocationId, setPreferenceLocationId] = useState<EntityId | "">("");
+  const [availabilityDays, setAvailabilityDays] = useState<number[]>([]);
+  const [availabilityStart, setAvailabilityStart] = useState("16:00");
+  const [availabilityEnd, setAvailabilityEnd] = useState("20:00");
+  const [preferenceSaving, setPreferenceSaving] = useState(false);
   const [trialAt, setTrialAt] = useState("2026-10-05T17:00");
   const [trialLocation, setTrialLocation] = useState("Основна локація");
   const [trialLocationId, setTrialLocationId] = useState<EntityId | "">("");
@@ -443,16 +458,47 @@ function App() {
   const openLead = (id: EntityId) => {
     setSelectedId(id);
     setTrialMode(null);
+    setPreferenceMode(false);
     const lead = leads.find((item) => item.id === id);
     if (lead?.trialAt) setTrialAt(toLocalDateTimeInput(lead.trialAt));
     if (lead?.trialLocation) setTrialLocation(lead.trialLocation);
     if (lead?.trialLocationId) setTrialLocationId(lead.trialLocationId);
     if (lead?.recommendedLevel) setRecommendedLevel(lead.recommendedLevel);
     setTeacherNotes(lead?.teacherNotes ?? "");
+    setPreferenceLocationId(lead?.preferredLocationId ?? "");
+    setAvailabilityDays(Array.from(new Set((lead?.availability ?? []).map((slot) => slot.weekday))));
+    setAvailabilityStart(lead?.availability?.[0]?.start_time ?? "16:00");
+    setAvailabilityEnd(lead?.availability?.[0]?.end_time ?? "20:00");
   };
 
   const toggleCandidate = (id: EntityId) => {
     setSelectedCandidates((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
+  };
+
+  const saveStudentPreferences = async () => {
+    if (!selected || !session) return;
+    setPreferenceSaving(true);
+    setWorkspaceError("");
+    try {
+      await apiPut(`/students/${selected.id}/preferences`, {
+        preferred_location_id: preferenceLocationId || null,
+        availability: availabilityDays.map((weekday) => ({
+          weekday,
+          start_time: availabilityStart,
+          end_time: availabilityEnd,
+        })),
+      }, session);
+      await syncWorkspace(session);
+      setPreferenceMode(false);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти бажаний графік");
+    } finally {
+      setPreferenceSaving(false);
+    }
+  };
+
+  const toggleAvailabilityDay = (weekday: number) => {
+    setAvailabilityDays((days) => days.includes(weekday) ? days.filter((day) => day !== weekday) : [...days, weekday].sort());
   };
 
   const createGroupFromCandidates = async () => {
@@ -1505,6 +1551,29 @@ function App() {
           <div className="detailGrid"><span>Джерело<b>{selected.source}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selected.comment && <div className="noteBox"><span>Коментар</span><p>{selected.comment}</p></div>}
           {selected.trialAt && <div className="trialSummary"><span>Пробне заняття</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
+          <div className="preferenceSummary">
+            <div><span>Бажана локація</span><b>{selected.preferredLocationName ?? "Не вказано"}</b></div>
+            <div><span>Бажаний час</span><b>{availabilityLabel(selected.availability ?? [])}</b></div>
+            <button className="search" onClick={() => setPreferenceMode((value) => !value)}>{preferenceMode ? "Скасувати" : "Змінити"}</button>
+          </div>
+
+          {preferenceMode && <div className="workflowBox">
+            <div className="workflowHead"><h3>Бажаний графік</h3><button onClick={() => setPreferenceMode(false)}>×</button></div>
+            <label>Локація<select value={preferenceLocationId} onChange={(e) => setPreferenceLocationId(e.target.value)}>
+              <option value="">Не має значення</option>
+              {locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+            </select></label>
+            <div className="availabilityDays">
+              {["Пн","Вт","Ср","Чт","Пт","Сб","Нд"].map((day, index) => <button type="button" key={day} className={availabilityDays.includes(index) ? "active" : ""} onClick={() => toggleAvailabilityDay(index)}>{day}</button>)}
+            </div>
+            <div className="formTwo">
+              <label>Від<input type="time" value={availabilityStart} onChange={(e) => setAvailabilityStart(e.target.value)} /></label>
+              <label>До<input type="time" value={availabilityEnd} onChange={(e) => setAvailabilityEnd(e.target.value)} /></label>
+            </div>
+            <button className="primary full" disabled={preferenceSaving || availabilityEnd <= availabilityStart} onClick={saveStudentPreferences}>{preferenceSaving ? "Зберігаємо…" : "Зберегти бажаний графік"}</button>
+          </div>}
+
+
 
           <div className="drawerActions">
             <button className="primary" onClick={() => setTrialMode("schedule")}>{selected.trialAt ? "Змінити пробне" : "Записати на пробне"}</button>
@@ -1685,6 +1754,13 @@ function applyWorkspace(
     phone: item.contact_phone ?? "",
     source: item.source ?? "CRM",
     comment: item.comment ?? undefined,
+    preferredLocationId: item.preferred_location_id ?? undefined,
+    preferredLocationName: item.preferred_location_name ?? undefined,
+    availability: item.availability.map((slot) => ({
+      weekday: slot.weekday,
+      start_time: slot.start_time.slice(0, 5),
+      end_time: slot.end_time.slice(0, 5),
+    })),
     status: crmStatusLabel(item.crm_status),
     trialId: item.latest_trial_id ?? undefined,
     trialAt: item.latest_trial_at ?? undefined,
@@ -1955,6 +2031,19 @@ function toLocalDateTimeInput(value: string) {
 
 function formatMoney(value: number, locale = "uk-UA", currency = "UAH") {
   return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+}
+
+function availabilityLabel(slots: AvailabilitySlot[]) {
+  if (!slots.length) return "Не вказано";
+  const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+  const groups = new Map<string, string[]>();
+  slots.forEach((slot) => {
+    const key = `${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`;
+    const days = groups.get(key) ?? [];
+    days.push(dayNames[slot.weekday] ?? "?");
+    groups.set(key, days);
+  });
+  return [...groups.entries()].map(([time, days]) => `${days.join("/")} · ${time}`).join("; ");
 }
 
 function parseScheduleText(value: string) {
