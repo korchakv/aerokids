@@ -467,6 +467,7 @@ function App() {
           min_age: selectedLeadRows.length ? Math.min(...selectedLeadRows.map((x) => x.age)) : null,
           max_age: selectedLeadRows.length ? Math.max(...selectedLeadRows.map((x) => x.age)) : null,
           student_ids: selectedCandidates,
+          schedule_slots: parseScheduleText(groupSchedule),
         }, session);
         await syncWorkspace(session);
         setSelectedCandidates([]);
@@ -1954,6 +1955,20 @@ function toLocalDateTimeInput(value: string) {
 
 function formatMoney(value: number, locale = "uk-UA", currency = "UAH") {
   return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+}
+
+function parseScheduleText(value: string) {
+  const weekdayMap: Record<string, number> = {
+    "Пн": 0, "Вт": 1, "Ср": 2, "Чт": 3, "Пт": 4, "Сб": 5, "Нд": 6,
+  };
+  return value.split(";").flatMap((part) => {
+    const [daysPart, timePart] = part.split("·").map((item) => item.trim());
+    if (!daysPart || !/^([01]\d|2[0-3]):[0-5]\d$/.test(timePart ?? "")) return [];
+    return daysPart.split("/").map((day) => day.trim()).flatMap((day) => {
+      const weekday = weekdayMap[day];
+      return weekday === undefined ? [] : [{ weekday, start_time: timePart, duration_minutes: 60 }];
+    });
+  });
 }
 
 function scheduleSlots(group: GroupItem) {
