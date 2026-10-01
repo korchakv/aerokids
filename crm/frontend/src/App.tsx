@@ -926,7 +926,7 @@ function App() {
   }
 
   const currentMembership = session?.user.memberships.find((item) => item.organization_id === session.organizationId);
-  const money = (value: number) => money(
+  const money = (value: number): string => formatMoney(
     value,
     currentMembership?.organization_locale ?? "uk-UA",
     currentMembership?.organization_currency ?? "UAH",
