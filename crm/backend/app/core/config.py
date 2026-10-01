@@ -1,3 +1,4 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,15 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_production_settings(self):
+        if self.environment.lower() == "production":
+            if self.jwt_secret == "change-me-in-production" or len(self.jwt_secret) < 32:
+                raise ValueError("Production JWT_SECRET must be a strong value of at least 32 characters")
+            if not self.database_url.startswith("postgresql"):
+                raise ValueError("Production DATABASE_URL must use PostgreSQL")
+        return self
 
 
 settings = Settings()
