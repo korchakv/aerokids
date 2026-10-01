@@ -169,6 +169,9 @@ function App() {
   const [newLessonGroupId, setNewLessonGroupId] = useState<EntityId>("1");
   const [newLessonAt, setNewLessonAt] = useState("2026-10-07T17:00");
   const [newLessonTopic, setNewLessonTopic] = useState("FPV / електроніка");
+  const [scheduleGroupId, setScheduleGroupId] = useState<EntityId>("1");
+  const [scheduleWeekday, setScheduleWeekday] = useState(0);
+  const [scheduleTime, setScheduleTime] = useState("17:00");
   useEffect(() => {
     if (!apiEnabled || !session) return;
     refreshMe(session).then(setSession).catch(() => {
@@ -407,6 +410,32 @@ function App() {
     const next: Record<EntityId, AttendanceValue> = {};
     lessonStudents.forEach((student) => { next[student.id] = "present"; });
     setAttendance((all) => ({ ...all, [selectedLesson.id]: next }));
+  };
+
+  const createGroupSchedule = async () => {
+    if (!scheduleGroupId) return;
+    if (apiEnabled && session) {
+      try {
+        await apiPost("/group-schedules", {
+          group_id: scheduleGroupId,
+          weekday: scheduleWeekday,
+          start_time: scheduleTime,
+          duration_minutes: 60,
+        }, session);
+        await syncWorkspace(session);
+        return;
+      } catch {
+        return;
+      }
+    }
+
+    const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+    setGroups((items) => items.map((group) => group.id === scheduleGroupId ? {
+      ...group,
+      schedule: group.schedule === "Розклад не задано"
+        ? `${dayNames[scheduleWeekday]} · ${scheduleTime}`
+        : `${group.schedule}; ${dayNames[scheduleWeekday]} · ${scheduleTime}`,
+    } : group));
   };
 
   const createLesson = async () => {
@@ -697,6 +726,7 @@ function App() {
 
   const currentMembership = session?.user.memberships.find((item) => item.organization_id === session.organizationId);
   const navigation = visibleNavigation(currentMembership?.role);
+  const canManageRecurringSchedule = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
 
   return (
     <div className="shell">
@@ -804,12 +834,23 @@ function App() {
               </div>)}
             </div>
           </article>
-          <aside className="panel lessonCreate">
-            <p className="eyebrow">Нове заняття</p><h2>Додати заняття</h2>
-            <label>Група<select value={newLessonGroupId} onChange={(e) => setNewLessonGroupId(e.target.value)}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
-            <label>Дата і час<input type="datetime-local" value={newLessonAt} onChange={(e) => setNewLessonAt(e.target.value)} /></label>
-            <label>Тема<input value={newLessonTopic} onChange={(e) => setNewLessonTopic(e.target.value)} /></label>
-            <button className="primary full" onClick={createLesson}>Створити заняття</button>
+          <aside className="scheduleSide">
+            {canManageRecurringSchedule && <article className="panel lessonCreate">
+              <p className="eyebrow">Регулярний розклад</p><h2>Додати слот</h2>
+              <label>Група<select value={scheduleGroupId} onChange={(e) => setScheduleGroupId(e.target.value)}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
+              <div className="formTwo">
+                <label>День<select value={scheduleWeekday} onChange={(e) => setScheduleWeekday(Number(e.target.value))}>{["Пн","Вт","Ср","Чт","Пт","Сб","Нд"].map((day,index) => <option value={index} key={day}>{day}</option>)}</select></label>
+                <label>Час<input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} /></label>
+              </div>
+              <button className="search full" onClick={createGroupSchedule}>Додати в розклад</button>
+            </article>}
+            <article className="panel lessonCreate">
+              <p className="eyebrow">Нове заняття</p><h2>Додати заняття</h2>
+              <label>Група<select value={newLessonGroupId} onChange={(e) => setNewLessonGroupId(e.target.value)}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
+              <label>Дата і час<input type="datetime-local" value={newLessonAt} onChange={(e) => setNewLessonAt(e.target.value)} /></label>
+              <label>Тема<input value={newLessonTopic} onChange={(e) => setNewLessonTopic(e.target.value)} /></label>
+              <button className="primary full" onClick={createLesson}>Створити заняття</button>
+            </article>
           </aside>
         </section>}
 
