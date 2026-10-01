@@ -344,3 +344,108 @@ def test_attendance_rejects_student_from_another_group(client):
         json={"items": [{"student_id": student_b["id"], "status": "present"}]},
     )
     assert response.status_code == 409
+
+
+def test_subscription_and_payment_flow(client):
+    org = create_org(client, "AeroKiDS", "aerokids-payments")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Марта", "age_at_inquiry": 9}).json()
+
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "8 занять", "price_minor": 180000, "period_days": 30, "lessons_included": 8},
+    )
+    assert plan.status_code == 201, plan.text
+
+    subscription = client.post(
+        "/student-subscriptions",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "plan_id": plan.json()["id"],
+            "starts_on": "2026-10-01",
+            "discount_minor": 10000,
+            "discount_label": "Знижка для сім'ї",
+        },
+    )
+    assert subscription.status_code == 201, subscription.text
+    assert subscription.json()["price_minor"] == 180000
+    assert subscription.json()["discount_minor"] == 10000
+
+    payment = client.post(
+        "/payments",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "subscription_id": subscription.json()["id"],
+            "amount_minor": 170000,
+            "due_date": "2000-01-01",
+            "note": "Жовтень",
+        },
+    )
+    assert payment.status_code == 201, payment.text
+    assert payment.json()["status"] == "pending"
+
+    summary = client.get("/payments-summary", headers=headers)
+    assert summary.status_code == 200, summary.text
+    assert summary.json()["pending_minor"] == 170000
+    assert summary.json()["overdue_minor"] == 170000
+
+    paid = client.patch(
+        f"/payments/{payment.json()['id']}/paid",
+        headers=headers,
+        json={"method": "card"},
+    )
+    assert paid.status_code == 200, paid.text
+    assert paid.json()["status"] == "paid"
+    assert paid.json()["method"] == "card"
+    assert paid.json()["paid_at"] is not None
+
+    summary_after = client.get("/payments-summary", headers=headers)
+    assert summary_after.json()["paid_minor"] == 170000
+    assert summary_after.json()["pending_minor"] == 0
+
+
+def test_payment_subscription_tenant_isolation(client):
+    org_a = create_org(client, "School A", "payments-a")
+    org_b = create_org(client, "School B", "payments-b")
+    a_headers = {"X-Organization-Id": org_a["id"]}
+    b_headers = {"X-Organization-Id": org_b["id"]}
+
+    student_a = client.post("/students", headers=a_headers, json={"first_name": "Анна"}).json()
+    plan_b = client.post(
+        "/subscription-plans",
+        headers=b_headers,
+        json={"name": "Foreign plan", "price_minor": 100000, "period_days": 30},
+    ).json()
+
+    response = client.post(
+        "/student-subscriptions",
+        headers=a_headers,
+        json={"student_id": student_a["id"], "plan_id": plan_b["id"], "starts_on": "2026-10-01"},
+    )
+    assert response.status_code == 404
+
+
+def test_subscription_discount_cannot_exceed_price(client):
+    org = create_org(client, "AeroKiDS", "discount-limit")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Іван"}).json()
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Base", "price_minor": 100000, "period_days": 30},
+    ).json()
+
+    response = client.post(
+        "/student-subscriptions",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "plan_id": plan["id"],
+            "starts_on": "2026-10-01",
+            "discount_minor": 120000,
+        },
+    )
+    assert response.status_code == 422
