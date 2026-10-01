@@ -1197,3 +1197,50 @@ def test_auth_membership_returns_organization_locale_settings(client):
     assert membership["organization_timezone"] == "Europe/Prague"
     assert membership["organization_currency"] == "CZK"
     assert membership["organization_locale"] == "cs-CZ"
+
+
+def test_intake_accepts_explicit_international_phone_and_deduplicates_repeat(client):
+    org = create_org(client, "International School", "international-intake")
+
+    first = client.post(
+        "/public/intake/international-intake",
+        json={
+            "child_first_name": "Ola",
+            "child_age": 9,
+            "contact_name": "Anna",
+            "phone": "+48 501 234 567",
+            "source": "website",
+            "comment": "First request",
+        },
+    )
+    assert first.status_code == 201, first.text
+
+    second = client.post(
+        "/public/intake/international-intake",
+        json={
+            "child_first_name": "ola",
+            "child_age": 9,
+            "contact_name": "Anna",
+            "phone": "+48 (501) 234-567",
+            "source": "website",
+            "comment": "Repeated request",
+        },
+    )
+    assert second.status_code == 201, second.text
+    assert second.json()["student_id"] == first.json()["student_id"]
+    assert second.json()["contact_id"] == first.json()["contact_id"]
+
+    leads = client.get("/workspace/leads", headers={"X-Organization-Id": org["id"]})
+    assert leads.status_code == 200, leads.text
+    assert len(leads.json()) == 1
+    assert leads.json()[0]["contact_phone"] == "+48501234567"
+
+    events = client.get(
+        "/audit-events",
+        headers={"X-Organization-Id": org["id"]},
+        params={"entity_type": "student", "entity_id": first.json()["student_id"]},
+    )
+    assert events.status_code == 200, events.text
+    event_types = [item["event_type"] for item in events.json()]
+    assert "lead.created" in event_types
+    assert "lead.duplicate_intake" in event_types
