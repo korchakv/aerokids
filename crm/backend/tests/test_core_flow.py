@@ -599,3 +599,111 @@ def test_overview_report_is_tenant_scoped(client):
     assert report_b.status_code == 200
     assert report_b.json()["payments"]["pending_minor"] == 99900
     assert report_b.json()["active_students"] == 0
+
+
+def test_auth_bootstrap_login_and_me(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKiDS",
+            "organization_slug": "aerokids-auth",
+            "full_name": "Owner User",
+            "email": "owner@aerokids.test",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    token = bootstrap.json()["access_token"]
+    org_id = bootstrap.json()["organization_id"]
+
+    login = client.post(
+        "/auth/login",
+        json={"email": "OWNER@AEROKIDS.TEST", "password": "very-secure-password"},
+    )
+    assert login.status_code == 200, login.text
+    assert login.json()["token_type"] == "bearer"
+    assert login.json()["user"]["memberships"][0]["organization_id"] == org_id
+    assert login.json()["user"]["memberships"][0]["role"] == "owner"
+
+    me = client.get(
+        "/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert me.status_code == 200, me.text
+    assert me.json()["email"] == "owner@aerokids.test"
+
+
+def test_authenticated_user_cannot_access_another_organization(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "School A",
+            "organization_slug": "auth-school-a",
+            "full_name": "Owner A",
+            "email": "owner-a@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    token = bootstrap.json()["access_token"]
+
+    org_b = create_org(client, "School B", "auth-school-b")
+    response = client.get(
+        "/students",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Organization-Id": org_b["id"],
+        },
+    )
+    assert response.status_code == 403
+
+
+def test_owner_token_can_use_role_protected_staff_endpoint(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKiDS",
+            "organization_slug": "auth-role-owner",
+            "full_name": "Owner",
+            "email": "owner-role@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    response = client.post(
+        "/staff",
+        headers=headers,
+        json={"full_name": "New Teacher", "role": "teacher"},
+    )
+    assert response.status_code == 201, response.text
+
+
+def test_bootstrap_is_single_use(client):
+    first = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKiDS",
+            "organization_slug": "bootstrap-one",
+            "full_name": "Owner",
+            "email": "bootstrap@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert first.status_code == 201
+
+    second = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "Other",
+            "organization_slug": "bootstrap-two",
+            "full_name": "Other Owner",
+            "email": "other@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert second.status_code == 409
