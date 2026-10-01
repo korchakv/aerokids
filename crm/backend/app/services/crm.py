@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Contact, CrmStatus, Enrollment, Group, Location, Organization, Student, StudentContact, TrialLesson
+from app.models.core import Contact, CrmStatus, Enrollment, Group, Location, Organization, Student, StudentContact, StudentStatus, TrialLesson
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 
 
@@ -216,3 +216,78 @@ def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommende
     db.commit()
     db.refresh(trial)
     return trial
+
+
+def list_waiting_candidates(db: Session, org_id: UUID) -> list[dict]:
+    students = list(db.scalars(
+        select(Student)
+        .where(Student.organization_id == org_id, Student.crm_status == CrmStatus.WAITING_FOR_GROUP)
+        .order_by(Student.age_at_inquiry, Student.created_at)
+    ))
+    result: list[dict] = []
+    for student in students:
+        latest_trial = db.scalar(
+            select(TrialLesson)
+            .where(
+                TrialLesson.organization_id == org_id,
+                TrialLesson.student_id == student.id,
+            )
+            .order_by(TrialLesson.starts_at.desc())
+            .limit(1)
+        )
+        result.append({
+            "student_id": student.id,
+            "first_name": student.first_name,
+            "last_name": student.last_name,
+            "age": student.age_at_inquiry,
+            "recommended_level": latest_trial.recommended_level if latest_trial else None,
+            "source": student.source,
+        })
+    return result
+
+
+def form_group(db: Session, org_id: UUID, data) -> tuple[Group, list[UUID]]:
+    require_organization(db, org_id)
+    if data.location_id:
+        scoped_get(db, Location, org_id, data.location_id)
+    if data.min_age and data.max_age and data.min_age > data.max_age:
+        raise HTTPException(status_code=422, detail="min_age cannot be greater than max_age")
+    if len(set(data.student_ids)) != len(data.student_ids):
+        raise HTTPException(status_code=422, detail="Duplicate students are not allowed")
+    if len(data.student_ids) > data.capacity:
+        raise HTTPException(status_code=422, detail="Selected students exceed group capacity")
+
+    students: list[Student] = []
+    for student_id in data.student_ids:
+        student = scoped_get(db, Student, org_id, student_id)
+        if student.crm_status != CrmStatus.WAITING_FOR_GROUP:
+            raise HTTPException(status_code=409, detail=f"Student {student_id} is not waiting for a group")
+        students.append(student)
+
+    group = Group(
+        organization_id=org_id,
+        location_id=data.location_id,
+        name=data.name,
+        capacity=data.capacity,
+        min_age=data.min_age,
+        max_age=data.max_age,
+    )
+    db.add(group)
+    try:
+        db.flush()
+        for student in students:
+            db.add(Enrollment(
+                organization_id=org_id,
+                student_id=student.id,
+                group_id=group.id,
+                started_at=date.today(),
+            ))
+            student.crm_status = CrmStatus.ENROLLED
+            student.student_status = StudentStatus.ACTIVE
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Could not form group; check name and enrollments") from exc
+
+    db.refresh(group)
+    return group, [student.id for student in students]
