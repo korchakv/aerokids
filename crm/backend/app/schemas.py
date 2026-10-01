@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.core import AttendanceStatus, CrmStatus, EnrollmentStatus, LessonStatus, StudentStatus, TrialStatus
+from app.models.core import AttendanceStatus, CrmStatus, EnrollmentStatus, LessonStatus, PaymentMethod, PaymentStatus, StudentStatus, SubscriptionStatus, TrialStatus
 
 
 class ORMModel(BaseModel):
@@ -268,3 +268,78 @@ class GroupRosterStudent(BaseModel):
     first_name: str
     last_name: str | None
     age: int | None
+
+
+class SubscriptionPlanCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    price_minor: int = Field(ge=0)
+    period_days: int = Field(default=30, ge=1, le=366)
+    lessons_included: int | None = Field(default=None, ge=1, le=365)
+
+
+class SubscriptionPlanRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    name: str
+    price_minor: int
+    period_days: int
+    lessons_included: int | None
+    is_active: bool
+
+
+class StudentSubscriptionCreate(BaseModel):
+    student_id: UUID
+    plan_id: UUID
+    starts_on: date
+    price_minor: int | None = Field(default=None, ge=0)
+    discount_minor: int = Field(default=0, ge=0)
+    discount_label: str | None = Field(default=None, max_length=160)
+
+
+class StudentSubscriptionRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    student_id: UUID
+    plan_id: UUID
+    status: SubscriptionStatus
+    starts_on: date
+    ends_on: date
+    price_minor: int
+    discount_minor: int
+    discount_label: str | None
+
+
+class PaymentCreate(BaseModel):
+    student_id: UUID
+    subscription_id: UUID | None = None
+    amount_minor: int = Field(gt=0)
+    due_date: date | None = None
+    note: str | None = Field(default=None, max_length=300)
+
+
+class PaymentMarkPaid(BaseModel):
+    method: PaymentMethod
+    paid_at: datetime | None = None
+
+
+class PaymentRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    student_id: UUID
+    subscription_id: UUID | None
+    amount_minor: int
+    currency: str
+    status: PaymentStatus
+    method: PaymentMethod | None
+    due_date: date | None
+    paid_at: datetime | None
+    note: str | None
+
+
+class PaymentSummary(BaseModel):
+    paid_minor: int
+    pending_minor: int
+    overdue_minor: int
+    paid_count: int
+    pending_count: int
+    overdue_count: int
