@@ -144,3 +144,18 @@ class IntakeResult(BaseModel):
     student_id: UUID
     contact_id: UUID
     crm_status: CrmStatus
+
+
+class StudentStatusUpdate(BaseModel):
+    crm_status: CrmStatus
+
+
+class TrialLessonComplete(BaseModel):
+    status: TrialStatus = TrialStatus.COMPLETED
+    recommended_level: str | None = Field(default=None, max_length=80)
+    teacher_notes: str | None = None
+
+
+class StudentDetail(StudentRead):
+    contacts: list[ContactRead] = []
+    trial_lessons: list[TrialLessonRead] = []
