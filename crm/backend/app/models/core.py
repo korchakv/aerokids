@@ -133,10 +133,25 @@ class Student(Base):
     birth_date: Mapped[date | None] = mapped_column(Date)
     age_at_inquiry: Mapped[int | None] = mapped_column(Integer)
     source: Mapped[str | None] = mapped_column(String(80))
+    preferred_location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"), index=True)
     crm_status: Mapped[CrmStatus] = mapped_column(Enum(CrmStatus), default=CrmStatus.NEW, nullable=False)
     student_status: Mapped[StudentStatus] = mapped_column(Enum(StudentStatus), default=StudentStatus.PROSPECT, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class StudentAvailability(Base):
+    __tablename__ = "student_availability"
+    __table_args__ = (
+        UniqueConstraint("student_id", "weekday", "start_time", "end_time", name="uq_student_availability_slot"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    weekday: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
 
 
 class StudentContact(Base):
