@@ -407,3 +407,9 @@ class OrganizationMembershipRead(BaseModel):
     full_name: str | None
     role: StaffRole
     is_active: bool
+
+
+class LocationUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=160)
+    address: str | None = Field(default=None, max_length=300)
+    is_active: bool | None = None
