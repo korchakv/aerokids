@@ -168,3 +168,89 @@ def test_group_formation_rejects_cross_tenant_student(client):
         json={"name": "Group A", "capacity": 8, "student_ids": [student["id"]]},
     )
     assert response.status_code == 404
+
+
+def test_student_profile_and_transfer(client):
+    org = create_org(client, "AeroKiDS", "aerokids-students")
+    headers = {"X-Organization-Id": org["id"]}
+
+    student = client.post("/students", headers=headers, json={"first_name": "Марко", "age_at_inquiry": 10}).json()
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Start", "capacity": 8, "student_ids": [student["id"]]},
+    )
+    assert formed.status_code == 201, formed.text
+
+    second_group = client.post(
+        "/groups",
+        headers=headers,
+        json={"name": "Next", "capacity": 8},
+    )
+    assert second_group.status_code == 201, second_group.text
+
+    profile = client.get(f"/students/{student['id']}/profile", headers=headers)
+    assert profile.status_code == 200, profile.text
+    assert profile.json()["groups"][0]["group_name"] == "Start"
+
+    moved = client.post(
+        f"/students/{student['id']}/transfer",
+        headers=headers,
+        json={"to_group_id": second_group.json()["id"]},
+    )
+    assert moved.status_code == 200, moved.text
+
+    profile_after = client.get(f"/students/{student['id']}/profile", headers=headers)
+    assert profile_after.status_code == 200
+    groups = profile_after.json()["groups"]
+    assert any(g["group_name"] == "Next" and g["enrollment_status"] == "active" for g in groups)
+    assert any(g["group_name"] == "Start" and g["enrollment_status"] == "finished" for g in groups)
+
+
+def test_student_transfer_is_tenant_scoped(client):
+    org_a = create_org(client, "School A", "student-transfer-a")
+    org_b = create_org(client, "School B", "student-transfer-b")
+    a_headers = {"X-Organization-Id": org_a["id"]}
+    b_headers = {"X-Organization-Id": org_b["id"]}
+
+    student = client.post("/students", headers=a_headers, json={"first_name": "Анна"}).json()
+    foreign_group = client.post("/groups", headers=b_headers, json={"name": "Foreign", "capacity": 8}).json()
+
+    response = client.post(
+        f"/students/{student['id']}/transfer",
+        headers=a_headers,
+        json={"to_group_id": foreign_group["id"]},
+    )
+    assert response.status_code == 404
+
+
+def test_archiving_student_finishes_active_enrollment(client):
+    org = create_org(client, "AeroKiDS", "aerokids-archive")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Іван"}).json()
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Archive Group", "capacity": 8, "student_ids": [student["id"]]},
+    )
+
+    response = client.patch(
+        f"/students/{student['id']}/status",
+        headers=headers,
+        json={"student_status": "archived"},
+    )
+    assert response.status_code == 200
+    assert response.json()["student_status"] == "archived"
+
+    profile = client.get(f"/students/{student['id']}/profile", headers=headers).json()
+    assert profile["groups"][0]["enrollment_status"] == "finished"
