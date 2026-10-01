@@ -865,3 +865,104 @@ def test_workspace_overviews_return_real_tenant_data(client):
     assert groups.json()[0]["name"] == "FPV Start"
     assert groups.json()[0]["enrolled_count"] == 1
     assert groups.json()[0]["capacity"] == 8
+
+
+def test_teacher_workspace_and_lessons_are_limited_to_assigned_groups(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKiDS",
+            "organization_slug": "teacher-scope",
+            "full_name": "Owner",
+            "email": "owner-teacher-scope@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    owner_headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    students = []
+    for name in ("Assigned Child", "Foreign Child"):
+        student = client.post("/students", headers=owner_headers, json={"first_name": name, "age_at_inquiry": 10})
+        assert student.status_code == 201, student.text
+        student_id = student.json()["id"]
+        client.patch(
+            f"/students/{student_id}/crm-status",
+            headers=owner_headers,
+            json={"crm_status": "waiting_for_group"},
+        )
+        students.append(student_id)
+
+    group_a = client.post(
+        "/groups/form",
+        headers=owner_headers,
+        json={"name": "Teacher Group", "capacity": 8, "student_ids": [students[0]]},
+    )
+    group_b = client.post(
+        "/groups/form",
+        headers=owner_headers,
+        json={"name": "Other Group", "capacity": 8, "student_ids": [students[1]]},
+    )
+    assert group_a.status_code == 201, group_a.text
+    assert group_b.status_code == 201, group_b.text
+    group_a_id = group_a.json()["group"]["id"]
+    group_b_id = group_b.json()["group"]["id"]
+
+    invite = client.post(
+        "/organization-invitations",
+        headers=owner_headers,
+        json={"email": "scoped-teacher@example.com", "role": "teacher"},
+    )
+    assert invite.status_code == 201, invite.text
+    accepted = client.post(
+        "/auth/accept-invite",
+        json={
+            "invite_token": invite.json()["invite_token"],
+            "full_name": "Scoped Teacher",
+            "password": "teacher-secure-password",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    staff = client.get("/staff", headers=owner_headers)
+    teacher = next(item for item in staff.json() if item["email"] == "scoped-teacher@example.com")
+    assigned = client.post(
+        f"/staff/{teacher['id']}/groups",
+        headers=owner_headers,
+        json={"group_id": group_a_id, "is_primary": True},
+    )
+    assert assigned.status_code == 201, assigned.text
+
+    teacher_headers = {
+        "Authorization": f"Bearer {accepted.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    groups = client.get("/workspace/groups", headers=teacher_headers)
+    assert groups.status_code == 200, groups.text
+    assert [item["name"] for item in groups.json()] == ["Teacher Group"]
+
+    workspace_students = client.get("/workspace/students", headers=teacher_headers)
+    assert workspace_students.status_code == 200, workspace_students.text
+    assert [item["first_name"] for item in workspace_students.json()] == ["Assigned Child"]
+
+    assert client.get("/workspace/leads", headers=teacher_headers).status_code == 403
+    assert client.get(f"/groups/{group_a_id}/roster", headers=teacher_headers).status_code == 200
+    assert client.get(f"/groups/{group_b_id}/roster", headers=teacher_headers).status_code == 403
+
+    allowed_session = client.post(
+        "/lesson-sessions",
+        headers=teacher_headers,
+        json={"group_id": group_a_id, "starts_at": "2026-10-10T17:00:00+03:00"},
+    )
+    assert allowed_session.status_code == 201, allowed_session.text
+
+    denied_session = client.post(
+        "/lesson-sessions",
+        headers=teacher_headers,
+        json={"group_id": group_b_id, "starts_at": "2026-10-10T18:00:00+03:00"},
+    )
+    assert denied_session.status_code == 403
