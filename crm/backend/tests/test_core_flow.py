@@ -1418,3 +1418,43 @@ def test_audit_event_records_authenticated_actor(client):
     actor_events = [item for item in events.json() if item["event_type"] in {"lead.created", "student.crm_status_changed"}]
     assert actor_events
     assert all(item["actor_user_id"] == owner_id for item in actor_events)
+
+
+def test_public_intake_honeypot_blocks_bot_submission(client):
+    org = create_org(client, "Honeypot School", "honeypot-school")
+    response = client.post(
+        "/public/intake/honeypot-school",
+        json={
+            "child_first_name": "Bot",
+            "child_age": 9,
+            "contact_name": "Spam",
+            "phone": "0671118899",
+            "website": "https://spam.example",
+        },
+    )
+    assert response.status_code == 422
+
+    leads = client.get("/workspace/leads", headers={"X-Organization-Id": org["id"]})
+    assert leads.status_code == 200
+    assert leads.json() == []
+
+
+def test_public_intake_rate_limits_repeated_phone(client):
+    create_org(client, "Rate Limit School", "rate-limit-school")
+    payload = {
+        "child_first_name": "Марко",
+        "child_age": 9,
+        "contact_name": "Олена",
+        "phone": "0677776655",
+        "source": "website",
+    }
+
+    student_id = None
+    for _ in range(5):
+        response = client.post("/public/intake/rate-limit-school", json=payload)
+        assert response.status_code == 201, response.text
+        student_id = student_id or response.json()["student_id"]
+        assert response.json()["student_id"] == student_id
+
+    blocked = client.post("/public/intake/rate-limit-school", json=payload)
+    assert blocked.status_code == 429
