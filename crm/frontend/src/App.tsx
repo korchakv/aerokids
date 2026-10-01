@@ -1544,6 +1544,7 @@ function applyWorkspace(
     parent: item.contact_name ?? "Контакт не вказано",
     phone: item.contact_phone ?? "",
     source: item.source ?? "CRM",
+    comment: item.comment ?? undefined,
     status: crmStatusLabel(item.crm_status),
     trialId: item.latest_trial_id ?? undefined,
     trialAt: item.latest_trial_at ?? undefined,
