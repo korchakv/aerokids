@@ -22,6 +22,9 @@ class AuthMembershipInfo(BaseModel):
     organization_id: UUID
     organization_name: str
     organization_slug: str
+    organization_timezone: str
+    organization_currency: str
+    organization_locale: str
     role: StaffRole
 
 
