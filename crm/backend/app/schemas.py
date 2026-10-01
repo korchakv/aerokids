@@ -173,6 +173,7 @@ class IntakeCreate(BaseModel):
     phone: str = Field(min_length=8, max_length=40)
     comment: str | None = None
     source: str = Field(default="website", max_length=80)
+    website: str | None = Field(default=None, max_length=200)
 
 
 class IntakeResult(BaseModel):
