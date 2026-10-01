@@ -109,11 +109,12 @@ def attach_contact(db: Session, org_id: UUID, student_id: UUID, contact_id: UUID
 
 
 def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate) -> TrialLesson:
-    scoped_get(db, Student, org_id, data.student_id)
+    student = scoped_get(db, Student, org_id, data.student_id)
     if data.location_id:
         scoped_get(db, Location, org_id, data.location_id)
     item = TrialLesson(organization_id=org_id, **data.model_dump())
     db.add(item)
+    student.crm_status = CrmStatus.TRIAL_SCHEDULED
     db.commit()
     db.refresh(item)
     return item
