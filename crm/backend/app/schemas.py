@@ -209,6 +209,12 @@ class WaitingCandidate(BaseModel):
     source: str | None
 
 
+class GroupFormationScheduleSlot(BaseModel):
+    weekday: int = Field(ge=0, le=6)
+    start_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    duration_minutes: int = Field(default=60, ge=15, le=360)
+
+
 class GroupFormationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     location_id: UUID | None = None
@@ -216,6 +222,7 @@ class GroupFormationCreate(BaseModel):
     min_age: int | None = Field(default=None, ge=3, le=30)
     max_age: int | None = Field(default=None, ge=3, le=30)
     student_ids: list[UUID] = Field(min_length=1)
+    schedule_slots: list[GroupFormationScheduleSlot] = Field(default_factory=list)
 
 
 class GroupFormationResult(BaseModel):
