@@ -333,11 +333,18 @@ function App() {
     if (!selected) return;
     if (apiEnabled && session) {
       try {
-        await apiPost("/trial-lessons", {
-          student_id: selected.id,
-          location_id: trialLocationId || null,
-          starts_at: new Date(trialAt).toISOString(),
-        }, session);
+        if (selected.trialId) {
+          await apiPatch(`/trial-lessons/${selected.trialId}`, {
+            location_id: trialLocationId || null,
+            starts_at: new Date(trialAt).toISOString(),
+          }, session);
+        } else {
+          await apiPost("/trial-lessons", {
+            student_id: selected.id,
+            location_id: trialLocationId || null,
+            starts_at: new Date(trialAt).toISOString(),
+          }, session);
+        }
         await syncWorkspace(session);
         setTrialMode(null);
         return;
@@ -1629,6 +1636,7 @@ function auditEventLabel(type: string) {
     "lead.created": "Заявка створена",
     "student.crm_status_changed": "Статус заявки змінено",
     "trial.scheduled": "Пробне заплановано",
+    "trial.rescheduled": "Пробне перенесено",
     "trial.completed": "Пробне пройдено",
     "trial.no_show": "Не прийшов на пробне",
     "student.enrolled": "Зараховано до групи",
