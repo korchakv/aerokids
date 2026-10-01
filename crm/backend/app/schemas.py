@@ -1,7 +1,8 @@
 from datetime import date, datetime, time
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.core import AttendanceStatus, CrmStatus, EnrollmentStatus, LessonStatus, PaymentMethod, PaymentStatus, StaffRole, StudentStatus, SubscriptionStatus, TrialStatus
 
@@ -17,12 +18,32 @@ class OrganizationCreate(BaseModel):
     currency: str = Field(default="UAH", pattern=r"^[A-Z]{3}$")
     locale: str = Field(default="uk-UA", min_length=2, max_length=20)
 
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("Unknown IANA timezone") from exc
+        return value
+
 
 class OrganizationUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=160)
     timezone: str | None = Field(default=None, min_length=2, max_length=64)
     currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     locale: str | None = Field(default=None, min_length=2, max_length=20)
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("Unknown IANA timezone") from exc
+        return value
 
 
 class OrganizationRead(ORMModel):
