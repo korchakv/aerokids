@@ -78,3 +78,32 @@
 - No secrets committed.
 - English code identifiers; Ukrainian UI copy is allowed.
 - Small cohesive commits.
+
+
+## Current implementation checkpoint (2026-10)
+
+The original MVP slice is implemented and covered by CI. Do not restart the architecture or replace it with a new framework.
+
+Already implemented:
+- JWT auth, organization memberships and role-based permissions;
+- owner/admin/manager/teacher/accountant roles;
+- staff invitations;
+- lead intake, contact/student deduplication and CRM stages;
+- trial lessons, waiting list, group formation and transfer;
+- recurring schedule, lesson sessions and attendance;
+- subscription plans and payments;
+- organization settings (timezone/currency/locale);
+- student preferred location and weekly availability;
+- audit events with actor identity;
+- React UI connected to the real API;
+- PostgreSQL/Alembic/Docker CI.
+
+Next priorities:
+1. private beta deployment with PostgreSQL + HTTPS;
+2. public intake rate limiting / anti-spam;
+3. password recovery / outbound transactional email;
+4. pagination and larger-dataset performance;
+5. backups, health/metrics/logging;
+6. only after stabilization: replace AeroKiDS Formspree with CRM public intake.
+
+When changing code, preserve existing API behavior and tenant isolation tests. Every new tenant-owned table must include `organization_id`. Prefer extending the modular monolith rather than introducing services.
