@@ -106,6 +106,8 @@ function App() {
   const [entityEvents, setEntityEvents] = useState<ApiAuditEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [active, setActive] = useState("Дашборд");
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [leadChildName, setLeadChildName] = useState("");
   const [leadAge, setLeadAge] = useState(9);
@@ -835,6 +837,16 @@ function App() {
   const canManageLeads = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const canManageStudents = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
+  const searchTerm = searchQuery.trim().toLocaleLowerCase("uk-UA");
+  const searchLeads = searchTerm ? leads.filter((item) =>
+    [item.child, item.parent, item.phone, item.source].some((value) => value.toLocaleLowerCase("uk-UA").includes(searchTerm))
+  ).slice(0, 8) : [];
+  const searchGroups = searchTerm ? groups.filter((item) =>
+    [item.name, item.ages, item.location].some((value) => value.toLocaleLowerCase("uk-UA").includes(searchTerm))
+  ).slice(0, 5) : [];
+  const searchStaff = searchTerm ? staff.filter((item) =>
+    [item.fullName, item.email, item.phone, item.role].some((value) => value.toLocaleLowerCase("uk-UA").includes(searchTerm))
+  ).slice(0, 5) : [];
 
   return (
     <div className="shell">
@@ -854,7 +866,7 @@ function App() {
               </select>
               <span>{roleLabel(currentMembership?.role)}</span>
             </div>}
-            <button className="search">⌕ Пошук</button>
+            <button className="search" onClick={() => { setSearchQuery(""); setShowSearch(true); }}>⌕ Пошук</button>
             {canManageLeads && <button className="primary" onClick={() => setShowLeadForm(true)}>+ Нова заявка</button>}
             {session && <button className="search" onClick={() => { clearSession(); setSession(null); }}>Вийти</button>}
           </div>
@@ -1183,6 +1195,35 @@ function App() {
           <p>Каркас модуля вже передбачений у навігації. Реалізуємо після завершення наскрізного сценарію «заявка → пробне → група → учень».</p>
         </section>}
       </main>
+
+      {showSearch && <div className="modalBackdrop" onClick={() => setShowSearch(false)}>
+        <div className="groupModal searchModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => setShowSearch(false)}>×</button>
+          <p className="eyebrow">Пошук</p><h2>Знайти в CRM</h2>
+          <input className="globalSearchInput" autoFocus value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Ім’я, телефон, група, працівник…" />
+          {!searchTerm && <div className="searchHint">Почніть вводити ім’я, телефон або назву групи.</div>}
+          {searchTerm && searchLeads.length + searchGroups.length + searchStaff.length === 0 && <div className="searchHint">Нічого не знайдено.</div>}
+          {searchLeads.length > 0 && <div className="searchResults">
+            <h3>Діти та заявки</h3>
+            {searchLeads.map((item) => <button key={item.id} onClick={() => {
+              if (item.status === "Зарахований") setSelectedStudentId(item.id); else setSelectedId(item.id);
+              setShowSearch(false);
+            }}><span><b>{item.child}</b><small>{item.parent} · {item.phone}</small></span><i>{item.status}</i></button>)}
+          </div>}
+          {searchGroups.length > 0 && <div className="searchResults">
+            <h3>Групи</h3>
+            {searchGroups.map((item) => <button key={item.id} onClick={() => { setActive("Групи"); setShowSearch(false); }}>
+              <span><b>{item.name}</b><small>{item.ages} · {item.location}</small></span><i>{item.members.length}/{item.capacity}</i>
+            </button>)}
+          </div>}
+          {searchStaff.length > 0 && <div className="searchResults">
+            <h3>Працівники</h3>
+            {searchStaff.map((item) => <button key={item.id} onClick={() => { setSelectedStaffId(item.id); setShowSearch(false); }}>
+              <span><b>{item.fullName}</b><small>{item.role} · {item.email || item.phone}</small></span><i>{item.isActive ? "Активний" : "Неактивний"}</i>
+            </button>)}
+          </div>}
+        </div>
+      </div>}
 
       {showLeadForm && <div className="modalBackdrop" onClick={() => setShowLeadForm(false)}>
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
