@@ -320,3 +320,24 @@ export async function bootstrapOwner(input: {
   saveSession(session);
   return session;
 }
+
+
+export async function acceptInvite(input: {
+  invite_token: string;
+  full_name: string;
+  password: string;
+}): Promise<Session> {
+  const result = await request<{ access_token: string; user: AuthUser }>("/auth/accept-invite", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  const organizationId = result.user.memberships[0]?.organization_id;
+  if (!organizationId) throw new Error("Запрошення не надало доступу до організації");
+  const session: Session = {
+    accessToken: result.access_token,
+    user: result.user,
+    organizationId,
+  };
+  saveSession(session);
+  return session;
+}
