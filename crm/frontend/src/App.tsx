@@ -981,7 +981,7 @@ function App() {
           <section className="reportStats">
             <article><span>Конверсія в учні</span><strong>{leads.length ? Math.round(activeStudents.length / leads.length * 100) : 0}%</strong><small>{activeStudents.length} з {leads.length} записів</small></article>
             <article><span>Заповненість груп</span><strong>{occupancy}%</strong><small>{occupiedSeats} з {totalCapacity} місць</small></article>
-            <article><span>Відвідуваність</span><strong>{attendanceRate}%</strong><small>{attendanceValues.length} відміток</small></article>
+            <article><span>Відвідуваність</span><strong>{attendanceRate}%</strong><small>{overviewReport?.attendance.total ?? attendanceValues.length} відміток</small></article>
             <article><span>Сплачено</span><strong>{formatMoney(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}</strong><small>зафіксовані платежі</small></article>
           </section>
 
@@ -990,13 +990,13 @@ function App() {
               <div className="panelHead"><div><p className="eyebrow">Воронка</p><h2>Заявка → учень</h2></div></div>
               <div className="funnelBars">
                 {[
-                  ["Нова", leads.filter((x) => x.status === "Нова").length],
-                  ["Пробне", leads.filter((x) => x.status === "Пробне заплановано").length],
-                  ["Очікує групу", waiting.length],
-                  ["Зарахований", activeStudents.length],
+                  ["Нова", overviewFunnelCount(overviewReport, "new", leads.filter((x) => x.status === "Нова").length)],
+                  ["Пробне", overviewFunnelCount(overviewReport, "trial_scheduled", leads.filter((x) => x.status === "Пробне заплановано").length)],
+                  ["Очікує групу", overviewFunnelCount(overviewReport, "waiting_for_group", waiting.length)],
+                  ["Зарахований", overviewFunnelCount(overviewReport, "enrolled", activeStudents.length)],
                 ].map(([label,count]) => {
                   const numeric = Number(count);
-                  const max = Math.max(1, leads.length);
+                  const max = Math.max(1, overviewReport ? overviewReport.funnel.reduce((sum, item) => sum + item.count, 0) : leads.length);
                   return <div className="funnelBar" key={String(label)}><span><b>{label}</b><i>{numeric}</i></span><div><em style={{width: Math.max(4, numeric / max * 100) + "%"}} /></div></div>;
                 })}
               </div>
@@ -1595,6 +1595,10 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
       </>}
     </div>
   </div>;
+}
+
+function overviewFunnelCount(report: OverviewReport | null, status: WorkspaceBundle["leads"][number]["crm_status"], fallback: number) {
+  return report?.funnel.find((item) => item.status === status)?.count ?? fallback;
 }
 
 function visibleNavigation(role?: string) {
