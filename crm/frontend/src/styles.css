@@ -22,3 +22,5 @@
 .miniActions{display:flex;align-items:center;gap:8px}.miniActions .link{padding:5px 7px}
 
 .loginChecking{padding:26px 0;color:#8ca3b2;text-align:center}
+
+.staffActions{display:flex;gap:8px;flex-wrap:wrap}.inviteSuccess{margin-top:16px;padding:14px;border:1px solid #245568;border-radius:12px;background:#0b2432}.inviteSuccess p{color:#8fa5b3;line-height:1.5}.inviteSuccess code{display:block;padding:10px;border-radius:9px;background:#06121c;color:#7fe6ec;overflow-wrap:anywhere;font-size:12px}
