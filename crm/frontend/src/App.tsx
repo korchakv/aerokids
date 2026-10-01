@@ -1847,7 +1847,7 @@ function AuditHistory({ title, events, loading }: { title: string; events: ApiAu
       <i></i>
       <p>
         <b>{auditEventLabel(event.event_type)}</b>
-        <span>{auditEventDetail(event)} · {new Date(event.created_at).toLocaleString("uk-UA")}</span>
+        <span>{auditEventDetail(event)} · {new Date(event.created_at).toLocaleString("uk-UA")}{event.actor_name ? " · " + event.actor_name : ""}</span>
       </p>
     </div>)}
   </div>;
