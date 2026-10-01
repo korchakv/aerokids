@@ -413,3 +413,29 @@ class LocationUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=160)
     address: str | None = Field(default=None, max_length=300)
     is_active: bool | None = None
+
+
+class FunnelCount(BaseModel):
+    status: CrmStatus
+    count: int
+
+
+class AttendanceSummary(BaseModel):
+    present: int
+    absent: int
+    late: int
+    excused: int
+    total: int
+    attendance_rate: float
+
+
+class OverviewReport(BaseModel):
+    funnel: list[FunnelCount]
+    active_students: int
+    active_groups: int
+    enrolled_students: int
+    group_capacity: int
+    active_staff: int
+    active_locations: int
+    attendance: AttendanceSummary
+    payments: PaymentSummary
