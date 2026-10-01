@@ -13,8 +13,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("students", sa.Column("preferred_location_id", sa.Uuid(), sa.ForeignKey("locations.id")))
-    op.create_index("ix_students_preferred_location_id", "students", ["preferred_location_id"])
+    with op.batch_alter_table("students") as batch_op:
+        batch_op.add_column(sa.Column("preferred_location_id", sa.Uuid(), nullable=True))
+        batch_op.create_foreign_key(
+            "fk_students_preferred_location_id_locations",
+            "locations",
+            ["preferred_location_id"],
+            ["id"],
+        )
+        batch_op.create_index("ix_students_preferred_location_id", ["preferred_location_id"])
 
     op.create_table(
         "student_availability",
@@ -32,5 +39,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("student_availability")
-    op.drop_index("ix_students_preferred_location_id", table_name="students")
-    op.drop_column("students", "preferred_location_id")
+    with op.batch_alter_table("students") as batch_op:
+        batch_op.drop_index("ix_students_preferred_location_id")
+        batch_op.drop_constraint("fk_students_preferred_location_id_locations", type_="foreignkey")
+        batch_op.drop_column("preferred_location_id")
