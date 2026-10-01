@@ -966,3 +966,52 @@ def test_teacher_workspace_and_lessons_are_limited_to_assigned_groups(client):
         json={"group_id": group_b_id, "starts_at": "2026-10-10T18:00:00+03:00"},
     )
     assert denied_session.status_code == 403
+
+
+def test_audit_events_follow_student_workflow_and_are_tenant_scoped(client):
+    org_a = create_org(client, "School A", "audit-a")
+    org_b = create_org(client, "School B", "audit-b")
+    a_headers = {"X-Organization-Id": org_a["id"]}
+    b_headers = {"X-Organization-Id": org_b["id"]}
+
+    intake = client.post(
+        "/public/intake/audit-a",
+        json={
+            "child_first_name": "Марко",
+            "child_age": 9,
+            "contact_name": "Оксана",
+            "phone": "0671112233",
+        },
+    )
+    assert intake.status_code == 201, intake.text
+    student_id = intake.json()["student_id"]
+
+    client.patch(
+        f"/students/{student_id}/crm-status",
+        headers=a_headers,
+        json={"crm_status": "contacted"},
+    )
+    client.post(
+        "/trial-lessons",
+        headers=a_headers,
+        json={"student_id": student_id, "starts_at": "2026-10-12T17:00:00+03:00"},
+    )
+
+    events = client.get(
+        "/audit-events",
+        headers=a_headers,
+        params={"entity_type": "student", "entity_id": student_id},
+    )
+    assert events.status_code == 200, events.text
+    event_types = {item["event_type"] for item in events.json()}
+    assert "lead.created" in event_types
+    assert "student.crm_status_changed" in event_types
+    assert "trial.scheduled" in event_types
+
+    foreign = client.get(
+        "/audit-events",
+        headers=b_headers,
+        params={"entity_type": "student", "entity_id": student_id},
+    )
+    assert foreign.status_code == 200
+    assert foreign.json() == []
