@@ -2,7 +2,7 @@ from datetime import date, datetime, time
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.core import AttendanceStatus, CrmStatus, EnrollmentStatus, LessonStatus, PaymentMethod, PaymentStatus, StaffRole, StudentStatus, SubscriptionStatus, TrialStatus
 
@@ -102,6 +102,7 @@ class StudentRead(ORMModel):
     birth_date: date | None
     age_at_inquiry: int | None
     source: str | None
+    preferred_location_id: UUID | None
     crm_status: CrmStatus
     student_status: StudentStatus
     notes: str | None
@@ -488,6 +489,29 @@ class OverviewReport(BaseModel):
     payments: PaymentSummary
 
 
+class StudentAvailabilitySlot(BaseModel):
+    weekday: int = Field(ge=0, le=6)
+    start_time: time
+    end_time: time
+
+    @model_validator(mode="after")
+    def validate_time_range(self):
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be after start_time")
+        return self
+
+
+class StudentPreferencesUpdate(BaseModel):
+    preferred_location_id: UUID | None = None
+    availability: list[StudentAvailabilitySlot] = Field(default_factory=list)
+
+
+class StudentPreferencesRead(BaseModel):
+    preferred_location_id: UUID | None
+    preferred_location_name: str | None
+    availability: list[StudentAvailabilitySlot]
+
+
 class LeadListItem(BaseModel):
     student_id: UUID
     first_name: str
@@ -495,6 +519,9 @@ class LeadListItem(BaseModel):
     age: int | None
     source: str | None
     comment: str | None
+    preferred_location_id: UUID | None
+    preferred_location_name: str | None
+    availability: list[StudentAvailabilitySlot] = Field(default_factory=list)
     crm_status: CrmStatus
     contact_name: str | None
     contact_phone: str | None
