@@ -820,3 +820,48 @@ def test_invitation_is_single_use(client):
     }
     assert client.post("/auth/accept-invite", json=payload).status_code == 200
     assert client.post("/auth/accept-invite", json=payload).status_code == 400
+
+
+def test_workspace_overviews_return_real_tenant_data(client):
+    org = create_org(client, "AeroKiDS", "workspace-overview")
+    headers = {"X-Organization-Id": org["id"]}
+
+    intake = client.post(
+        "/public/intake/workspace-overview",
+        json={
+            "child_first_name": "Максим",
+            "child_age": 9,
+            "contact_name": "Оксана",
+            "phone": "0671234567",
+        },
+    )
+    assert intake.status_code == 201, intake.text
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    assert leads.json()[0]["first_name"] == "Максим"
+    assert leads.json()[0]["contact_name"] == "Оксана"
+
+    student_id = intake.json()["student_id"]
+    client.patch(
+        f"/students/{student_id}/crm-status",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "FPV Start", "capacity": 8, "min_age": 8, "max_age": 10, "student_ids": [student_id]},
+    )
+    assert formed.status_code == 201, formed.text
+
+    students = client.get("/workspace/students", headers=headers)
+    assert students.status_code == 200, students.text
+    assert students.json()[0]["first_name"] == "Максим"
+    assert students.json()[0]["group_name"] == "FPV Start"
+
+    groups = client.get("/workspace/groups", headers=headers)
+    assert groups.status_code == 200, groups.text
+    assert groups.json()[0]["name"] == "FPV Start"
+    assert groups.json()[0]["enrolled_count"] == 1
+    assert groups.json()[0]["capacity"] == 8
