@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 720
     auth_required: bool = False
+    cors_origins: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(
         env_file=".env",
