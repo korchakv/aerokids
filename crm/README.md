@@ -1,41 +1,51 @@
 # School CRM
 
-Універсальна multi-tenant CRM для шкіл, гуртків і навчальних центрів. AeroKiDS — перша організація, на якій перевіряємо продукт.
+Універсальна multi-tenant CRM для шкіл, гуртків і навчальних центрів. AeroKiDS — перша організація, на якій перевіряється продукт, але домен і база не прив'язані лише до AeroKiDS.
 
-## MVP 1
+## Поточний наскрізний сценарій
 
-Перший наскрізний сценарій:
+**заявка → контакт/дитина → пробне → очікує групу → група → активний учень → розклад → заняття → відвідування → абонемент → оплата**
 
-**заявка з сайту → дитина/контакт → пробне заняття → очікує групу → група → активний учень**
+Додатково вже є працівники, ролі, локації, запрошення в CRM та звіти.
 
-Базові сутності закладаються одразу з підтримкою кількох організацій, локацій і працівників.
+## Архітектура
 
-## Архітектурні принципи
-
-- modular monolith, без мікросервісів на старті;
-- PostgreSQL у production, SQLite дозволено лише для швидкого локального запуску;
-- кожна бізнес-сутність належить до `organization_id`;
-- tenant isolation обов'язково перевіряється тестами;
+- modular monolith;
+- FastAPI + SQLAlchemy + Alembic;
+- PostgreSQL у production, SQLite тільки для development/tests;
+- React + TypeScript frontend;
+- `Organization` є tenant boundary;
+- tenant isolation перевіряється тестами;
+- роль і membership перевіряються backend API;
 - `Contact`, а не жорстко `Parent`;
 - `Staff`, а не лише `Teacher`;
-- навчання не прив'язане до фіксованого "курсу";
-- групи, enrollment і розклад — окремі сутності;
-- платежі, SaaS billing, white-label та зовнішні месенджери — не в MVP 1.
+- CRM status та student status розділені;
+- довготривале навчання моделюється через enrollment, а не фіксований course.
 
-## Структура
+## Каталоги
 
-- `backend/` — FastAPI + SQLAlchemy;
-- `frontend/` — React + TypeScript;
-- `docs/` — продуктова та технічна документація;
-- `CODEX.md` — інструкція для Codex.
+- `backend/` — FastAPI API;
+- `frontend/` — React UI;
+- `docs/` — архітектура і статус;
+- `CODEX.md` — правила для Codex;
+- `docker-compose.yml` — локальний full-stack PostgreSQL + API + frontend.
 
-## Перший реліз
+## Локальний full-stack
 
-1. Organizations / Locations / Staff.
-2. Contacts / Students.
-3. Trial lessons.
-4. Waiting list + Groups.
-5. Enrollment.
-6. Простий Dashboard.
+З каталогу `crm/`:
 
-Сайт AeroKiDS зараз використовує Formspree. Після стабілізації API форма сайту буде відправляти заявку безпосередньо в CRM.
+```bash
+docker compose up --build
+```
+
+Після запуску:
+- CRM: `http://localhost:8080`
+- API docs: `http://localhost:8000/docs`
+
+На чистій базі CRM сама покаже перший запуск для створення організації та власника.
+
+## Важливо
+
+Публічний сайт AeroKiDS поки не переводимо з Formspree на CRM до окремого етапу стабілізації та deployment.
+
+Детальний поточний стан: `docs/status.md`.
