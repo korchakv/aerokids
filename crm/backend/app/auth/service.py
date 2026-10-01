@@ -1,5 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
+import hashlib
+import secrets
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -7,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.schemas import AuthMembershipInfo, AuthUserInfo, BootstrapOwnerCreate
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models.core import Organization, OrganizationMembership, Staff, StaffRole, User
+from app.models.core import Organization, OrganizationInvitation, OrganizationMembership, Staff, StaffRole, User
 
 
 def normalize_email(email: str) -> str:
@@ -94,3 +96,90 @@ def auth_user_info(db: Session, user: User) -> AuthUserInfo:
 def issue_login_token(db: Session, email: str, password: str) -> tuple[str, AuthUserInfo]:
     user = authenticate_user(db, email, password)
     return create_access_token(user.id), auth_user_info(db, user)
+
+
+def create_invitation(db: Session, org_id: UUID, invited_by_user_id: UUID, email: str, role: StaffRole):
+    normalized = normalize_email(email)
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+
+    invitation = OrganizationInvitation(
+        organization_id=org_id,
+        email=normalized,
+        role=role,
+        token_hash=token_hash,
+        invited_by_user_id=invited_by_user_id,
+        expires_at=expires_at,
+    )
+    db.add(invitation)
+    db.commit()
+    db.refresh(invitation)
+    return invitation, raw_token
+
+
+def accept_invitation(db: Session, raw_token: str, full_name: str, password: str):
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    invitation = db.scalar(select(OrganizationInvitation).where(
+        OrganizationInvitation.token_hash == token_hash,
+        OrganizationInvitation.accepted_at.is_(None),
+    ))
+    now = datetime.now(timezone.utc)
+    if invitation is None or invitation.expires_at < now:
+        raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
+
+    user = db.scalar(select(User).where(User.email == invitation.email))
+    if user is None:
+        user = User(
+            email=invitation.email,
+            full_name=full_name,
+            password_hash=hash_password(password),
+        )
+        db.add(user)
+        db.flush()
+    else:
+        if user.password_hash:
+            if not verify_password(password, user.password_hash):
+                raise HTTPException(status_code=409, detail="This email already has an account; use its existing password")
+        else:
+            user.password_hash = hash_password(password)
+        if not user.full_name:
+            user.full_name = full_name
+
+    membership = db.scalar(select(OrganizationMembership).where(
+        OrganizationMembership.organization_id == invitation.organization_id,
+        OrganizationMembership.user_id == user.id,
+    ))
+    if membership is None:
+        membership = OrganizationMembership(
+            organization_id=invitation.organization_id,
+            user_id=user.id,
+            role=invitation.role,
+        )
+        db.add(membership)
+    else:
+        membership.role = invitation.role
+        membership.is_active = True
+
+    staff = db.scalar(select(Staff).where(
+        Staff.organization_id == invitation.organization_id,
+        Staff.email == invitation.email,
+    ))
+    if staff is None:
+        staff = Staff(
+            organization_id=invitation.organization_id,
+            user_id=user.id,
+            full_name=full_name,
+            email=invitation.email,
+            role=invitation.role,
+        )
+        db.add(staff)
+    else:
+        staff.user_id = user.id
+        staff.role = invitation.role
+        staff.is_active = True
+
+    invitation.accepted_at = now
+    db.commit()
+    db.refresh(user)
+    return user, create_access_token(user.id), auth_user_info(db, user)
