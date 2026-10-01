@@ -111,6 +111,12 @@ export function apiPatch<T>(path: string, body: unknown, session: Session) {
 }
 
 
+export type StudentAvailabilitySlot = {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+};
+
 export type WorkspaceLead = {
   student_id: string;
   first_name: string;
@@ -118,6 +124,9 @@ export type WorkspaceLead = {
   age: number | null;
   source: string | null;
   comment: string | null;
+  preferred_location_id: string | null;
+  preferred_location_name: string | null;
+  availability: StudentAvailabilitySlot[];
   crm_status: "new" | "contacted" | "trial_scheduled" | "trial_completed" | "waiting_for_group" | "enrolled" | "no_response" | "declined" | "not_relevant";
   contact_name: string | null;
   contact_phone: string | null;
