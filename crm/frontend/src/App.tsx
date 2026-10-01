@@ -1075,7 +1075,7 @@ function applyOperations(
     .map((item) => ({
       id: item.id,
       studentId: item.student_id,
-      planId: item.subscription_id ?? "",
+      planId: item.plan_id ?? "",
       amount: item.amount_minor / 100,
       dueDate: item.due_date ?? "",
       status: item.status === "paid" ? "paid" : item.due_date && item.due_date < today ? "overdue" : "pending",
