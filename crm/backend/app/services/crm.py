@@ -291,3 +291,84 @@ def form_group(db: Session, org_id: UUID, data) -> tuple[Group, list[UUID]]:
 
     db.refresh(group)
     return group, [student.id for student in students]
+
+
+def student_profile(db: Session, org_id: UUID, student_id: UUID):
+    student, contacts, trials = student_detail(db, org_id, student_id)
+    rows = db.execute(
+        select(Enrollment, Group)
+        .join(Group, Group.id == Enrollment.group_id)
+        .where(
+            Enrollment.organization_id == org_id,
+            Enrollment.student_id == student_id,
+            Group.organization_id == org_id,
+        )
+        .order_by(Enrollment.started_at.desc())
+    ).all()
+    groups = [{
+        "group_id": group.id,
+        "group_name": group.name,
+        "enrollment_id": enrollment.id,
+        "enrollment_status": enrollment.status,
+        "started_at": enrollment.started_at,
+        "location_id": group.location_id,
+    } for enrollment, group in rows]
+    return student, contacts, trials, groups
+
+
+def update_student_lifecycle(db: Session, org_id: UUID, student_id: UUID, status: StudentStatus) -> Student:
+    student = scoped_get(db, Student, org_id, student_id)
+    student.student_status = status
+    if status == StudentStatus.ARCHIVED:
+        active_enrollments = list(db.scalars(select(Enrollment).where(
+            Enrollment.organization_id == org_id,
+            Enrollment.student_id == student_id,
+            Enrollment.status == "ACTIVE",
+        )))
+        for enrollment in active_enrollments:
+            enrollment.status = "FINISHED"
+            enrollment.ended_at = date.today()
+    db.commit()
+    db.refresh(student)
+    return student
+
+
+def transfer_student(db: Session, org_id: UUID, student_id: UUID, to_group_id: UUID, started_at: date | None = None) -> Enrollment:
+    student = scoped_get(db, Student, org_id, student_id)
+    target = scoped_get(db, Group, org_id, to_group_id)
+
+    active_enrollments = list(db.scalars(select(Enrollment).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.student_id == student_id,
+        Enrollment.status == "ACTIVE",
+    )))
+    for enrollment in active_enrollments:
+        if enrollment.group_id == target.id:
+            return enrollment
+        enrollment.status = "FINISHED"
+        enrollment.ended_at = (started_at or date.today())
+
+    existing = db.scalar(select(Enrollment).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.student_id == student_id,
+        Enrollment.group_id == target.id,
+    ))
+    if existing:
+        existing.status = "ACTIVE"
+        existing.started_at = started_at or date.today()
+        existing.ended_at = None
+        enrollment = existing
+    else:
+        enrollment = Enrollment(
+            organization_id=org_id,
+            student_id=student.id,
+            group_id=target.id,
+            started_at=started_at or date.today(),
+        )
+        db.add(enrollment)
+
+    student.crm_status = CrmStatus.ENROLLED
+    student.student_status = StudentStatus.ACTIVE
+    db.commit()
+    db.refresh(enrollment)
+    return enrollment
