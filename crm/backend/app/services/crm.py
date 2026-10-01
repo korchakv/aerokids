@@ -1019,6 +1019,7 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             "last_name": student.last_name,
             "age": student.age_at_inquiry,
             "source": student.source,
+            "comment": student.notes,
             "crm_status": student.crm_status,
             "contact_name": contact.full_name if contact else None,
             "contact_phone": contact.phone if contact else None,
