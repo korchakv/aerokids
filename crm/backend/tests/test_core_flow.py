@@ -104,3 +104,67 @@ def test_scheduling_trial_updates_crm_status(client):
     assert trial.status_code == 201, trial.text
     detail = client.get(f"/students/{student['id']}", headers=headers).json()
     assert detail["crm_status"] == "trial_scheduled"
+
+
+def test_waiting_list_and_group_formation(client):
+    org = create_org(client, "AeroKiDS", "aerokids-groups")
+    headers = {"X-Organization-Id": org["id"]}
+
+    students = []
+    for name, age in [("Максим", 9), ("Софія", 10)]:
+        student = client.post("/students", headers=headers, json={"first_name": name, "age_at_inquiry": age}).json()
+        updated = client.patch(
+            f"/students/{student['id']}/crm-status",
+            headers=headers,
+            json={"crm_status": "waiting_for_group"},
+        )
+        assert updated.status_code == 200
+        students.append(student)
+
+    waiting = client.get("/waiting-list", headers=headers)
+    assert waiting.status_code == 200, waiting.text
+    assert {item["first_name"] for item in waiting.json()} == {"Максим", "Софія"}
+
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={
+            "name": "FPV Start 8-10",
+            "capacity": 8,
+            "min_age": 8,
+            "max_age": 10,
+            "student_ids": [student["id"] for student in students],
+        },
+    )
+    assert formed.status_code == 201, formed.text
+    assert len(formed.json()["enrolled_student_ids"]) == 2
+
+    waiting_after = client.get("/waiting-list", headers=headers)
+    assert waiting_after.status_code == 200
+    assert waiting_after.json() == []
+
+    for student in students:
+        detail = client.get(f"/students/{student['id']}", headers=headers).json()
+        assert detail["crm_status"] == "enrolled"
+        assert detail["student_status"] == "active"
+
+
+def test_group_formation_rejects_cross_tenant_student(client):
+    org_a = create_org(client, "School A", "school-a-form")
+    org_b = create_org(client, "School B", "school-b-form")
+    a_headers = {"X-Organization-Id": org_a["id"]}
+    b_headers = {"X-Organization-Id": org_b["id"]}
+
+    student = client.post("/students", headers=b_headers, json={"first_name": "Чужий"}).json()
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=b_headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+
+    response = client.post(
+        "/groups/form",
+        headers=a_headers,
+        json={"name": "Group A", "capacity": 8, "student_ids": [student["id"]]},
+    )
+    assert response.status_code == 404
