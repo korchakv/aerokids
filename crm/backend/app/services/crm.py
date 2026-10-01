@@ -97,6 +97,17 @@ def list_organizations(db: Session) -> list[Organization]:
     return list(db.scalars(select(Organization).order_by(Organization.name)))
 
 
+def update_organization(db: Session, org_id: UUID, data) -> Organization:
+    item = require_organization(db, org_id)
+    updates = data.model_dump(exclude_none=True)
+    for key, value in updates.items():
+        setattr(item, key, value)
+    record_audit(db, org_id, "organization", item.id, "organization.settings_updated", updates)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
 def require_organization(db: Session, org_id: UUID) -> Organization:
     item = db.get(Organization, org_id)
     if item is None:
