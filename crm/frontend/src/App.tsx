@@ -1580,9 +1580,12 @@ function formatMoney(value: number) {
 }
 
 function scheduleSlots(group: GroupItem) {
-  const [daysPart, timePart] = group.schedule.split("·").map((x) => x.trim());
-  const time = timePart || "—";
-  return (daysPart || "").split("/").map((day) => ({ day: day.trim(), time })).filter((item) => item.day);
+  if (!group.schedule || group.schedule === "Розклад не задано") return [];
+  return group.schedule.split(";").flatMap((part) => {
+    const [daysPart, timePart] = part.split("·").map((x) => x.trim());
+    const time = timePart || "—";
+    return (daysPart || "").split("/").map((day) => ({ day: day.trim(), time })).filter((item) => item.day);
+  });
 }
 
 function ageRange(items: Lead[]) {
