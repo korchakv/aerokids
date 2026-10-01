@@ -159,3 +159,26 @@ class TrialLessonComplete(BaseModel):
 class StudentDetail(StudentRead):
     contacts: list[ContactRead] = []
     trial_lessons: list[TrialLessonRead] = []
+
+
+class WaitingCandidate(BaseModel):
+    student_id: UUID
+    first_name: str
+    last_name: str | None
+    age: int | None
+    recommended_level: str | None
+    source: str | None
+
+
+class GroupFormationCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    location_id: UUID | None = None
+    capacity: int = Field(default=8, ge=1, le=100)
+    min_age: int | None = Field(default=None, ge=3, le=30)
+    max_age: int | None = Field(default=None, ge=3, le=30)
+    student_ids: list[UUID] = Field(min_length=1)
+
+
+class GroupFormationResult(BaseModel):
+    group: GroupRead
+    enrolled_student_ids: list[UUID]
