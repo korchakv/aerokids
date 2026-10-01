@@ -160,9 +160,7 @@ export async function loadWorkspace(session: Session): Promise<WorkspaceBundle> 
     ? apiGet<WorkspaceLead[]>("/workspace/leads", session)
     : Promise.resolve([]);
 
-  const studentsPromise = role === "accountant"
-    ? Promise.resolve([])
-    : apiGet<WorkspaceStudent[]>("/workspace/students", session);
+  const studentsPromise = apiGet<WorkspaceStudent[]>("/workspace/students", session);
 
   const groupsPromise = role === "accountant"
     ? Promise.resolve([])
