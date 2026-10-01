@@ -450,6 +450,7 @@ class LeadListItem(BaseModel):
     crm_status: CrmStatus
     contact_name: str | None
     contact_phone: str | None
+    latest_trial_id: UUID | None
     latest_trial_at: datetime | None
     recommended_level: str | None
 
