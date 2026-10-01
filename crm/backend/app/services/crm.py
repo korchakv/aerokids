@@ -3,11 +3,11 @@ from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, Staff, StaffLocation, StaffRole, Student, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
+from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 
 def record_audit(
@@ -1096,6 +1096,62 @@ def _primary_contact_for_student(db: Session, org_id: UUID, student_id: UUID) ->
     )
 
 
+def student_preferences(db: Session, org_id: UUID, student_id: UUID) -> dict:
+    student = scoped_get(db, Student, org_id, student_id)
+    location = scoped_get(db, Location, org_id, student.preferred_location_id) if student.preferred_location_id else None
+    availability = list(db.scalars(
+        select(StudentAvailability)
+        .where(
+            StudentAvailability.organization_id == org_id,
+            StudentAvailability.student_id == student_id,
+        )
+        .order_by(StudentAvailability.weekday, StudentAvailability.start_time)
+    ))
+    return {
+        "preferred_location_id": student.preferred_location_id,
+        "preferred_location_name": location.name if location else None,
+        "availability": [{
+            "weekday": item.weekday,
+            "start_time": item.start_time,
+            "end_time": item.end_time,
+        } for item in availability],
+    }
+
+
+def replace_student_preferences(db: Session, org_id: UUID, student_id: UUID, data) -> dict:
+    student = scoped_get(db, Student, org_id, student_id)
+    if data.preferred_location_id is not None:
+        scoped_get(db, Location, org_id, data.preferred_location_id)
+
+    seen: set[tuple[int, time, time]] = set()
+    for slot in data.availability:
+        key = (slot.weekday, slot.start_time, slot.end_time)
+        if key in seen:
+            raise HTTPException(status_code=422, detail="Duplicate availability slots are not allowed")
+        seen.add(key)
+
+    student.preferred_location_id = data.preferred_location_id
+    db.execute(delete(StudentAvailability).where(
+        StudentAvailability.organization_id == org_id,
+        StudentAvailability.student_id == student_id,
+    ))
+    for slot in data.availability:
+        db.add(StudentAvailability(
+            organization_id=org_id,
+            student_id=student_id,
+            weekday=slot.weekday,
+            start_time=slot.start_time,
+            end_time=slot.end_time,
+        ))
+
+    record_audit(db, org_id, "student", student.id, "student.preferences_updated", {
+        "preferred_location_id": str(data.preferred_location_id) if data.preferred_location_id else None,
+        "availability_count": len(data.availability),
+    })
+    db.commit()
+    return student_preferences(db, org_id, student_id)
+
+
 def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
     students = list(db.scalars(
         select(Student)
@@ -1112,6 +1168,7 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             .limit(1)
         )
         trial_location = scoped_get(db, Location, org_id, trial.location_id) if trial and trial.location_id else None
+        preferences = student_preferences(db, org_id, student.id)
         result.append({
             "student_id": student.id,
             "first_name": student.first_name,
@@ -1119,6 +1176,9 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             "age": student.age_at_inquiry,
             "source": student.source,
             "comment": student.notes,
+            "preferred_location_id": preferences["preferred_location_id"],
+            "preferred_location_name": preferences["preferred_location_name"],
+            "availability": preferences["availability"],
             "crm_status": student.crm_status,
             "contact_name": contact.full_name if contact else None,
             "contact_phone": contact.phone if contact else None,
