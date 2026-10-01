@@ -69,3 +69,18 @@ class AcceptInvitationCreate(BaseModel):
 
 class BootstrapStatus(BaseModel):
     available: bool
+
+
+class PasswordResetLinkCreate(BaseModel):
+    email: str = Field(min_length=5, max_length=255)
+
+
+class PasswordResetLinkResult(BaseModel):
+    email: str
+    reset_token: str
+    expires_at: str
+
+
+class PasswordResetComplete(BaseModel):
+    reset_token: str = Field(min_length=20, max_length=300)
+    password: str = Field(min_length=10, max_length=200)
