@@ -350,3 +350,13 @@ def workspace_students(access: OrgAccess = Depends(get_org_access), db: Session 
 @router.get("/workspace/groups", response_model=list[GroupOverviewItem])
 def workspace_groups(access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)):
     return crm.list_group_overview(db, access.organization_id, access.user_id, access.role)
+
+
+@router.delete("/staff/{staff_id}/groups/{group_id}", status_code=204)
+def remove_staff_group(
+    staff_id: UUID,
+    group_id: UUID,
+    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    crm.remove_staff_from_group(db, org_id, staff_id, group_id)
