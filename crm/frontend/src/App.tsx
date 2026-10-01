@@ -96,6 +96,9 @@ const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне
 
 function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession());
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [active, setActive] = useState("Дашборд");
   const [leads, setLeads] = useState(initialLeads);
   const [groups, setGroups] = useState<GroupItem[]>([
@@ -125,7 +128,7 @@ function App() {
     { id: 1, name: "Основна локація", address: "Івано-Франківськ", isActive: true },
   ]);
   const [staff, setStaff] = useState<StaffDemo[]>([
-    { id: 1, fullName: "Іван Викладач", role: "Викладач", email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: [1], groupIds: [1], isActive: true },
+    { id: 1, fullName: "Іван Викладач", role: "Викладач", email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: [1], groupIds: ["1"], isActive: true },
     { id: 2, fullName: "Адміністратор AeroKiDS", role: "Адміністратор", email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: [1], groupIds: [], isActive: true },
   ]);
   const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null);
@@ -163,6 +166,30 @@ function App() {
     // Session is refreshed once when the app shell mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+
+  useEffect(() => {
+    if (!apiEnabled || !session) return;
+    let cancelled = false;
+    setWorkspaceLoading(true);
+    setWorkspaceError("");
+
+    loadWorkspace(session)
+      .then((bundle) => {
+        if (cancelled) return;
+        applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
+        setWorkspaceLoaded(true);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити дані CRM");
+      })
+      .finally(() => {
+        if (!cancelled) setWorkspaceLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [session?.accessToken, session?.organizationId]);
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedStudent = leads.find((lead) => lead.id === selectedStudentId) ?? null;
@@ -404,6 +431,10 @@ function App() {
             {session && <button className="search" onClick={() => { clearSession(); setSession(null); }}>Вийти</button>}
           </div>
         </header>
+
+        {apiEnabled && workspaceLoading && <div className="syncBanner">Завантажуємо дані організації…</div>}
+        {apiEnabled && workspaceError && <div className="syncBanner error">{workspaceError}</div>}
+        {apiEnabled && workspaceLoaded && !workspaceLoading && !workspaceError && <div className="syncStatus">Дані завантажено з CRM API</div>}
 
         {active === "Дашборд" && <>
           <section className="stats">
@@ -867,6 +898,76 @@ function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) =>
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span></div>
     {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{lead.source}</span><span className="pill">{lead.status}</span></button>)}
   </div>;
+}
+
+function applyWorkspace(
+  bundle: WorkspaceBundle,
+  setLeads: React.Dispatch<React.SetStateAction<Lead[]>>,
+  setGroups: React.Dispatch<React.SetStateAction<GroupItem[]>>,
+  setStudentStates: React.Dispatch<React.SetStateAction<Record<EntityId, "Активний" | "Пауза" | "Архів">>>,
+) {
+  const prospects: Lead[] = bundle.leads.map((item) => ({
+    id: item.student_id,
+    child: [item.first_name, item.last_name].filter(Boolean).join(" "),
+    age: item.age ?? 0,
+    parent: item.contact_name ?? "Контакт не вказано",
+    phone: item.contact_phone ?? "",
+    source: item.source ?? "CRM",
+    status: crmStatusLabel(item.crm_status),
+    trialAt: item.latest_trial_at ?? undefined,
+    recommendedLevel: item.recommended_level ?? undefined,
+    trialResult: item.crm_status === "waiting_for_group" || item.crm_status === "enrolled" ? "completed" : item.latest_trial_at ? "scheduled" : undefined,
+  }));
+
+  const students: Lead[] = bundle.students.map((item) => ({
+    id: item.student_id,
+    child: [item.first_name, item.last_name].filter(Boolean).join(" "),
+    age: item.age ?? 0,
+    parent: item.contact_name ?? "Контакт не вказано",
+    phone: item.contact_phone ?? "",
+    source: item.source ?? "CRM",
+    status: "Зарахований",
+  }));
+
+  const states: Record<EntityId, "Активний" | "Пауза" | "Архів"> = {};
+  bundle.students.forEach((item) => {
+    states[item.student_id] = item.student_status === "paused" ? "Пауза" : item.student_status === "archived" ? "Архів" : "Активний";
+  });
+
+  const groups: GroupItem[] = bundle.groups.map((group) => ({
+    id: group.group_id,
+    name: group.name,
+    ages: ageLabel(group.min_age, group.max_age),
+    schedule: "Розклад не задано",
+    location: group.location_name ?? "Локацію не вказано",
+    capacity: group.capacity ?? Math.max(group.enrolled_count, 1),
+    members: bundle.students.filter((student) => student.group_id === group.group_id).map((student) => student.student_id),
+  }));
+
+  setLeads([...prospects, ...students]);
+  setGroups(groups);
+  setStudentStates(states);
+}
+
+function crmStatusLabel(status: WorkspaceBundle["leads"][number]["crm_status"]): LeadStatus {
+  const labels: Record<WorkspaceBundle["leads"][number]["crm_status"], LeadStatus> = {
+    new: "Нова",
+    contacted: "Зв'язались",
+    trial_scheduled: "Пробне заплановано",
+    trial_completed: "Пробне пройдено",
+    waiting_for_group: "Очікує групу",
+    enrolled: "Зарахований",
+    no_response: "Зв'язались",
+    declined: "Зв'язались",
+    not_relevant: "Зв'язались",
+  };
+  return labels[status];
+}
+
+function ageLabel(min: number | null, max: number | null) {
+  if (min == null && max == null) return "—";
+  if (min != null && max != null) return min === max ? String(min) : `${min}–${max}`;
+  return String(min ?? max);
 }
 
 function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
