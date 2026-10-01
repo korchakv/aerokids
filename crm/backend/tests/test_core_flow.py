@@ -1275,3 +1275,37 @@ def test_organization_rejects_unknown_timezone(client):
         json={"timezone": "Mars/Olympus"},
     )
     assert response.status_code == 422
+
+
+def test_group_formation_persists_recurring_schedule(client):
+    org = create_org(client, "Schedule School", "schedule-formation")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Іра", "age_at_inquiry": 9}).json()
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={
+            "name": "Starter",
+            "capacity": 8,
+            "student_ids": [student["id"]],
+            "schedule_slots": [
+                {"weekday": 0, "start_time": "17:00", "duration_minutes": 60},
+                {"weekday": 2, "start_time": "17:00", "duration_minutes": 60},
+            ],
+        },
+    )
+    assert formed.status_code == 201, formed.text
+    group_id = formed.json()["group"]["id"]
+
+    schedules = client.get("/group-schedules", headers=headers, params={"group_id": group_id})
+    assert schedules.status_code == 200, schedules.text
+    assert [(item["weekday"], item["start_time"]) for item in schedules.json()] == [
+        (0, "17:00:00"),
+        (2, "17:00:00"),
+    ]
