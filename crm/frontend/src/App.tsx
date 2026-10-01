@@ -162,12 +162,14 @@ function App() {
   const [trialMode, setTrialMode] = useState<"schedule" | "complete" | null>(null);
   const [trialAt, setTrialAt] = useState("2026-10-05T17:00");
   const [trialLocation, setTrialLocation] = useState("Основна локація");
+  const [trialLocationId, setTrialLocationId] = useState<EntityId | "">("");
   const [recommendedLevel, setRecommendedLevel] = useState("Початковий");
   const [teacherNotes, setTeacherNotes] = useState("");
   const [selectedCandidates, setSelectedCandidates] = useState<EntityId[]>([]);
   const [groupName, setGroupName] = useState("FPV Start 8–10");
   const [groupSchedule, setGroupSchedule] = useState("Пн / Ср · 17:00");
   const [groupCapacity, setGroupCapacity] = useState(8);
+  const [groupLocationId, setGroupLocationId] = useState<EntityId | "">("");
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [newLessonGroupId, setNewLessonGroupId] = useState<EntityId>("1");
   const [newLessonAt, setNewLessonAt] = useState("2026-10-07T17:00");
@@ -198,6 +200,8 @@ function App() {
       ]);
       applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
       applyOperations(operations, setLocations, setStaff, setPlans, setPayments);
+      if (!trialLocationId && operations.locations[0]) setTrialLocationId(operations.locations[0].id);
+      if (!groupLocationId && operations.locations[0]) setGroupLocationId(operations.locations[0].id);
       applyTeaching(teaching, setLessons, setGroups);
       setOverviewReport(report);
       setSelectedLessonId((current) => teaching.lessons.some((item) => item.id === current) ? current : (teaching.lessons[0]?.id ?? ""));
@@ -277,6 +281,7 @@ function App() {
       try {
         await apiPost("/trial-lessons", {
           student_id: selected.id,
+          location_id: trialLocationId || null,
           starts_at: new Date(trialAt).toISOString(),
         }, session);
         await syncWorkspace(session);
@@ -290,7 +295,7 @@ function App() {
       ...item,
       status: "Пробне заплановано",
       trialAt,
-      trialLocation,
+      trialLocation: locations.find((location) => location.id === trialLocationId)?.name ?? trialLocation,
       trialResult: "scheduled",
     } : item));
     setTrialMode(null);
@@ -344,6 +349,7 @@ function App() {
         await apiPost("/groups/form", {
           name: groupName.trim(),
           capacity: groupCapacity,
+          location_id: groupLocationId || null,
           min_age: selectedLeadRows.length ? Math.min(...selectedLeadRows.map((x) => x.age)) : null,
           max_age: selectedLeadRows.length ? Math.max(...selectedLeadRows.map((x) => x.age)) : null,
           student_ids: selectedCandidates,
@@ -362,7 +368,7 @@ function App() {
       name: groupName.trim(),
       ages: selectedCandidates.length ? ageRange(selectedLeadRows) : "—",
       schedule: groupSchedule,
-      location: "Основна локація",
+      location: locations.find((location) => location.id === groupLocationId)?.name ?? "Локацію не вказано",
       capacity: groupCapacity,
       members: selectedCandidates,
     }]);
@@ -1243,7 +1249,10 @@ function App() {
           <label>Назва групи<input value={groupName} onChange={(e) => setGroupName(e.target.value)} /></label>
           <div className="formTwo">
             <label>Місткість<input type="number" min={1} max={30} value={groupCapacity} onChange={(e) => setGroupCapacity(Number(e.target.value))} /></label>
-            <label>Локація<select><option>Основна локація</option></select></label>
+            <label>Локація<select value={groupLocationId} onChange={(e) => setGroupLocationId(e.target.value)}>
+              <option value="">Без локації</option>
+              {locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+            </select></label>
           </div>
           <label>Розклад<input value={groupSchedule} onChange={(e) => setGroupSchedule(e.target.value)} /></label>
           <div className="selectedNames">{leads.filter((x) => selectedCandidates.includes(x.id)).map((x) => <span key={x.id}>{x.child} · {x.age}</span>)}</div>
@@ -1276,7 +1285,10 @@ function App() {
           {trialMode === "schedule" && <div className="workflowBox">
             <div className="workflowHead"><h3>Запис на пробне</h3><button onClick={() => setTrialMode(null)}>×</button></div>
             <label>Дата і час<input type="datetime-local" value={trialAt} onChange={(e) => setTrialAt(e.target.value)} /></label>
-            <label>Локація<select value={trialLocation} onChange={(e) => setTrialLocation(e.target.value)}><option>Основна локація</option><option>Локація 2</option></select></label>
+            <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
+              <option value="">Без локації</option>
+              {locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+            </select></label>
             <button className="primary full" onClick={scheduleTrial}>Підтвердити пробне</button>
           </div>}
 
