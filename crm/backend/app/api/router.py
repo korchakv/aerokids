@@ -209,33 +209,33 @@ def create_group_schedule(data: GroupScheduleCreate, org_id: UUID = Depends(requ
 
 
 @router.get("/group-schedules", response_model=list[GroupScheduleRead])
-def group_schedules(group_id: UUID | None = None, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.list_group_schedules(db, org_id, group_id)
+def group_schedules(group_id: UUID | None = None, access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)):
+    return crm.list_group_schedules(db, access.organization_id, group_id, access.user_id, access.role)
 
 
 @router.get("/groups/{group_id}/roster", response_model=list[GroupRosterStudent])
-def roster(group_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.group_roster(db, org_id, group_id)
+def roster(group_id: UUID, access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)):
+    return crm.group_roster(db, access.organization_id, group_id, access.user_id, access.role)
 
 
 @router.post("/lesson-sessions", response_model=LessonSessionRead, status_code=201)
-def create_lesson_session(data: LessonSessionCreate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.create_lesson_session(db, org_id, data)
+def create_lesson_session(data: LessonSessionCreate, access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)):
+    return crm.create_lesson_session(db, access.organization_id, data, access.user_id, access.role)
 
 
 @router.get("/lesson-sessions", response_model=list[LessonSessionRead])
-def lesson_sessions(group_id: UUID | None = None, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.list_lesson_sessions(db, org_id, group_id)
+def lesson_sessions(group_id: UUID | None = None, access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)):
+    return crm.list_lesson_sessions(db, access.organization_id, group_id, access.user_id, access.role)
 
 
 @router.put("/lesson-sessions/{session_id}/attendance", response_model=list[AttendanceRead])
-def update_attendance(session_id: UUID, data: AttendanceBulkUpdate, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.mark_attendance_bulk(db, org_id, session_id, data.items)
+def update_attendance(session_id: UUID, data: AttendanceBulkUpdate, access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)):
+    return crm.mark_attendance_bulk(db, access.organization_id, session_id, data.items, access.user_id, access.role)
 
 
 @router.get("/lesson-sessions/{session_id}/attendance", response_model=list[AttendanceRead])
-def attendance(session_id: UUID, org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.list_attendance(db, org_id, session_id)
+def attendance(session_id: UUID, access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)):
+    return crm.list_attendance(db, access.organization_id, session_id, access.user_id, access.role)
 
 
 @router.post("/subscription-plans", response_model=SubscriptionPlanRead, status_code=201)
