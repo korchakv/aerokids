@@ -820,6 +820,9 @@ function App() {
   }
 
   const currentMembership = session?.user.memberships.find((item) => item.organization_id === session.organizationId);
+  const headerContext = locations[0]
+    ? `${currentMembership?.organization_name ?? "School CRM"} · ${locations[0].name}`
+    : currentMembership?.organization_name ?? "School CRM";
   const navigation = visibleNavigation(currentMembership?.role);
   const canManageRecurringSchedule = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const canManageLeads = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
@@ -836,7 +839,7 @@ function App() {
 
       <main>
         <header>
-          <div><p className="eyebrow">Івано-Франківськ · основна локація</p><h1>{active}</h1></div>
+          <div><p className="eyebrow">{headerContext}</p><h1>{active}</h1></div>
           <div className="headerActions">
             {session && <div className="orgSwitcher">
               <select value={session.organizationId} onChange={(e) => { setSession(changeOrganization(session, e.target.value)); setActive("Дашборд"); }}>
