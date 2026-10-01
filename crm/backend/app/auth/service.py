@@ -125,7 +125,12 @@ def accept_invitation(db: Session, raw_token: str, full_name: str, password: str
         OrganizationInvitation.accepted_at.is_(None),
     ))
     now = datetime.now(timezone.utc)
-    if invitation is None or invitation.expires_at < now:
+    if invitation is None:
+        raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < now:
         raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
 
     user = db.scalar(select(User).where(User.email == invitation.email))
