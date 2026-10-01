@@ -261,3 +261,27 @@ export async function loadOperations(session: Session): Promise<OperationsBundle
 
   return { locations, staff, plans, payments };
 }
+
+
+export function apiPut<T>(path: string, body: unknown, session: Session) {
+  return request<T>(path, { method: "PUT", body: JSON.stringify(body) }, session);
+}
+
+export async function apiDelete(path: string, session: Session): Promise<void> {
+  if (!API_URL) throw new Error("API URL is not configured");
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+      "X-Organization-Id": session.organizationId,
+    },
+  });
+  if (!response.ok) {
+    let message = "Request failed";
+    try {
+      const body = await response.json();
+      message = body.detail ?? message;
+    } catch {}
+    throw new Error(message);
+  }
+}
