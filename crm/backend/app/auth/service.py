@@ -81,6 +81,9 @@ def auth_user_info(db: Session, user: User) -> AuthUserInfo:
             organization_id=organization.id,
             organization_name=organization.name,
             organization_slug=organization.slug,
+            organization_timezone=organization.timezone,
+            organization_currency=organization.currency,
+            organization_locale=organization.locale,
             role=membership.role,
         )
         for membership, organization in rows
