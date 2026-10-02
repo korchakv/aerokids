@@ -858,9 +858,22 @@ function App() {
         setSelectedCandidates([]);
         setShowGroupForm(false);
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити заняття.");
         return;
       }
+    }
+    const newStart = new Date(newLessonAt).getTime();
+    const newEnd = newStart + newLessonDuration * 60_000;
+    const overlap = lessons.find((lesson) => {
+      if (lesson.status === "cancelled") return false;
+      const start = new Date(lesson.startsAt).getTime();
+      const end = start + lesson.duration * 60_000;
+      return lesson.groupId === newLessonGroupId && newStart < end && newEnd > start;
+    });
+    if (overlap) {
+      setWorkspaceError("Час зайнятий: у цієї групи вже є заняття, яке перетинається з вибраним часом.");
+      return;
     }
     const nextId = crypto.randomUUID();
     setGroups((items) => [...items, {
@@ -953,6 +966,17 @@ function App() {
     setAttendance((all) => ({ ...all, [selectedLesson.id]: next }));
   };
 
+  const markUnmarkedAbsent = () => {
+    if (!selectedLesson) return;
+    setAttendance((all) => {
+      const current = { ...(all[selectedLesson.id] ?? {}) };
+      lessonStudents.forEach((student) => {
+        if (!current[student.id]) current[student.id] = "absent";
+      });
+      return { ...all, [selectedLesson.id]: current };
+    });
+  };
+
   const createGroupSchedule = async () => {
     if (!scheduleGroupId) return;
     if (apiEnabled && session) {
@@ -1012,17 +1036,23 @@ function App() {
   const saveAttendance = async () => {
     if (!selectedLesson) return;
     const lessonMarks = attendance[selectedLesson.id] ?? {};
+    const unmarked = lessonStudents.filter((student) => !lessonMarks[student.id]);
+    if (unmarked.length) {
+      setWorkspaceError(`Не відмічено: ${unmarked.map((student) => student.child).join(", ")}. Позначте кожного учня.`);
+      return;
+    }
     if (apiEnabled && session) {
       setAttendanceSaving(true);
       try {
         await apiPut(`/lesson-sessions/${selectedLesson.id}/attendance`, {
           items: lessonStudents.map((student) => ({
             student_id: student.id,
-            status: lessonMarks[student.id] ?? "present",
+            status: lessonMarks[student.id],
           })),
         }, session);
         await syncWorkspace(session);
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти відвідування.");
         return;
       } finally {
         setAttendanceSaving(false);
