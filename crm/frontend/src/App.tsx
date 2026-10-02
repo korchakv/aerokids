@@ -510,14 +510,21 @@ function App() {
   };
 
   const createManualLead = async () => {
-    if (!leadChildName.trim() || !leadContactName.trim() || !leadPhone.trim()) return;
+    const childNameError = personNameError(leadChildName, "Ім’я дитини");
+    const contactNameError = personNameError(leadContactName, "Контактна особа");
+    const phoneError = uaPhoneError(leadPhone);
+    if (childNameError || contactNameError || phoneError) {
+      setWorkspaceError(childNameError || contactNameError || phoneError);
+      return;
+    }
+    const normalizedPhone = normalizeUaPhone(leadPhone)!;
     if (apiEnabled && session) {
       try {
         await apiPost("/intake", {
-          child_first_name: leadChildName.trim(),
+          child_first_name: cleanSpaces(leadChildName),
           child_age: leadAge,
-          contact_name: leadContactName.trim(),
-          phone: leadPhone.trim(),
+          contact_name: cleanSpaces(leadContactName),
+          phone: normalizedPhone,
           source: leadSource,
           comment: leadComment.trim() || null,
         }, session);
@@ -538,10 +545,10 @@ function App() {
     const nextId = crypto.randomUUID();
     setLeads((items) => [{
       id: nextId,
-      child: leadChildName.trim(),
+      child: cleanSpaces(leadChildName),
       age: leadAge,
-      parent: leadContactName.trim(),
-      phone: leadPhone.trim(),
+      parent: cleanSpaces(leadContactName),
+      phone: formatUaPhone(normalizedPhone),
       source: leadSource,
       status: "Нова",
       comment: leadComment.trim() || undefined,
@@ -1185,14 +1192,25 @@ function App() {
   const selectedGroup = groups.find((item) => item.id === selectedGroupId) ?? null;
 
   const createStaffMember = async () => {
-    if (!staffName.trim()) return;
+    const nameError = personNameError(staffName, "Ім’я та прізвище");
+    const mailError = emailError(staffEmail);
+    const phoneError = uaPhoneError(staffPhone, false);
+    if (nameError || mailError || phoneError) {
+      setWorkspaceError(nameError || mailError || phoneError);
+      return;
+    }
+    if (!staffEmail.trim() && !staffPhone.trim()) {
+      setWorkspaceError("Вкажіть email або телефон працівника.");
+      return;
+    }
+    const normalizedStaffPhone = staffPhone.trim() ? normalizeUaPhone(staffPhone) : null;
     if (apiEnabled && session) {
       try {
         await apiPost("/staff", {
-          full_name: staffName.trim(),
+          full_name: cleanSpaces(staffName),
           role: staffRoleValue(staffRole),
-          email: staffEmail.trim() || null,
-          phone: staffPhone.trim() || null,
+          email: staffEmail.trim().toLowerCase() || null,
+          phone: normalizedStaffPhone,
           location_ids: locations[0] ? [locations[0].id] : [],
         }, session);
         await syncWorkspace(session);
@@ -1208,10 +1226,10 @@ function App() {
     const nextId = crypto.randomUUID();
     setStaff((items) => [...items, {
       id: nextId,
-      fullName: staffName.trim(),
+      fullName: cleanSpaces(staffName),
       role: staffRole,
-      email: staffEmail.trim(),
-      phone: staffPhone.trim(),
+      email: staffEmail.trim().toLowerCase(),
+      phone: normalizedStaffPhone ? formatUaPhone(normalizedStaffPhone) : "",
       locationIds: locations[0] ? [locations[0].id] : [],
       groupIds: [],
       isActive: true,
@@ -1238,10 +1256,15 @@ function App() {
   };
 
   const createInvitation = async () => {
-    if (!session || !inviteEmail.trim()) return;
+    if (!session) return;
+    const validation = emailError(inviteEmail, true);
+    if (validation) {
+      setWorkspaceError(validation);
+      return;
+    }
     try {
       const result = await apiPost<{ invite_token: string }>("/organization-invitations", {
-        email: inviteEmail.trim(),
+        email: inviteEmail.trim().toLowerCase(),
         role: staffRoleValue(inviteRole),
       }, session);
       const url = new URL(window.location.href);
