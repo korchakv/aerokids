@@ -1173,14 +1173,24 @@ function App() {
         </>}
 
         {active === "Заявки" && <section className="panel leadsPage">
-          <div className="panelHead">
+          <div className="panelHead leadsHead">
             <div><p className="eyebrow">Воронка</p><h2>Заявки та пробні</h2></div>
-            <div className="filters">
-              <button className={"chip " + (leadFilter === "all" ? "active" : "")} onClick={() => setLeadFilter("all")}>Усі</button>
-              <button className={"chip " + (leadFilter === "new" ? "active" : "")} onClick={() => setLeadFilter("new")}>Нові</button>
-              <button className={"chip " + (leadFilter === "trial" ? "active" : "")} onClick={() => setLeadFilter("trial")}>Пробні</button>
-              <button className={"chip " + (leadFilter === "waiting" ? "active" : "")} onClick={() => setLeadFilter("waiting")}>Очікують групу</button>
-            </div>
+            <label className="leadSort">Сортування<select value={leadSort} onChange={(e) => setLeadSort(e.target.value as typeof leadSort)}>
+              <option value="priority">Потребують дії</option>
+              <option value="newest">Найновіші</option>
+              <option value="oldest">Найстаріші</option>
+              <option value="trial">Найближче пробне</option>
+              <option value="age">За віком</option>
+            </select></label>
+          </div>
+          <div className="filters leadFilters">
+            <button className={"chip " + (leadFilter === "action" ? "active" : "")} onClick={() => setLeadFilter("action")}>В роботі</button>
+            <button className={"chip " + (leadFilter === "new" ? "active" : "")} onClick={() => setLeadFilter("new")}>Нові</button>
+            <button className={"chip " + (leadFilter === "trial" ? "active" : "")} onClick={() => setLeadFilter("trial")}>Пробні</button>
+            <button className={"chip " + (leadFilter === "no_show" ? "active" : "")} onClick={() => setLeadFilter("no_show")}>Не прийшли</button>
+            <button className={"chip " + (leadFilter === "after_trial" ? "active" : "")} onClick={() => setLeadFilter("after_trial")}>Після пробного</button>
+            <button className={"chip " + (leadFilter === "waiting" ? "active" : "")} onClick={() => setLeadFilter("waiting")}>Очікують групу</button>
+            <button className={"chip " + (leadFilter === "closed" ? "active" : "")} onClick={() => setLeadFilter("closed")}>Закриті</button>
           </div>
           <LeadTable leads={visibleLeads} onOpen={openLead} />
         </section>}
@@ -1748,7 +1758,7 @@ function App() {
 
           <div className="drawerActions">
             <button className="primary" onClick={() => setTrialMode("schedule")}>{selected.trialAt ? "Змінити пробне" : "Записати на пробне"}</button>
-            {selected.trialAt && selected.trialResult !== "completed" && <button className="search" onClick={() => setTrialMode("complete")}>Результат пробного</button>}
+            {selected.trialAt && selected.trialResult !== "completed" && selected.trialResult !== "no_show" && <button className="search" onClick={() => setTrialMode("complete")}>Результат пробного</button>}
           </div>
 
           {trialMode === "schedule" && <div className="workflowBox">
@@ -1768,7 +1778,58 @@ function App() {
             <div className="resultActions"><button className="primary" onClick={() => completeTrial("completed")}>Пробне пройдено</button><button className="search" onClick={() => completeTrial("no_show")}>Не прийшов</button></div>
           </div>}
 
-          {selected.trialResult === "completed" && <div className="resultCard"><span>Пробне завершено</span><b>{selected.recommendedLevel ?? "Рівень не вказано"}</b>{selected.teacherNotes && <p>{selected.teacherNotes}</p>}<small>Дитина автоматично перейшла в «Очікує групу».</small></div>}
+          {selected.trialResult === "completed" && <div className="resultCard postTrialCard">
+            <span>Пробне пройдено</span>
+            <b>{selected.recommendedLevel ?? "Рівень не вказано"}</b>
+            {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
+            {selected.status === "Після пробного" && <>
+              <small>Зафіксуйте рішення сім’ї. До «Очікує групу» дитина переходить тільки після підтвердження.</small>
+              <div className="postTrialActions">
+                <button className="primary" onClick={() => saveLeadOutcome("waiting_for_group")}>Готові навчатися</button>
+                <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Ще думають</button>
+                <button className="search dangerSoft" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Не хочуть продовжувати</button>
+              </div>
+            </>}
+            {selected.status === "Очікує групу" && <small>Готові навчатися · потрібно підібрати групу.</small>}
+          </div>}
+
+          {selected.trialResult === "no_show" && <div className="resultCard noShowCard">
+            <span>Не прийшли на пробне</span>
+            <b>Потрібен повторний контакт</b>
+            {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
+            <small>Заявка залишається активною. Можна перезаписати пробне або закрити її після контакту.</small>
+            <div className="postTrialActions">
+              <button className="primary" onClick={() => setTrialMode("schedule")}>Перезаписати пробне</button>
+              <button className="search" onClick={() => { setCloseKind("no_response"); setPostTrialMode("close"); setWorkspaceError(""); }}>Закрити заявку</button>
+            </div>
+          </div>}
+
+          {postTrialMode === "thinking" && <div className="workflowBox">
+            <div className="workflowHead"><h3>Ще думають</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
+            <p className="softPreferenceHint">Залишаємо заявку в роботі й ставимо дату, коли треба зв’язатися з батьками знову.</p>
+            <DateTimeEditor label="Наступний контакт" value={followUpAt} onChange={setFollowUpAt} />
+            <button className="primary full" disabled={!followUpAt} onClick={saveThinkingFollowUp}>Зберегти нагадування</button>
+          </div>}
+
+          {postTrialMode === "close" && <div className="workflowBox">
+            <div className="workflowHead"><h3>Закрити заявку</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
+            <label>Результат<select value={closeKind} onChange={(e) => setCloseKind(e.target.value as typeof closeKind)}>
+              <option value="declined">Відмовились</option>
+              <option value="no_response">Не відповідає</option>
+              <option value="not_relevant">Неактуально</option>
+            </select></label>
+            {closeKind === "declined" && <label>Причина<select value={closeReason} onChange={(e) => setCloseReason(e.target.value)}>
+              <option value="price">Ціна</option>
+              <option value="schedule">Не підходить графік</option>
+              <option value="child_not_interested">Дитині не сподобалось / не цікаво</option>
+              <option value="parents_changed_mind">Батьки передумали</option>
+              <option value="location">Далеко / не підходить локація</option>
+              <option value="other_club">Обрали інший гурток</option>
+              <option value="other">Інше</option>
+            </select></label>}
+            <label>Коментар<textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="За потреби додайте коротке пояснення" /></label>
+            <button className="primary full" onClick={closeLead}>Закрити заявку</button>
+          </div>}
 
           {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} /> : <div className="history">
             <h3>Історія</h3>
@@ -1784,9 +1845,12 @@ function App() {
 }
 
 function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) => void }) {
-  return <div className="table">
-    <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span></div>
-    {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{leadSourceLabel(lead.source)}</span><span className="pill">{lead.status}</span></button>)}
+  return <div className="table leadTable">
+    <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span><span>Наступна дія</span></div>
+    {leads.length === 0 && <div className="emptyState">За цим фільтром заявок немає.</div>}
+    {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}>
+      <b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{leadSourceLabel(lead.source)}</span><span className="pill">{lead.status}</span><span className={"nextAction " + (lead.nextContactAt && dateValue(lead.nextContactAt) < Date.now() ? "overdue" : "")}>{leadNextAction(lead)}</span>
+    </button>)}
   </div>;
 }
 
