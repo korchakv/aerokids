@@ -828,15 +828,16 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
             for payment in payment_rows:
                 linked = subscription_by_id.get(payment.subscription_id) if payment.subscription_id else None
                 payment.plan_id = linked.plan_id if linked else None
+                _attach_payment_financials(db, org_id, payment)
 
             latest_subscription = subscriptions[0] if subscriptions else None
             plan = scoped_get(db, SubscriptionPlan, org_id, latest_subscription.plan_id) if latest_subscription else None
-            pending = [item for item in payment_rows if item.status == PaymentStatus.PENDING]
+            pending = [item for item in payment_rows if item.status != PaymentStatus.CANCELLED and item.balance_minor > 0]
             dated_pending = [item for item in pending if item.due_date is not None]
             overdue = [item for item in dated_pending if item.due_date < today]
             due_today = [item for item in dated_pending if item.due_date == today]
             next_due_date = min((item.due_date for item in dated_pending), default=None)
-            last_paid = next((item for item in payment_rows if item.status == PaymentStatus.PAID), None)
+            last_paid = next((item for item in payment_rows if item.paid_minor - item.refunded_minor > 0), None)
             if overdue:
                 billing_status = "overdue"
             elif due_today:
@@ -851,10 +852,10 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
             billing = {
                 "status": billing_status,
                 "plan_name": plan.name if plan else None,
-                "amount_due_minor": sum(item.amount_minor for item in pending),
+                "amount_due_minor": sum(item.balance_minor for item in pending),
                 "next_due_date": next_due_date,
                 "last_paid_at": last_paid.paid_at if last_paid else None,
-                "last_paid_minor": last_paid.amount_minor if last_paid else None,
+                "last_paid_minor": (last_paid.paid_minor - last_paid.refunded_minor) if last_paid else None,
                 "subscription_ends_on": latest_subscription.ends_on if latest_subscription else None,
             }
 
