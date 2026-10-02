@@ -281,6 +281,7 @@ function App() {
   const [groupCandidateSaving, setGroupCandidateSaving] = useState(false);
   const [selectedGroupTeacherId, setSelectedGroupTeacherId] = useState<EntityId | "">("");
   const [groupTeacherSaving, setGroupTeacherSaving] = useState(false);
+  const [groupTeacherEditing, setGroupTeacherEditing] = useState(false);
   const [paymentReminders, setPaymentReminders] = useState<ApiPaymentReminder[]>([]);
   const [reminderSavingId, setReminderSavingId] = useState<EntityId | null>(null);
   const [showStaffForm, setShowStaffForm] = useState(false);
@@ -1080,6 +1081,7 @@ function App() {
     setShowGroupCandidatePicker(false);
     setGroupCandidateId("");
     setSelectedGroupTeacherId(groupTeacher(groupId)?.id ?? "");
+    setGroupTeacherEditing(false);
     if (!apiEnabled || !session) return;
     setGroupDetailLoading(true);
     try {
@@ -1137,6 +1139,7 @@ function App() {
         }, session);
       }
       await syncWorkspace(session);
+      setGroupTeacherEditing(false);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося призначити викладача.");
     } finally {
@@ -2012,7 +2015,7 @@ function App() {
           <section className="waitingSecondary" id="waiting-groups">
             <div className="waitingSecondaryHead">
               <div><p className="eyebrow">Формування нових груп</p><h2>Очікують групу <span>{waiting.length}</span></h2><p>Допоміжний список кандидатів. Використовуйте його, коли потрібно сформувати нову групу або дозаповнити існуючу.</p></div>
-              <div className="suggestion compact waitingSuggestion"><strong>{waiting.filter((x) => x.age >= 8 && x.age <= 10 && x.recommendedLevel === "Початковий").length}</strong><span>8–10 років · початковий</span><button className="link" onClick={() => setSelectedCandidates(waiting.filter((x) => x.age >= 8 && x.age <= 10 && x.recommendedLevel === "Початковий").map((x) => x.id))}>Вибрати схожих →</button></div>
+
             </div>
             <article className="panel waitingPanel">
               <div className="candidateControls">
@@ -2154,20 +2157,34 @@ function App() {
         </div>
       </div>}
 
-      {selectedGroupId && <div className="drawerBackdrop" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>
+      {selectedGroupId && <div className="drawerBackdrop groupPageBackdrop">
         <aside className="drawer groupDetailDrawer" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>×</button>
+          <div className="groupPageTopbar">
+            <button className="groupBackButton" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); setGroupTeacherEditing(false); }}>← До списку груп</button>
+            <button className="groupPageClose" aria-label="Закрити групу" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); setGroupTeacherEditing(false); }}>×</button>
+          </div>
           <p className="eyebrow">Група</p>
           <div className="groupDetailHero">
-            <div><h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2><p>{selectedGroup?.location ?? "Локація не вказана"} · {selectedGroup?.schedule ?? "Розклад не вказаний"}{selectedGroup?.teacherName ? " · Викладач: " + selectedGroup.teacherName : selectedTeacher ? " · Викладач: " + selectedTeacher.fullName : ""}</p></div>
+            <div className="groupDetailIdentity">
+              <h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2>
+              <div className="groupDetailMeta">
+                <span>{selectedGroup?.location ?? "Локація не вказана"}</span>
+                <span>{selectedGroup?.schedule ?? "Розклад не вказаний"}</span>
+                {canManageStaff
+                  ? <button className="groupTeacherLink" onClick={() => { setSelectedGroupTeacherId(groupTeacher(selectedGroupId)?.id ?? ""); setGroupTeacherEditing(true); }}>
+                      {selectedGroup?.teacherName ?? selectedTeacher?.fullName ? "Викладач: " + (selectedGroup?.teacherName ?? selectedTeacher?.fullName) : "+ Призначити викладача"}
+                    </button>
+                  : <span>{selectedGroup?.teacherName ?? selectedTeacher?.fullName ? "Викладач: " + (selectedGroup?.teacherName ?? selectedTeacher?.fullName) : "Викладач не призначений"}</span>}
+              </div>
+            </div>
             <div className="groupDetailHeroActions"><strong>{groupDetail?.members.length ?? selectedGroup?.members.length ?? 0}/{groupDetail?.group.capacity ?? selectedGroup?.capacity ?? "—"}</strong>{canManageLeads && <button className="primary compact" onClick={() => { setShowGroupCandidatePicker((value) => !value); setGroupCandidateId(existingGroupCandidates[0]?.id ?? ""); }}>+ Додати учня</button>}</div>
           </div>
-          {canManageStaff && <div className="groupTeacherAssign">
-            <label>Викладач<select value={selectedGroupTeacherId} onChange={(e) => setSelectedGroupTeacherId(e.target.value)}>
+          {canManageStaff && groupTeacherEditing && <div className="groupTeacherAssign">
+            <label>Викладач<select autoFocus value={selectedGroupTeacherId} onChange={(e) => setSelectedGroupTeacherId(e.target.value)}>
               <option value="">Не призначено</option>
               {activeTeachers.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.fullName}</option>)}
             </select></label>
-            <button className="search" disabled={groupTeacherSaving} onClick={assignTeacherToSelectedGroup}>{groupTeacherSaving ? "Зберігаємо…" : "Зберегти викладача"}</button>
+            <div className="groupTeacherAssignActions"><button className="search" onClick={() => setGroupTeacherEditing(false)}>Скасувати</button><button className="primary" disabled={groupTeacherSaving} onClick={assignTeacherToSelectedGroup}>{groupTeacherSaving ? "Зберігаємо…" : "Зберегти"}</button></div>
           </div>}
           {showGroupCandidatePicker && <div className="groupCandidatePicker">
             <div className="groupCandidatePickerHead"><div><b>Додати в існуючу групу</b><small>Доступні діти, які пройшли пробне або вже очікують групу.</small></div><span>{existingGroupCandidates.length} кандидатів</span></div>
