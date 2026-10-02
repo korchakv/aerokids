@@ -34,6 +34,7 @@ type Lead = {
   age: number;
   parent: string;
   phone: string;
+  childPhone?: string;
   source: string;
   status: LeadStatus;
   comment?: string;
@@ -204,6 +205,8 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [leadChildName, setLeadChildName] = useState("");
+  const [leadChildLastName, setLeadChildLastName] = useState("");
+  const [leadChildPhone, setLeadChildPhone] = useState("");
   const [leadAge, setLeadAge] = useState(9);
   const [leadContactName, setLeadContactName] = useState("");
   const [leadPhone, setLeadPhone] = useState("");
@@ -535,17 +538,22 @@ function App() {
 
   const createManualLead = async () => {
     const childNameError = personNameError(leadChildName, "Ім’я дитини");
-    const contactNameError = personNameError(leadContactName, "Контактна особа");
+    const childLastNameError = leadChildLastName.trim() ? personNameError(leadChildLastName, "Прізвище дитини") : "";
+    const childPhoneError = uaPhoneError(leadChildPhone, false);
+    const contactNameError = personNameError(leadContactName, "Ім’я та прізвище відповідального");
     const phoneError = uaPhoneError(leadPhone);
-    if (childNameError || contactNameError || phoneError) {
-      setWorkspaceError(childNameError || contactNameError || phoneError);
+    if (childNameError || childLastNameError || childPhoneError || contactNameError || phoneError) {
+      setWorkspaceError(childNameError || childLastNameError || childPhoneError || contactNameError || phoneError);
       return;
     }
     const normalizedPhone = normalizeUaPhone(leadPhone)!;
+    const normalizedChildPhone = leadChildPhone.trim() ? normalizeUaPhone(leadChildPhone) : null;
     if (apiEnabled && session) {
       try {
         await apiPost("/intake", {
           child_first_name: cleanSpaces(leadChildName),
+          child_last_name: leadChildLastName.trim() ? cleanSpaces(leadChildLastName) : null,
+          child_phone: normalizedChildPhone,
           child_age: leadAge,
           contact_name: cleanSpaces(leadContactName),
           phone: normalizedPhone,
@@ -556,6 +564,8 @@ function App() {
         setShowLeadForm(false);
         setActive("Заявки");
         setLeadChildName("");
+        setLeadChildLastName("");
+        setLeadChildPhone("");
         setLeadContactName("");
         setLeadPhone("");
         setLeadComment("");
@@ -569,7 +579,8 @@ function App() {
     const nextId = crypto.randomUUID();
     setLeads((items) => [{
       id: nextId,
-      child: cleanSpaces(leadChildName),
+      child: [cleanSpaces(leadChildName), leadChildLastName.trim() ? cleanSpaces(leadChildLastName) : ""].filter(Boolean).join(" "),
+      childPhone: normalizedChildPhone ? formatUaPhone(normalizedChildPhone) : undefined,
       age: leadAge,
       parent: cleanSpaces(leadContactName),
       phone: formatUaPhone(normalizedPhone),
@@ -2733,6 +2744,7 @@ function applyWorkspace(
     age: item.age ?? 0,
     parent: item.contact_name ?? "Контакт не вказано",
     phone: item.contact_phone ?? "",
+    childPhone: item.student_phone ?? undefined,
     source: item.source ?? "CRM",
     comment: item.comment ?? undefined,
     preferredLocationId: item.preferred_location_id ?? undefined,
@@ -2763,6 +2775,7 @@ function applyWorkspace(
     age: item.age ?? 0,
     parent: item.contact_name ?? "Контакт не вказано",
     phone: item.contact_phone ?? "",
+    childPhone: item.student_phone ?? undefined,
     source: item.source ?? "CRM",
     status: "Зарахований",
   }));
