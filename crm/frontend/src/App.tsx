@@ -165,8 +165,8 @@ function App() {
   const [paymentDueDate, setPaymentDueDate] = useState("2026-10-31");
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [planName, setPlanName] = useState("8 занять / 30 днів");
-  const [planPrice, setPlanPrice] = useState(1800);
-  const [planLessons, setPlanLessons] = useState(8);
+  const [planPrice, setPlanPrice] = useState("");
+  const [planLessons, setPlanLessons] = useState("8");
   const [locations, setLocations] = useState<LocationDemo[]>([
     { id: "1", name: "Основна локація", address: "Івано-Франківськ", isActive: true },
   ]);
@@ -246,6 +246,16 @@ function App() {
       ]);
       applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
       applyOperations(operations, setLocations, setStaff, setPlans, setPayments);
+      setPaymentStudentId((current) =>
+        bundle.students.some((student) => student.student_id === current)
+          ? current
+          : (bundle.students[0]?.student_id ?? "")
+      );
+      setPaymentPlanId((current) =>
+        operations.plans.some((plan) => plan.id === current && plan.price_minor > 0)
+          ? current
+          : (operations.plans.find((plan) => plan.price_minor > 0)?.id ?? operations.plans[0]?.id ?? "")
+      );
       if (!trialLocationId && operations.locations[0]) setTrialLocationId(operations.locations[0].id);
       if (!groupLocationId && operations.locations[0]) setGroupLocationId(operations.locations[0].id);
       applyTeaching(teaching, setLessons, setGroups);
@@ -709,7 +719,25 @@ function App() {
     setPayments((items) => items.map((item) => item.id === id ? { ...item, status: "paid", method: "Картка" } : item));
   };
 
+  const openPaymentForm = () => {
+    const nextStudentId = activeStudents.some((student) => student.id === paymentStudentId)
+      ? paymentStudentId
+      : (activeStudents[0]?.id ?? "");
+    const nextPlanId = plans.some((plan) => plan.id === paymentPlanId && plan.price > 0)
+      ? paymentPlanId
+      : (plans.find((plan) => plan.price > 0)?.id ?? "");
+
+    setPaymentStudentId(nextStudentId);
+    setPaymentPlanId(nextPlanId);
+    setWorkspaceError("");
+    setShowPaymentForm(true);
+  };
+
   const createPayment = async () => {
+    if (!paymentStudentId || !activeStudents.some((student) => student.id === paymentStudentId)) {
+      setWorkspaceError("Оберіть учня для нарахування.");
+      return;
+    }
     const plan = plans.find((item) => item.id === paymentPlanId);
     if (!plan || plan.price <= 0) {
       setWorkspaceError("Для нарахування оберіть абонемент із заданою ціною.");
@@ -717,6 +745,7 @@ function App() {
     }
     if (apiEnabled && session) {
       try {
+        setWorkspaceError("");
         const subscription = await apiPost<{ id: string }>("/student-subscriptions", {
           student_id: paymentStudentId,
           plan_id: paymentPlanId,
@@ -733,7 +762,8 @@ function App() {
         await syncWorkspace(session);
         setShowPaymentForm(false);
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити нарахування.");
         return;
       }
     }
@@ -750,28 +780,41 @@ function App() {
   };
 
   const createPlan = async () => {
-    if (!planName.trim() || planPrice < 0) return;
+    const parsedPrice = planPrice === "" ? Number.NaN : Number(planPrice);
+    const parsedLessons = planLessons === "" ? null : Number(planLessons);
+    if (!planName.trim() || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      setWorkspaceError("Вкажіть назву та коректну ціну тарифу.");
+      return;
+    }
+    if (parsedLessons !== null && (!Number.isInteger(parsedLessons) || parsedLessons < 0)) {
+      setWorkspaceError("Кількість занять має бути цілим числом.");
+      return;
+    }
     if (apiEnabled && session) {
       try {
+        setWorkspaceError("");
         await apiPost("/subscription-plans", {
           name: planName.trim(),
-          price_minor: Math.round(planPrice * 100),
+          price_minor: Math.round(parsedPrice * 100),
           period_days: 30,
-          lessons_included: planLessons > 0 ? planLessons : null,
+          lessons_included: parsedLessons && parsedLessons > 0 ? parsedLessons : null,
         }, session);
         await syncWorkspace(session);
+        setPlanPrice("");
         setShowPlanForm(false);
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити тариф.");
         return;
       }
     }
     setPlans((items) => [...items, {
       id: crypto.randomUUID(),
       name: planName.trim(),
-      price: planPrice,
-      lessons: planLessons > 0 ? planLessons : null,
+      price: parsedPrice,
+      lessons: parsedLessons && parsedLessons > 0 ? parsedLessons : null,
     }]);
+    setPlanPrice("");
     setShowPlanForm(false);
   };
 
@@ -1166,7 +1209,7 @@ function App() {
               <article><span>Прострочено</span><strong>{money(paymentTotals.overdue)}</strong><small>{payments.filter((x) => x.status === "overdue").length} боргів</small></article>
             </section>
             <article className="panel paymentsPanel">
-              <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати учнів</h2></div><button className="primary" onClick={() => setShowPaymentForm(true)}>+ Нарахування</button></div>
+              <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати учнів</h2></div><button className="primary" onClick={openPaymentForm}>+ Нарахування</button></div>
               <div className="paymentTable">
                 <div className="paymentRow paymentHead"><span>Учень</span><span>Абонемент</span><span>Сума</span><span>До дати</span><span>Статус</span><span></span></div>
                 {payments.map((payment) => {
@@ -1367,7 +1410,7 @@ function App() {
         </section>}
       </main>
 
-      {showSearch && <div className="modalBackdrop" onClick={() => setShowSearch(false)}>
+      {showSearch && <div className="modalBackdrop">
         <div className="groupModal searchModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowSearch(false)}>×</button>
           <p className="eyebrow">Пошук</p><h2>Знайти в CRM</h2>
@@ -1396,7 +1439,7 @@ function App() {
         </div>
       </div>}
 
-      {showLeadForm && <div className="modalBackdrop" onClick={() => setShowLeadForm(false)}>
+      {showLeadForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowLeadForm(false)}>×</button>
           <p className="eyebrow">Нова заявка</p><h2>Додати дитину</h2>
@@ -1418,7 +1461,7 @@ function App() {
         </div>
       </div>}
 
-      {showInviteForm && <div className="modalBackdrop" onClick={() => setShowInviteForm(false)}>
+      {showInviteForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowInviteForm(false)}>×</button>
           <p className="eyebrow">Доступ до CRM</p><h2>Запросити працівника</h2>
@@ -1433,7 +1476,7 @@ function App() {
         </div>
       </div>}
 
-            {showStaffForm && <div className="modalBackdrop" onClick={() => setShowStaffForm(false)}>
+            {showStaffForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowStaffForm(false)}>×</button>
           <p className="eyebrow">Команда</p><h2>Новий працівник</h2>
@@ -1444,7 +1487,7 @@ function App() {
         </div>
       </div>}
 
-      {showLocationForm && <div className="modalBackdrop" onClick={() => setShowLocationForm(false)}>
+      {showLocationForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowLocationForm(false)}>×</button>
           <p className="eyebrow">Мережа</p><h2>Нова локація</h2>
@@ -1486,27 +1529,27 @@ function App() {
         </aside>
       </div>}
 
-            {showPlanForm && <div className="modalBackdrop" onClick={() => setShowPlanForm(false)}>
+            {showPlanForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowPlanForm(false)}>×</button>
           <p className="eyebrow">Абонементи</p><h2>Новий тариф</h2>
           <label>Назва<input value={planName} onChange={(e) => setPlanName(e.target.value)} /></label>
           <div className="formTwo">
-            <label>Ціна, грн<input type="number" min={0} value={planPrice} onChange={(e) => setPlanPrice(Number(e.target.value))} /></label>
-            <label>Занять<input type="number" min={0} value={planLessons} onChange={(e) => setPlanLessons(Number(e.target.value))} /></label>
+            <label>Ціна, грн<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="2500" value={planPrice} onChange={(e) => setPlanPrice(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /></label>
+            <label>Занять<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="8" value={planLessons} onChange={(e) => setPlanLessons(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /></label>
           </div>
-          <button className="primary full" disabled={!planName.trim()} onClick={createPlan}>Створити тариф</button>
+          <button className="primary full" disabled={!planName.trim() || planPrice === ""} onClick={createPlan}>Створити тариф</button>
         </div>
       </div>}
 
-            {showPaymentForm && <div className="modalBackdrop" onClick={() => setShowPaymentForm(false)}>
+            {showPaymentForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
           <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
           <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(e.target.value)}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · {student.parent}</option>)}</select></label>
           <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {plan.price ? money(plan.price) : "індивідуально"}</option>)}</select></label>
           <label>Оплатити до<input type="date" value={paymentDueDate} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
-          <button className="primary full" onClick={createPayment}>Створити нарахування</button>
+          <button className="primary full" disabled={!paymentStudentId || !paymentPlanId || !plans.some((plan) => plan.id === paymentPlanId && plan.price > 0)} onClick={createPayment}>Створити нарахування</button>
         </div>
       </div>}
 
@@ -1550,7 +1593,7 @@ function App() {
         </aside>
       </div>}
 
-      {showGroupForm && <div className="modalBackdrop" onClick={() => setShowGroupForm(false)}>
+      {showGroupForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowGroupForm(false)}>×</button>
           <p className="eyebrow">Нова група</p>
