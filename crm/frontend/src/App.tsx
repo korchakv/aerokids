@@ -1604,7 +1604,7 @@ function App() {
   return (
     <div className="shell">
       <aside>
-        <div className="brand"><img className="brandLogo" src="https://aerokids.space/assets/logo/aerokids-logo-master.webp" alt="AeroKids" /><div><b>AeroKids CRM</b><small>{currentMembership?.organization_name ?? "Керування школою"}</small></div></div>
+        <div className="brand"><img className="brandLogo" src="/aerokids-logo-master-v1.png" alt="AeroKids" /><div><b>AeroKids CRM</b><small>{currentMembership?.organization_name ?? "Керування школою"}</small></div></div>
         <nav>{navigation.map((item) => <button onClick={() => {
           if (item === "Налаштування" && currentMembership) {
             setOrganizationName(currentMembership.organization_name);
@@ -3103,7 +3103,7 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
 
   return <div className="loginScreen">
     <div className="loginCard">
-      <div className="loginBrand"><img className="brandLogo brandLogoLarge" src="https://aerokids.space/assets/logo/aerokids-logo-master.webp" alt="AeroKids" /><div><b>AeroKids CRM</b><small>Керування школою в одному місці</small></div></div>
+      <div className="loginBrand"><img className="brandLogo brandLogoLarge" src="/aerokids-logo-master-v1.png" alt="AeroKids" /><div><b>AeroKids CRM</b><small>Керування школою в одному місці</small></div></div>
 
       {resetToken ? <>
         <p className="eyebrow">Новий пароль</p>
