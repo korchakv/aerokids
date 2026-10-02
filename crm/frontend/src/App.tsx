@@ -1856,66 +1856,70 @@ function App() {
           </section>
         </section>}
 
-                {active === "Групи" && <section className="groupsLayout">
-          <article className="panel">
-            <div className="panelHead"><div><p className="eyebrow">Waiting list</p><h2>Очікують групу</h2></div><span className="counter">{waiting.length}</span></div>
-            <div className="candidateControls">
-              <label className="candidateSelect">Вік<select value={candidateAgeFilter} onChange={(e) => setCandidateAgeFilter(e.target.value as typeof candidateAgeFilter)}>
-                <option value="all">Усі віки</option>
-                <option value="8-10">8–10 років</option>
-                <option value="11-13">11–13 років</option>
-              </select></label>
-              <label className="candidateSelect">Рівень<select value={candidateLevelFilter} onChange={(e) => setCandidateLevelFilter(e.target.value)}>
-                <option value="all">Усі рівні</option>
-                {candidateLevels.map((level) => <option value={level} key={level}>{level}</option>)}
-              </select></label>
-              <label className="candidateSelect">Бажана локація<select value={candidateLocationFilter} onChange={(e) => setCandidateLocationFilter(e.target.value)}>
-                <option value="all">Усі локації</option>
-                <option value="none">Не вказано</option>
-                {locations.filter((location) => location.isActive).map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
-              </select></label>
-              <label className="candidateSelect">Сортування<select value={candidateSort} onChange={(e) => setCandidateSort(e.target.value as typeof candidateSort)}>
-                <option value="match">Найкращий збіг</option>
-                <option value="age">За віком</option>
-                <option value="name">За ім’ям</option>
-              </select></label>
+                {active === "Групи" && <section className="groupsPage">
+          <article className="panel groupsPrimary">
+            <div className="panelHead groupsPrimaryHead">
+              <div><p className="eyebrow">Основне</p><h2>Активні групи</h2><p className="sectionLead">Відкрийте групу, щоб побачити учасників, відвідування, пропуски, оплати та історію.</p></div>
+              <div className="groupsHeadActions"><span className="counter">{groups.length}</span>{waiting.length > 0 && <button className="search" onClick={() => document.getElementById("waiting-groups")?.scrollIntoView({ behavior: "smooth" })}>Очікують: {waiting.length}</button>}</div>
             </div>
-            <div className="candidateFilters" aria-label="Фільтр за збігом графіка">
-              {([['all','Усі збіги'],['match','Підходить'],['partial','Частково'],['conflict','Узгодити'],['unknown','Невідомо']] as const).map(([value,label]) => <button className={"chip " + (candidateMatchFilter === value ? "active" : "")} onClick={() => setCandidateMatchFilter(value)} key={value}>{label}</button>)}
-            </div>
-            <div className="candidateList">
-              {visibleWaiting.length === 0 && <div className="emptyState">За цим фільтром кандидатів немає.</div>}
-              {visibleWaiting.map((lead) => { const match = candidateCompatibility(lead, groupSchedule, groupLocationId || null); return <label className={"candidate " + (selectedCandidates.includes(lead.id) ? "selected" : "")} key={lead.id}>
-                <input type="checkbox" checked={selectedCandidates.includes(lead.id)} onChange={() => toggleCandidate(lead.id)} />
-                <span className="candidateAvatar">{lead.child[0]}</span>
-                <span className="candidateMain"><b>{lead.child}</b><small>{lead.age} років · {lead.recommendedLevel ?? "Рівень не вказано"}</small><small>{availabilityLabel(lead.availability ?? [])}{lead.preferredLocationName ? " · " + lead.preferredLocationName : ""}</small><MatchExplanation match={match} /></span>
-                <MatchBadge match={match} />
-              </label>})}
-            </div>
-            <div className="selectionBar">
-              <span>Вибрано: <b>{selectedCandidates.length}</b></span>
-              <button className="primary" disabled={!selectedCandidates.length} onClick={() => setShowGroupForm(true)}>Створити групу</button>
-            </div>
+            {groups.length === 0 ? <div className="groupsEmptyPrimary">
+              <strong>Ще немає створених груп</strong>
+              <span>Виберіть дітей зі списку очікування нижче та сформуйте першу групу.</span>
+            </div> : <div className="groupCards groupCardsPrimary">
+              {groups.map((group) => <button className="groupCard groupCardButton groupCardPrimary" key={group.id} onClick={() => openGroup(group.id)}>
+                <div className="groupCardMain"><span className="groupCardIcon">{group.name.slice(0,1)}</span><span><b>{group.name}</b><small>{group.ages} років</small></span></div>
+                <div className="groupCardInfo"><span><small>Розклад</small><b>{group.schedule}</b></span><span><small>Локація</small><b>{group.location}</b></span></div>
+                <div className="groupCardCapacity"><div><span>Заповненість</span><strong>{group.members.length}/{group.capacity}</strong></div><div className="capacityTrack"><i style={{ width: Math.min(100, group.members.length / group.capacity * 100) + "%" }} /></div></div>
+                <div className="groupCardFooter"><span>{group.members.length} учнів</span><strong>Відкрити групу →</strong></div>
+              </button>)}
+            </div>}
           </article>
 
-          <div className="groupsSide">
-            <article className="panel">
-              <p className="eyebrow">Підказка CRM</p>
-              <h2>Схожі кандидати</h2>
-              <div className="suggestion compact"><strong>{waiting.filter((x) => x.age >= 8 && x.age <= 10 && x.recommendedLevel === "Початковий").length}</strong><span>8–10 років · початковий</span><button className="link" onClick={() => setSelectedCandidates(waiting.filter((x) => x.age >= 8 && x.age <= 10 && x.recommendedLevel === "Початковий").map((x) => x.id))}>Вибрати цих дітей →</button></div>
-            </article>
-            <article className="panel">
-              <div className="panelHead"><div><p className="eyebrow">Активні</p><h2>Групи</h2></div><span className="counter">{groups.length}</span></div>
-              <div className="groupCards">
-                {groups.map((group) => <button className="groupCard groupCardButton" key={group.id} onClick={() => openGroup(group.id)}>
-                  <div><b>{group.name}</b><span>{group.schedule}</span></div>
-                  <div className="capacity"><strong>{group.members.length}/{group.capacity}</strong><span>{group.location}</span></div>
-                  <div className="capacityTrack"><i style={{ width: Math.min(100, group.members.length / group.capacity * 100) + "%" }} /></div>
-                  <small className="groupOpenHint">Відкрити групу →</small>
-                </button>)}
+          <section className="waitingSecondary" id="waiting-groups">
+            <div className="waitingSecondaryHead">
+              <div><p className="eyebrow">Формування нових груп</p><h2>Очікують групу <span>{waiting.length}</span></h2><p>Допоміжний список кандидатів. Використовуйте його, коли потрібно сформувати нову групу або дозаповнити існуючу.</p></div>
+              <div className="suggestion compact waitingSuggestion"><strong>{waiting.filter((x) => x.age >= 8 && x.age <= 10 && x.recommendedLevel === "Початковий").length}</strong><span>8–10 років · початковий</span><button className="link" onClick={() => setSelectedCandidates(waiting.filter((x) => x.age >= 8 && x.age <= 10 && x.recommendedLevel === "Початковий").map((x) => x.id))}>Вибрати схожих →</button></div>
+            </div>
+            <article className="panel waitingPanel">
+              <div className="candidateControls">
+                <label className="candidateSelect">Вік<select value={candidateAgeFilter} onChange={(e) => setCandidateAgeFilter(e.target.value as typeof candidateAgeFilter)}>
+                  <option value="all">Усі віки</option>
+                  <option value="8-10">8–10 років</option>
+                  <option value="11-13">11–13 років</option>
+                </select></label>
+                <label className="candidateSelect">Рівень<select value={candidateLevelFilter} onChange={(e) => setCandidateLevelFilter(e.target.value)}>
+                  <option value="all">Усі рівні</option>
+                  {candidateLevels.map((level) => <option value={level} key={level}>{level}</option>)}
+                </select></label>
+                <label className="candidateSelect">Бажана локація<select value={candidateLocationFilter} onChange={(e) => setCandidateLocationFilter(e.target.value)}>
+                  <option value="all">Усі локації</option>
+                  <option value="none">Не вказано</option>
+                  {locations.filter((location) => location.isActive).map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+                </select></label>
+                <label className="candidateSelect">Сортування<select value={candidateSort} onChange={(e) => setCandidateSort(e.target.value as typeof candidateSort)}>
+                  <option value="match">Найкращий збіг</option>
+                  <option value="age">За віком</option>
+                  <option value="name">За ім’ям</option>
+                </select></label>
+              </div>
+              <div className="candidateFilters" aria-label="Фільтр за збігом графіка">
+                {([['all','Усі збіги'],['match','Підходить'],['partial','Частково'],['conflict','Узгодити'],['unknown','Невідомо']] as const).map(([value,label]) => <button className={"chip " + (candidateMatchFilter === value ? "active" : "")} onClick={() => setCandidateMatchFilter(value)} key={value}>{label}</button>)}
+              </div>
+              <div className="candidateList candidateListSecondary">
+                {visibleWaiting.length === 0 && <div className="emptyState">За цим фільтром кандидатів немає.</div>}
+                {visibleWaiting.map((lead) => { const match = candidateCompatibility(lead, groupSchedule, groupLocationId || null); return <label className={"candidate " + (selectedCandidates.includes(lead.id) ? "selected" : "")} key={lead.id}>
+                  <input type="checkbox" checked={selectedCandidates.includes(lead.id)} onChange={() => toggleCandidate(lead.id)} />
+                  <span className="candidateAvatar">{lead.child[0]}</span>
+                  <span className="candidateMain"><b>{lead.child}</b><small>{lead.age} років · {lead.recommendedLevel ?? "Рівень не вказано"}</small><small>{availabilityLabel(lead.availability ?? [])}{lead.preferredLocationName ? " · " + lead.preferredLocationName : ""}</small><MatchExplanation match={match} /></span>
+                  <MatchBadge match={match} />
+                </label>})}
+              </div>
+              <div className="selectionBar">
+                <span>Вибрано: <b>{selectedCandidates.length}</b></span>
+                <button className="primary" disabled={!selectedCandidates.length} onClick={() => setShowGroupForm(true)}>Створити нову групу</button>
               </div>
             </article>
-          </div>
+          </section>
         </section>}
 
         {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && active !== "Розклад" && active !== "Відвідування" && active !== "Оплати" && active !== "Працівники" && active !== "Локації" && active !== "Звіти" && <section className="panel placeholder">
