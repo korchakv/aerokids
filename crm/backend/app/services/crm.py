@@ -843,7 +843,7 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
                 billing_status = "due"
             elif pending:
                 billing_status = "upcoming"
-            elif latest_subscription and latest_subscription.status == SubscriptionStatus.ACTIVE:
+            elif latest_subscription and latest_subscription.status == SubscriptionStatus.ACTIVE and latest_subscription.ends_on >= today:
                 billing_status = "current"
             else:
                 billing_status = "no_plan"
@@ -1051,7 +1051,7 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
         subscription_id=subscription.id,
         amount_minor=amount_minor,
         currency=organization.currency,
-        due_date=data.due_date,
+        due_date=data.due_date or data.starts_on,
         note=data.note or plan.name,
     )
     db.add(payment)
@@ -1122,8 +1122,8 @@ def list_payments(db: Session, org_id: UUID, student_id: UUID | None = None, sta
 
 def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: PaymentMethod, paid_at: datetime | None = None, actor_user_id: UUID | None = None) -> Payment:
     payment = scoped_get(db, Payment, org_id, payment_id)
-    if payment.status == PaymentStatus.CANCELLED:
-        raise HTTPException(status_code=409, detail="Cancelled payment cannot be marked as paid")
+    if payment.status != PaymentStatus.PENDING:
+        raise HTTPException(status_code=409, detail="Only pending payments can be marked as paid")
     payment.status = PaymentStatus.PAID
     payment.method = method
     payment.paid_at = paid_at or datetime.now(timezone.utc)
