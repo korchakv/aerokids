@@ -50,7 +50,7 @@ def main():
         "full_name": "Smoke Owner",
         "email": "owner@smoke.test",
         "password": "smoke-test-password-123",
-    }, headers={"X-Bootstrap-Secret": "local-first-run-key-for-testing-only"})
+    }, headers={"X-Bootstrap-Secret": "local-bootstrap-secret-change-before-public-deploy"})
     assert status == 201, bootstrap
     token = bootstrap["access_token"]
     organization_id = bootstrap["organization_id"]

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, User
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
+from app.services.schedule_matching import enrollment_schedule_note, evaluate_schedule_match
 
 def record_audit(
     db: Session,
@@ -525,15 +526,26 @@ def form_group(db: Session, org_id: UUID, data, actor_user_id: UUID | None = Non
             ))
 
         for student in students:
+            windows = list(db.scalars(select(StudentAvailability).where(
+                StudentAvailability.organization_id == org_id,
+                StudentAvailability.student_id == student.id,
+            )))
+            match = evaluate_schedule_match(data.schedule_slots, windows, data.location_id, student.preferred_location_id)
+            note = enrollment_schedule_note(match, data.schedule_slots, windows)
             db.add(Enrollment(
                 organization_id=org_id,
                 student_id=student.id,
                 group_id=group.id,
                 started_at=date.today(),
+                schedule_match=match.status,
+                schedule_note=note,
             ))
             student.crm_status = CrmStatus.ENROLLED
             student.student_status = StudentStatus.ACTIVE
-            record_audit(db, org_id, "student", student.id, "student.enrolled", {"group_id": str(group.id), "group_name": group.name}, actor_user_id=actor_user_id)
+            record_audit(db, org_id, "student", student.id, "student.enrolled", {
+                "group_id": str(group.id), "group_name": group.name,
+                "schedule_match": match.status, "schedule_note": note,
+            }, actor_user_id=actor_user_id)
         record_audit(db, org_id, "group", group.id, "group.created", {
             "name": group.name,
             "student_count": len(students),
@@ -1186,6 +1198,8 @@ def student_preferences(db: Session, org_id: UUID, student_id: UUID) -> dict:
             "weekday": item.weekday,
             "start_time": item.start_time,
             "end_time": item.end_time,
+            "preference": item.preference,
+            "note": item.note,
         } for item in availability],
     }
 
@@ -1214,6 +1228,8 @@ def replace_student_preferences(db: Session, org_id: UUID, student_id: UUID, dat
             weekday=slot.weekday,
             start_time=slot.start_time,
             end_time=slot.end_time,
+            preference=slot.preference,
+            note=slot.note,
         ))
 
     record_audit(db, org_id, "student", student.id, "student.preferences_updated", {
@@ -1222,6 +1238,28 @@ def replace_student_preferences(db: Session, org_id: UUID, student_id: UUID, dat
     }, actor_user_id=actor_user_id)
     db.commit()
     return student_preferences(db, org_id, student_id)
+
+
+def preview_group_matches(db: Session, org_id: UUID, data) -> list[dict]:
+    if data.location_id is not None:
+        scoped_get(db, Location, org_id, data.location_id)
+    results = []
+    for student_id in data.student_ids:
+        student = scoped_get(db, Student, org_id, student_id)
+        windows = list(db.scalars(select(StudentAvailability).where(
+            StudentAvailability.organization_id == org_id,
+            StudentAvailability.student_id == student.id,
+        )))
+        match = evaluate_schedule_match(data.schedule_slots, windows, data.location_id, student.preferred_location_id)
+        results.append({
+            "student_id": student.id,
+            "status": match.status,
+            "summary": match.summary,
+            "matching_slots": [vars(item) for item in match.matching_slots],
+            "partial_slots": [vars(item) for item in match.partial_slots],
+            "conflicting_slots": [vars(item) for item in match.conflicting_slots],
+        })
+    return results
 
 
 def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
