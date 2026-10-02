@@ -1730,11 +1730,13 @@ function App() {
           <p className="eyebrow">Картка заявки</p>
           <h2>{selected.child}, {selected.age} років</h2>
           <div className="contactCard"><span>Контакт</span><b>{selected.parent}</b><a href={"tel:" + selected.phone.replace(/\s/g, "")}>{selected.phone}</a></div>
-          <label className="statusField">Статус
-            <select value={selected.status} onChange={(e) => updateStatus(selected.id, e.target.value as LeadStatus)}>
-              {statuses.map((status) => <option key={status}>{status}</option>)}
-            </select>
-          </label>
+          {["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status)
+            ? <div className="statusField statusReadonly">Статус<strong>{selected.status}</strong></div>
+            : <label className="statusField">Статус
+                <select value={selected.status} onChange={(e) => updateStatus(selected.id, e.target.value as LeadStatus)}>
+                  {statuses.map((status) => <option key={status}>{status}</option>)}
+                </select>
+              </label>}
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selected.nextContactAt && <div className="noteBox followUpBox"><span>Наступний контакт</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>}
           {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}</div>}
