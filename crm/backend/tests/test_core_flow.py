@@ -1380,7 +1380,7 @@ def test_auth_membership_returns_organization_locale_settings(client):
     assert membership["organization_locale"] == "cs-CZ"
 
 
-def test_intake_accepts_explicit_international_phone_and_deduplicates_repeat(client):
+def test_intake_normalizes_ukrainian_phone_and_deduplicates_repeat(client):
     org = create_org(client, "International School", "international-intake")
 
     first = client.post(
@@ -1389,7 +1389,7 @@ def test_intake_accepts_explicit_international_phone_and_deduplicates_repeat(cli
             "child_first_name": "Ola",
             "child_age": 9,
             "contact_name": "Anna",
-            "phone": "+48 501 234 567",
+            "phone": "067 123 45 67",
             "source": "website",
             "comment": "First request",
         },
@@ -1402,7 +1402,7 @@ def test_intake_accepts_explicit_international_phone_and_deduplicates_repeat(cli
             "child_first_name": "ola",
             "child_age": 9,
             "contact_name": "Anna",
-            "phone": "+48 (501) 234-567",
+            "phone": "+380 (67) 123-45-67",
             "source": "website",
             "comment": "Repeated request",
         },
@@ -1414,7 +1414,7 @@ def test_intake_accepts_explicit_international_phone_and_deduplicates_repeat(cli
     leads = client.get("/workspace/leads", headers={"X-Organization-Id": org["id"]})
     assert leads.status_code == 200, leads.text
     assert len(leads.json()) == 1
-    assert leads.json()[0]["contact_phone"] == "+48501234567"
+    assert leads.json()[0]["contact_phone"] == "+380671234567"
 
     events = client.get(
         "/audit-events",
