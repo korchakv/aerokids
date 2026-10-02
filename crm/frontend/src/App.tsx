@@ -1536,17 +1536,26 @@ function App() {
             <article className="panel paymentsPanel">
               <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати учнів</h2></div><button className="primary" onClick={openPaymentForm}>+ Нарахування</button></div>
               <div className="paymentTable">
-                <div className="paymentRow paymentHead"><span>Учень</span><span>Абонемент</span><span>Сума</span><span>До дати</span><span>Статус</span><span></span></div>
+                <div className="paymentRow paymentHead"><span>Учень</span><span>Абонемент</span><span>Нараховано / залишок</span><span>До дати</span><span>Статус</span><span>Дії</span></div>
                 {payments.map((payment) => {
                   const student = leads.find((lead) => lead.id === payment.studentId);
                   const plan = plans.find((item) => item.id === payment.planId);
+                  const subscription = payment.subscriptionId ? subscriptions.find((item) => item.id === payment.subscriptionId) : undefined;
+                  const statusLabel = payment.status === "paid" ? "Сплачено" : payment.status === "overdue" ? "Прострочено" : payment.status === "refunded" ? "Повернено" : payment.status === "cancelled" ? "Скасовано" : "Очікується";
                   return <div className="paymentRow" key={payment.id}>
                     <span><b>{student?.child ?? "Учень"}</b><small>{student?.parent}</small></span>
-                    <span>{plan?.name ?? "—"}</span>
-                    <span><b>{money(payment.amount)}</b></span>
-                    <span>{new Date(payment.dueDate).toLocaleDateString("uk-UA")}</span>
-                    <span className={"paymentStatus " + payment.status}>{payment.status === "paid" ? "Сплачено" : payment.status === "overdue" ? "Прострочено" : "Очікується"}</span>
-                    <span>{payment.status !== "paid" ? <button className="link payAction" onClick={() => markPaymentPaid(payment.id)}>Позначити сплачено</button> : <small>{payment.method}</small>}</span>
+                    <span className="paymentPlanCell"><b>{plan?.name ?? "—"}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}</span>
+                    <span className="paymentAmountCell"><b>{money(payment.adjustedAmount)}</b><small>{payment.balanceAmount > 0 ? <>Залишок: {money(payment.balanceAmount)}</> : <>Внесено: {money(Math.max(0, payment.paidAmount - payment.refundedAmount))}</>}{payment.refundedAmount > 0 ? " · повернено " + money(payment.refundedAmount) : ""}</small></span>
+                    <span>{payment.dueDate ? new Date(payment.dueDate + "T00:00:00").toLocaleDateString("uk-UA") : "—"}</span>
+                    <span className={"paymentStatus " + payment.status}>{statusLabel}</span>
+                    <span className="paymentActions">
+                      {payment.balanceAmount > 0 && payment.status !== "cancelled" && <button className="link payAction" onClick={() => markPaymentPaid(payment.id)}>Сплатити повністю</button>}
+                      {payment.balanceAmount > 0 && payment.status !== "cancelled" && <button className="link" onClick={() => openPaymentAction(payment, "partial")}>Часткова</button>}
+                      {payment.paidAmount - payment.refundedAmount > 0 && payment.status !== "cancelled" && <button className="link" onClick={() => openPaymentAction(payment, "refund")}>Повернення</button>}
+                      {payment.status !== "cancelled" && <button className="link" onClick={() => openPaymentAction(payment, "adjustment")}>Коригувати</button>}
+                      {subscription && subscription.status !== "cancelled" && <button className="link" onClick={() => toggleAutoRenew(subscription.id, !subscription.auto_renew)}>{subscription.auto_renew ? "Вимкнути авто" : "Увімкнути авто"}</button>}
+                      {subscription?.status === "paused" ? <button className="link" onClick={() => resumeSubscriptionNow(subscription.id)}>Відновити</button> : subscription && subscription.status === "active" ? <button className="link" onClick={() => openPauseSubscription(subscription.id)}>Пауза</button> : null}
+                    </span>
                   </div>;
                 })}
               </div>
