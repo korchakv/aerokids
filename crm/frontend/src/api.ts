@@ -143,9 +143,14 @@ export type WorkspaceLead = {
   contact_phone: string | null;
   latest_trial_id: string | null;
   latest_trial_at: string | null;
+  latest_trial_status: "scheduled" | "completed" | "no_show" | "cancelled" | null;
   trial_location_id: string | null;
   trial_location_name: string | null;
   recommended_level: string | null;
+  teacher_notes: string | null;
+  next_contact_at: string | null;
+  close_reason: string | null;
+  close_note: string | null;
 };
 
 export type WorkspaceStudent = {
