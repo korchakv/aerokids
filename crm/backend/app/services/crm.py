@@ -1290,13 +1290,13 @@ def run_billing_renewals(
     candidates = list(db.scalars(select(StudentSubscription).where(
         StudentSubscription.organization_id == org_id,
         StudentSubscription.auto_renew.is_(True),
-        StudentSubscription.status == SubscriptionStatus.ACTIVE,
+        StudentSubscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED]),
         StudentSubscription.ends_on <= horizon,
     ).order_by(StudentSubscription.ends_on, StudentSubscription.created_at)))
 
     for original in candidates:
         current = original
-        while current.auto_renew and current.status == SubscriptionStatus.ACTIVE and current.ends_on <= horizon:
+        while current.auto_renew and current.status in {SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED} and current.ends_on <= horizon:
             open_pause = db.scalar(select(SubscriptionPause.id).where(
                 SubscriptionPause.organization_id == org_id,
                 SubscriptionPause.subscription_id == current.id,
