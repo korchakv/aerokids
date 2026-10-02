@@ -1,4 +1,5 @@
 from datetime import date, datetime, time
+import re
 from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -16,6 +17,45 @@ def validate_quarter_hour(value: time) -> time:
 
 def validate_datetime_quarter_hour(value: datetime) -> datetime:
     validate_quarter_hour(value.timetz().replace(tzinfo=None))
+    return value
+
+
+def normalize_person_name(value: str) -> str:
+    value = re.sub(r"\s+", " ", value.strip())
+    if len(value) < 2:
+        raise ValueError("Вкажіть ім’я щонайменше з 2 символів")
+    if not re.fullmatch(r"[A-Za-zА-Яа-яІіЇїЄєҐґ'’\- ]+", value):
+        raise ValueError("Ім’я може містити лише літери, пробіл, апостроф і дефіс")
+    if re.search(r"(^|[ '\-’])[ '\-’]", value) or value[0] in "'’- " or value[-1] in "'’- ":
+        raise ValueError("Перевірте написання імені")
+    return value
+
+
+def normalize_ua_phone(value: str) -> str:
+    raw = value.strip()
+    digits = re.sub(r"\D", "", raw)
+    if digits.startswith("380") and len(digits) == 12:
+        national = digits[3:]
+    elif digits.startswith("0") and len(digits) == 10:
+        national = digits[1:]
+    elif len(digits) == 9:
+        national = digits
+    else:
+        raise ValueError("Вкажіть український номер у форматі +380 XX XXX XX XX")
+
+    if not re.fullmatch(r"[3-9]\d{8}", national):
+        raise ValueError("Некоректний номер телефону України")
+    return "+380" + national
+
+
+def normalize_email(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip().lower()
+    if not value:
+        return None
+    if len(value) > 255 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]{2,}", value):
+        raise ValueError("Некоректна email-адреса")
     return value
 
 
@@ -87,6 +127,10 @@ class ContactCreate(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     notes: str | None = None
 
+    _name = field_validator("full_name")(normalize_person_name)
+    _phone = field_validator("phone")(normalize_ua_phone)
+    _email = field_validator("email")(normalize_email)
+
 
 class ContactRead(ORMModel):
     id: UUID
@@ -98,12 +142,19 @@ class ContactRead(ORMModel):
 
 
 class StudentCreate(BaseModel):
-    first_name: str = Field(min_length=1, max_length=120)
+    first_name: str = Field(min_length=2, max_length=120)
     last_name: str | None = Field(default=None, max_length=120)
     birth_date: date | None = None
     age_at_inquiry: int | None = Field(default=None, ge=3, le=25)
     source: str | None = Field(default=None, max_length=80)
     notes: str | None = None
+
+    _first_name = field_validator("first_name")(normalize_person_name)
+
+    @field_validator("last_name")
+    @classmethod
+    def valid_last_name(cls, value: str | None) -> str | None:
+        return normalize_person_name(value) if value else None
 
 
 class StudentRead(ORMModel):
@@ -186,13 +237,17 @@ class EnrollmentRead(ORMModel):
 
 
 class IntakeCreate(BaseModel):
-    child_first_name: str = Field(min_length=1, max_length=120)
+    child_first_name: str = Field(min_length=2, max_length=120)
     child_age: int = Field(ge=3, le=25)
     contact_name: str = Field(min_length=2, max_length=160)
     phone: str = Field(min_length=8, max_length=40)
     comment: str | None = None
     source: str = Field(default="website", max_length=80)
     website: str | None = Field(default=None, max_length=200)
+
+    _child_name = field_validator("child_first_name")(normalize_person_name)
+    _contact_name = field_validator("contact_name")(normalize_person_name)
+    _phone = field_validator("phone")(normalize_ua_phone)
 
 
 class IntakeResult(BaseModel):
@@ -633,6 +688,14 @@ class StaffCreate(BaseModel):
     notes: str | None = None
     location_ids: list[UUID] = []
 
+    _name = field_validator("full_name")(normalize_person_name)
+    _email = field_validator("email")(normalize_email)
+
+    @field_validator("phone")
+    @classmethod
+    def valid_phone(cls, value: str | None) -> str | None:
+        return normalize_ua_phone(value) if value and value.strip() else None
+
 
 class StaffRead(ORMModel):
     id: UUID
@@ -653,6 +716,18 @@ class StaffUpdate(BaseModel):
     role: StaffRole | None = None
     is_active: bool | None = None
     notes: str | None = None
+
+    @field_validator("full_name")
+    @classmethod
+    def valid_name(cls, value: str | None) -> str | None:
+        return normalize_person_name(value) if value else None
+
+    _email = field_validator("email")(normalize_email)
+
+    @field_validator("phone")
+    @classmethod
+    def valid_phone(cls, value: str | None) -> str | None:
+        return normalize_ua_phone(value) if value and value.strip() else None
 
 
 class StaffLocationAssignment(BaseModel):
