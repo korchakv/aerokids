@@ -254,6 +254,7 @@ class StudentDetail(StudentRead):
 
 class WaitingCandidate(BaseModel):
     student_id: UUID
+    created_at: datetime
     first_name: str
     last_name: str | None
     age: int | None
