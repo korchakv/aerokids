@@ -107,3 +107,12 @@ Next priorities:
 6. only after stabilization: replace AeroKiDS Formspree with CRM public intake.
 
 When changing code, preserve existing API behavior and tenant isolation tests. Every new tenant-owned table must include `organization_id`. Prefer extending the modular monolith rather than introducing services.
+
+
+## Active implementation task
+
+Implement the scheduling UX / soft availability / group matching specification in:
+
+`crm/docs/task-scheduling-ux.md`
+
+Treat that document as the current product specification. Preserve existing architecture, tenant isolation, role permissions, PostgreSQL/Alembic compatibility, and CI. Do not touch the public AeroKiDS website or merge to `main`.
