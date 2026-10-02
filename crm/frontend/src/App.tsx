@@ -1743,13 +1743,13 @@ function App() {
           </article>
           <article className="panel attendancePanel">
             {selectedLesson && <>
-              <div className="panelHead"><div><p className="eyebrow">Відвідування</p><h2>{lessonGroup?.name}</h2><p className="lessonMeta">{new Date(selectedLesson.startsAt).toLocaleString("uk-UA")} · {selectedLesson.duration} хв</p></div><button className="search" onClick={markAllPresent}>Усі присутні</button></div>
+              <div className="panelHead"><div><p className="eyebrow">Відвідування</p><h2>{lessonGroup?.name}</h2><p className="lessonMeta">{new Date(selectedLesson.startsAt).toLocaleString("uk-UA")} · {selectedLesson.duration} хв</p></div><div className="attendanceQuickActions"><button className="search" onClick={markAllPresent}>Усі присутні</button><button className="search" onClick={markUnmarkedAbsent}>Непозначені → відсутні</button></div></div>
               <div className="topicBox"><span>Тема заняття</span><b>{selectedLesson.topic}</b></div>
               <div className="attendanceTable">
                 {lessonStudents.map((student) => {
-                  const value = attendance[selectedLesson.id]?.[student.id] ?? "present";
-                  return <div className="attendanceRow" key={student.id}>
-                    <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років</small></b></span>
+                  const value = attendance[selectedLesson.id]?.[student.id];
+                  return <div className={"attendanceRow " + (!value ? "unmarked" : "")} key={student.id}>
+                    <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років{student.parent ? " · " + student.parent : ""}</small></b>{!value && <em className="unmarkedBadge">Не відмічено</em>}</span>
                     <div className="attendanceButtons">
                       <button className={value === "present" ? "active present" : ""} onClick={() => markAttendance(student.id, "present")}>✓ Був</button>
                       <button className={value === "late" ? "active late" : ""} onClick={() => markAttendance(student.id, "late")}>Запізнився</button>
@@ -1760,7 +1760,7 @@ function App() {
                 })}
                 {lessonStudents.length === 0 && <div className="emptyState">У цій групі поки немає активних учнів.</div>}
               </div>
-              <div className="attendanceFooter"><span>{attendanceLoading ? "Завантажуємо…" : <>Позначено: <b>{Object.keys(attendance[selectedLesson.id] ?? {}).length}/{lessonStudents.length}</b></>}</span><button className="primary" disabled={attendanceSaving || attendanceLoading} onClick={saveAttendance}>{attendanceSaving ? "Зберігаємо…" : "Зберегти відвідування"}</button></div>
+              <div className="attendanceFooter"><span>{attendanceLoading ? "Завантажуємо…" : <>Позначено: <b>{Object.keys(attendance[selectedLesson.id] ?? {}).length}/{lessonStudents.length}</b>{lessonStudents.length > Object.keys(attendance[selectedLesson.id] ?? {}).length && <small> · ще {lessonStudents.length - Object.keys(attendance[selectedLesson.id] ?? {}).length}</small>}</>}</span><button className="primary" disabled={attendanceSaving || attendanceLoading || Object.keys(attendance[selectedLesson.id] ?? {}).length !== lessonStudents.length} onClick={saveAttendance}>{attendanceSaving ? "Зберігаємо…" : "Зберегти відвідування"}</button></div>
             </>}
           </article>
         </section>}
