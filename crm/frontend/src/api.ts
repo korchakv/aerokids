@@ -40,7 +40,16 @@ async function request<T>(path: string, init: RequestInit = {}, session?: Sessio
     let message = "Request failed";
     try {
       const body = await response.json();
-      message = body.detail ?? message;
+      const detail = body?.detail;
+      if (typeof detail === "string") {
+        message = detail;
+      } else if (Array.isArray(detail)) {
+        message = detail
+          .map((item) => typeof item?.msg === "string" ? item.msg : JSON.stringify(item))
+          .join("; ");
+      } else if (detail && typeof detail === "object") {
+        message = typeof detail.message === "string" ? detail.message : JSON.stringify(detail);
+      }
     } catch {}
     throw new Error(message);
   }
