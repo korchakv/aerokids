@@ -253,6 +253,25 @@ export type ApiPayment = {
   due_date: string | null;
   paid_at: string | null;
   note: string | null;
+  adjusted_amount_minor: number;
+  paid_minor: number;
+  refunded_minor: number;
+  balance_minor: number;
+};
+
+export type ApiStudentSubscription = {
+  id: string;
+  organization_id: string;
+  student_id: string;
+  plan_id: string;
+  status: "active" | "paused" | "expired" | "cancelled";
+  starts_on: string;
+  ends_on: string;
+  price_minor: number;
+  discount_minor: number;
+  discount_label: string | null;
+  auto_renew: boolean;
+  renewal_of_id: string | null;
 };
 
 export type OperationsBundle = {
@@ -260,6 +279,7 @@ export type OperationsBundle = {
   staff: ApiStaffProfile[];
   plans: ApiSubscriptionPlan[];
   payments: ApiPayment[];
+  subscriptions: ApiStudentSubscription[];
 };
 
 export async function loadOperations(session: Session): Promise<OperationsBundle> {
@@ -284,16 +304,25 @@ export async function loadOperations(session: Session): Promise<OperationsBundle
     ? apiGet<ApiPayment[]>("/payments", session)
     : Promise.resolve([]);
 
-  const [locations, staff, plans, payments] = await Promise.all([
+  const subscriptionsPromise = role === "owner" || role === "admin" || role === "accountant"
+    ? apiGet<ApiStudentSubscription[]>("/student-subscriptions", session)
+    : Promise.resolve([]);
+
+  const [locations, staff, plans, payments, subscriptions] = await Promise.all([
     locationsPromise,
     staffPromise,
     plansPromise,
     paymentsPromise,
+    subscriptionsPromise,
   ]);
 
-  return { locations, staff, plans, payments };
+  return { locations, staff, plans, payments, subscriptions };
 }
 
+
+export function runBillingRenewals(session: Session) {
+  return apiPost<{ resumed_subscriptions: number; created_subscriptions: number; skipped_stale_subscriptions: number; created_payment_ids: string[] }>("/billing/renewals/run", {}, session);
+}
 
 export function apiPut<T>(path: string, body: unknown, session: Session) {
   return request<T>(path, { method: "PUT", body: JSON.stringify(body) }, session);
