@@ -1227,6 +1227,7 @@ def run_billing_renewals(
     resumed = _resume_due_pauses(db, org_id, today, actor_user_id)
     created_payment_ids: list[UUID] = []
     created_subscriptions = 0
+    skipped_stale_subscriptions = 0
 
     candidates = list(db.scalars(select(StudentSubscription).where(
         StudentSubscription.organization_id == org_id,
@@ -1267,6 +1268,9 @@ def run_billing_renewals(
                 break
 
             plan = scoped_get(db, SubscriptionPlan, org_id, current.plan_id)
+            if current.ends_on < today - timedelta(days=plan.period_days):
+                skipped_stale_subscriptions += 1
+                break
             next_start = current.ends_on + timedelta(days=1)
             next_subscription = StudentSubscription(
                 organization_id=org_id,
@@ -1319,6 +1323,7 @@ def run_billing_renewals(
     return {
         "resumed_subscriptions": resumed,
         "created_subscriptions": created_subscriptions,
+        "skipped_stale_subscriptions": skipped_stale_subscriptions,
         "created_payment_ids": created_payment_ids,
     }
 
@@ -1695,7 +1700,7 @@ def cancel_payment(db: Session, org_id: UUID, payment_id: UUID, reason: str, act
     )
     db.commit()
     db.refresh(payment)
-    return payment
+    return _attach_payment_financials(db, org_id, payment)
 
 
 def _payment_reminder_stage(due_date: date, today: date) -> tuple[str, str] | None:
