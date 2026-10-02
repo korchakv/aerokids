@@ -413,6 +413,7 @@ class StudentSubscriptionCreate(BaseModel):
     price_minor: int | None = Field(default=None, ge=0)
     discount_minor: int = Field(default=0, ge=0)
     discount_label: str | None = Field(default=None, max_length=160)
+    auto_renew: bool = False
 
 
 class StudentSubscriptionRead(ORMModel):
@@ -426,6 +427,8 @@ class StudentSubscriptionRead(ORMModel):
     price_minor: int
     discount_minor: int
     discount_label: str | None
+    auto_renew: bool
+    renewal_of_id: UUID | None
 
 
 class PaymentCreate(BaseModel):
@@ -444,11 +447,44 @@ class SubscriptionChargeCreate(BaseModel):
     discount_minor: int = Field(default=0, ge=0)
     discount_label: str | None = Field(default=None, max_length=160)
     note: str | None = Field(default=None, max_length=300)
+    auto_renew: bool = False
 
 
 class PaymentMarkPaid(BaseModel):
     method: PaymentMethod
     paid_at: datetime | None = None
+
+
+class PaymentReceiptCreate(BaseModel):
+    amount_minor: int = Field(gt=0)
+    method: PaymentMethod
+    paid_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=300)
+
+
+class PaymentRefundCreate(BaseModel):
+    amount_minor: int = Field(gt=0)
+    note: str = Field(min_length=2, max_length=300)
+    occurred_at: datetime | None = None
+    reduce_charge: bool = True
+
+
+class PaymentAdjustmentCreate(BaseModel):
+    direction: Literal["increase", "decrease"]
+    amount_minor: int = Field(gt=0)
+    reason: str = Field(min_length=2, max_length=300)
+
+
+class PaymentTransactionRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    payment_id: UUID
+    student_id: UUID
+    kind: str
+    amount_minor: int
+    method: PaymentMethod | None
+    note: str | None
+    occurred_at: datetime
 
 
 class PaymentRead(ORMModel):
@@ -464,6 +500,10 @@ class PaymentRead(ORMModel):
     due_date: date | None
     paid_at: datetime | None
     note: str | None
+    adjusted_amount_minor: int = 0
+    paid_minor: int = 0
+    refunded_minor: int = 0
+    balance_minor: int = 0
 
 
 class SubscriptionChargeResult(BaseModel):
@@ -541,6 +581,43 @@ class PaymentReminderMark(BaseModel):
 
 class PaymentCancel(BaseModel):
     reason: str = Field(min_length=2, max_length=300)
+
+
+class SubscriptionPauseCreate(BaseModel):
+    starts_on: date
+    resume_on: date | None = None
+    note: str | None = Field(default=None, max_length=300)
+
+    @model_validator(mode="after")
+    def validate_pause_dates(self):
+        if self.resume_on is not None and self.resume_on <= self.starts_on:
+            raise ValueError("resume_on must be after starts_on")
+        return self
+
+
+class SubscriptionResumeCreate(BaseModel):
+    resumes_on: date | None = None
+
+
+class SubscriptionPauseRead(ORMModel):
+    id: UUID
+    organization_id: UUID
+    subscription_id: UUID
+    student_id: UUID
+    starts_on: date
+    ends_on: date | None
+    resumed_at: datetime | None
+    note: str | None
+
+
+class BillingRenewalRun(BaseModel):
+    through_date: date | None = None
+
+
+class BillingRenewalResult(BaseModel):
+    resumed_subscriptions: int
+    created_subscriptions: int
+    created_payment_ids: list[UUID] = Field(default_factory=list)
 
 
 class StaffCreate(BaseModel):
