@@ -1219,7 +1219,8 @@ function App() {
         setStaffPhone("");
         setShowStaffForm(false);
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося додати працівника.");
         return;
       }
     }
@@ -1270,7 +1271,8 @@ function App() {
       const url = new URL(window.location.href);
       url.searchParams.set("invite", result.invite_token);
       setInviteLink(url.toString());
-    } catch {
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити запрошення.");
       return;
     }
   };
