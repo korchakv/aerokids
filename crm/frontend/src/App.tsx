@@ -128,7 +128,7 @@ function App() {
   const [organizationCurrency, setOrganizationCurrency] = useState("UAH");
   const [organizationLocale, setOrganizationLocale] = useState("uk-UA");
   const [organizationSaving, setOrganizationSaving] = useState(false);
-  const [leadFilter, setLeadFilter] = useState<"action" | "new" | "trial" | "no_show" | "after_trial" | "waiting" | "closed">("action");
+  const [leadFilter, setLeadFilter] = useState<"all" | "action" | "new" | "trial" | "no_show" | "after_trial" | "waiting" | "closed">("action");
   const [leadSort, setLeadSort] = useState<"priority" | "newest" | "oldest" | "trial" | "age">("priority");
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateFilter, setCandidateFilter] = useState<"all" | "8-10" | "11-13" | "beginner">("all");
@@ -1185,6 +1185,7 @@ function App() {
             </select></label>
           </div>
           <div className="filters leadFilters">
+            <button className={"chip " + (leadFilter === "all" ? "active" : "")} onClick={() => setLeadFilter("all")}>Усі</button>
             <button className={"chip " + (leadFilter === "action" ? "active" : "")} onClick={() => setLeadFilter("action")}>В роботі</button>
             <button className={"chip " + (leadFilter === "new" ? "active" : "")} onClick={() => setLeadFilter("new")}>Нові</button>
             <button className={"chip " + (leadFilter === "trial" ? "active" : "")} onClick={() => setLeadFilter("trial")}>Пробні</button>
