@@ -2065,7 +2065,7 @@ function App() {
           <p className="eyebrow">Група</p>
           <div className="groupDetailHero">
             <div><h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2><p>{selectedGroup?.location ?? "Локація не вказана"} · {selectedGroup?.schedule ?? "Розклад не вказаний"}</p></div>
-            <div className="groupDetailHeroActions"><strong>{groupDetail?.members.length ?? selectedGroup?.members.length ?? 0}/{groupDetail?.group.capacity ?? selectedGroup?.capacity ?? "—"}</strong><button className="primary compact" onClick={() => { setShowGroupCandidatePicker((value) => !value); setGroupCandidateId(existingGroupCandidates[0]?.id ?? ""); }}>+ Додати учня</button></div>
+            <div className="groupDetailHeroActions"><strong>{groupDetail?.members.length ?? selectedGroup?.members.length ?? 0}/{groupDetail?.group.capacity ?? selectedGroup?.capacity ?? "—"}</strong>{canManageLeads && <button className="primary compact" onClick={() => { setShowGroupCandidatePicker((value) => !value); setGroupCandidateId(existingGroupCandidates[0]?.id ?? ""); }}>+ Додати учня</button>}</div>
           </div>
           {showGroupCandidatePicker && <div className="groupCandidatePicker">
             <div className="groupCandidatePickerHead"><div><b>Додати в існуючу групу</b><small>Доступні діти, які пройшли пробне або вже очікують групу.</small></div><span>{existingGroupCandidates.length} кандидатів</span></div>
