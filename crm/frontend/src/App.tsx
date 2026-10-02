@@ -2199,6 +2199,7 @@ function applyOperations(
   setStaff: Dispatch<SetStateAction<StaffDemo[]>>,
   setPlans: Dispatch<SetStateAction<PlanDemo[]>>,
   setPayments: Dispatch<SetStateAction<PaymentDemo[]>>,
+  setSubscriptions: Dispatch<SetStateAction<ApiStudentSubscription[]>>,
 ) {
   setLocations(bundle.locations.map((item) => ({
     id: item.id,
@@ -2226,17 +2227,21 @@ function applyOperations(
   })));
 
   const today = new Date().toISOString().slice(0, 10);
-  setPayments(bundle.payments
-    .filter((item) => item.status === "pending" || item.status === "paid")
-    .map((item) => ({
-      id: item.id,
-      studentId: item.student_id,
-      planId: item.plan_id ?? "",
-      amount: item.amount_minor / 100,
-      dueDate: item.due_date ?? "",
-      status: item.status === "paid" ? "paid" : item.due_date && item.due_date < today ? "overdue" : "pending",
-      method: paymentMethodLabel(item.method),
-    })));
+  setPayments(bundle.payments.map((item) => ({
+    id: item.id,
+    studentId: item.student_id,
+    planId: item.plan_id ?? "",
+    subscriptionId: item.subscription_id ?? undefined,
+    amount: item.amount_minor / 100,
+    adjustedAmount: item.adjusted_amount_minor / 100,
+    paidAmount: item.paid_minor / 100,
+    refundedAmount: item.refunded_minor / 100,
+    balanceAmount: item.balance_minor / 100,
+    dueDate: item.due_date ?? "",
+    status: item.status === "pending" && item.due_date && item.due_date < today ? "overdue" : item.status,
+    method: paymentMethodLabel(item.method),
+  })));
+  setSubscriptions(bundle.subscriptions);
 }
 
 function staffRoleLabel(role: string): StaffRoleDemo {
