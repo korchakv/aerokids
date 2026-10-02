@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -34,7 +34,13 @@ def auth_bootstrap_status(db: Session = Depends(get_db)):
 
 
 @router.post("/auth/bootstrap", response_model=BootstrapOwnerResult, status_code=201)
-def auth_bootstrap(data: BootstrapOwnerCreate, db: Session = Depends(get_db)):
+def auth_bootstrap(
+    data: BootstrapOwnerCreate,
+    x_bootstrap_secret: str | None = Header(default=None, alias="X-Bootstrap-Secret"),
+    db: Session = Depends(get_db),
+):
+    if settings.environment.lower() == "production" and x_bootstrap_secret != settings.bootstrap_secret:
+        raise HTTPException(status_code=403, detail="Invalid bootstrap secret")
     organization, user, token = auth_service.bootstrap_owner(db, data)
     return BootstrapOwnerResult(
         organization_id=organization.id,
