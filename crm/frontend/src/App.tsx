@@ -130,6 +130,7 @@ function App() {
   const [organizationSaving, setOrganizationSaving] = useState(false);
   const [leadFilter, setLeadFilter] = useState<"all" | "action" | "new" | "trial" | "no_show" | "after_trial" | "waiting" | "closed">("action");
   const [leadSort, setLeadSort] = useState<"priority" | "newest" | "oldest" | "trial" | "age">("priority");
+  const [leadSourceFilter, setLeadSourceFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateFilter, setCandidateFilter] = useState<"all" | "8-10" | "11-13" | "beginner">("all");
   const [candidateMatchFilter, setCandidateMatchFilter] = useState<"all" | "match" | "partial" | "conflict" | "unknown">("all");
@@ -346,6 +347,10 @@ function App() {
       return true;
     });
 
+    if (leadSourceFilter !== "all") {
+      items = items.filter((item) => (item.source ?? "").toLowerCase() === leadSourceFilter);
+    }
+
     items = [...items].sort((a, b) => {
       if (leadSort === "newest") return dateValue(b.createdAt) - dateValue(a.createdAt);
       if (leadSort === "oldest") return dateValue(a.createdAt) - dateValue(b.createdAt);
@@ -360,7 +365,7 @@ function App() {
       return dateValue(b.createdAt) - dateValue(a.createdAt);
     });
     return items;
-  }, [leads, leadFilter, leadSort]);
+  }, [leads, leadFilter, leadSort, leadSourceFilter]);
 
   const visibleStudents = useMemo(() => activeStudents.filter((item) => {
     const state = studentStates[item.id] ?? "Активний";
@@ -1180,13 +1185,19 @@ function App() {
         {active === "Заявки" && <section className="panel leadsPage">
           <div className="panelHead leadsHead">
             <div><p className="eyebrow">Воронка</p><h2>Заявки та пробні</h2></div>
-            <label className="leadSort">Сортування<select value={leadSort} onChange={(e) => setLeadSort(e.target.value as typeof leadSort)}>
-              <option value="priority">Потребують дії</option>
-              <option value="newest">Найновіші</option>
-              <option value="oldest">Найстаріші</option>
-              <option value="trial">Найближче пробне</option>
-              <option value="age">За віком</option>
-            </select></label>
+            <div className="leadControls">
+              <label className="leadSort">Джерело<select value={leadSourceFilter} onChange={(e) => setLeadSourceFilter(e.target.value)}>
+                <option value="all">Усі джерела</option>
+                {Array.from(new Set(leads.map((lead) => (lead.source ?? "").toLowerCase()).filter(Boolean))).sort().map((source) => <option value={source} key={source}>{leadSourceLabel(source)}</option>)}
+              </select></label>
+              <label className="leadSort">Сортування<select value={leadSort} onChange={(e) => setLeadSort(e.target.value as typeof leadSort)}>
+                <option value="priority">Потребують дії</option>
+                <option value="newest">Найновіші</option>
+                <option value="oldest">Найстаріші</option>
+                <option value="trial">Найближче пробне</option>
+                <option value="age">За віком</option>
+              </select></label>
+            </div>
           </div>
           <div className="filters leadFilters">
             <button className={"chip " + (leadFilter === "all" ? "active" : "")} onClick={() => setLeadFilter("all")}>Усі</button>
@@ -1735,16 +1746,16 @@ function App() {
           <p className="eyebrow">Картка заявки</p>
           <h2>{selected.child}, {selected.age} років</h2>
           <div className="contactCard"><span>Контакт</span><b>{selected.parent}</b><a href={"tel:" + selected.phone.replace(/\s/g, "")}>{selected.phone}</a></div>
-          {["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status)
-            ? <div className="statusField statusReadonly">Статус<strong>{selected.status}</strong></div>
+          {["Пробне заплановано","Після пробного","Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status)
+            ? <div className="statusField statusReadonly">Статус<strong>{leadDisplayStatus(selected)}</strong></div>
             : <label className="statusField">Статус
                 <select value={selected.status} onChange={(e) => updateStatus(selected.id, e.target.value as LeadStatus)}>
-                  {statuses.map((status) => <option key={status}>{status}</option>)}
+                  {statuses.filter((status) => ["Нова","Зв'язались","Очікує групу"].includes(status)).map((status) => <option key={status}>{status}</option>)}
                 </select>
               </label>}
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selected.nextContactAt && <div className="noteBox followUpBox"><span>Наступний контакт</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>}
-          {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}</div>}
+          {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}<button className="search reopenLead" onClick={() => saveLeadOutcome("contacted")}>Повернути в роботу</button></div>}
           {selected.comment && <div className="noteBox"><span>Коментар</span><p>{selected.comment}</p></div>}
           {selected.trialAt && <div className="trialSummary"><span>Пробне заняття</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
           <div className="preferenceSummary">
@@ -1803,7 +1814,7 @@ function App() {
             {selected.status === "Очікує групу" && <small>Готові навчатися · потрібно підібрати групу.</small>}
           </div>}
 
-          {selected.trialResult === "no_show" && <div className="resultCard noShowCard">
+          {selected.trialResult === "no_show" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="resultCard noShowCard">
             <span>Не прийшли на пробне</span>
             <b>Потрібен повторний контакт</b>
             {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
