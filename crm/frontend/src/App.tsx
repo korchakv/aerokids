@@ -2514,11 +2514,22 @@ function candidateCompatibility(
     const lessonEnd = lessonStart + lesson.duration_minutes;
     const sameDay = lead.availability!.filter((x) => x.weekday === lesson.weekday);
     const acceptable = sameDay.filter((x) => (x.preference ?? "preferred") !== "avoid");
+    const avoided = sameDay.filter((x) => (x.preference ?? "preferred") === "avoid");
     const fits = acceptable.filter((x) => timeToMinutes(x.start_time) <= lessonStart && timeToMinutes(x.end_time) >= lessonEnd);
+    const avoidOverlap = avoided.some((x) => lessonStart < timeToMinutes(x.end_time) && lessonEnd > timeToMinutes(x.start_time));
+    if (avoidOverlap && !fits.length) {
+      conflicts++;
+      details.push(`${DAY_NAMES[lesson.weekday]} ${lesson.start_time} — потрапляє в небажаний час`);
+      return;
+    }
     if (fits.length) {
       full++;
       if (fits.some((x) => (x.preference ?? "preferred") === "preferred")) preferred++;
       details.push(`${DAY_NAMES[lesson.weekday]} ${lesson.start_time} — підходить`);
+      if (avoidOverlap) {
+        partial++;
+        details.push(`${DAY_NAMES[lesson.weekday]} ${lesson.start_time} — також перетинає небажаний час`);
+      }
       return;
     }
     const close = acceptable.find((x) => {
