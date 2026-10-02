@@ -142,22 +142,18 @@ def enforce_public_intake_rate_limit(
 def normalize_phone(value: str) -> str:
     raw = value.strip()
     digits = re.sub(r"\D", "", raw)
-
-    # International numbers are accepted when the country code is explicit.
-    if raw.startswith("+"):
-        if 8 <= len(digits) <= 15:
-            return f"+{digits}"
-        raise HTTPException(status_code=422, detail="Invalid international phone number")
-
-    # Ukrainian shorthand remains convenient for the first AeroKiDS tenant.
     if digits.startswith("380") and len(digits) == 12:
-        return f"+{digits}"
-    if digits.startswith("0") and len(digits) == 10:
-        return f"+38{digits}"
-    if len(digits) == 9:
-        return f"+380{digits}"
+        national = digits[3:]
+    elif digits.startswith("0") and len(digits) == 10:
+        national = digits[1:]
+    elif len(digits) == 9:
+        national = digits
+    else:
+        raise HTTPException(status_code=422, detail="Вкажіть український номер у форматі +380 XX XXX XX XX")
 
-    raise HTTPException(status_code=422, detail="Use an international phone number starting with +")
+    if not re.fullmatch(r"[3-9]\d{8}", national):
+        raise HTTPException(status_code=422, detail="Некоректний номер телефону України")
+    return "+380" + national
 
 
 def create_organization(db: Session, data: OrganizationCreate) -> Organization:
