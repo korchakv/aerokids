@@ -437,8 +437,8 @@ def test_attendance_rejects_student_from_another_group(client):
     org = create_org(client, "AeroKiDS", "aerokids-attendance-scope")
     headers = {"X-Organization-Id": org["id"]}
 
-    student_a = client.post("/students", headers=headers, json={"first_name": "A"}).json()
-    student_b = client.post("/students", headers=headers, json={"first_name": "B"}).json()
+    student_a = client.post("/students", headers=headers, json={"first_name": "Anna"}).json()
+    student_b = client.post("/students", headers=headers, json={"first_name": "Bohdan"}).json()
     for student in (student_a, student_b):
         client.patch(
             f"/students/{student['id']}/crm-status",
@@ -563,7 +563,7 @@ def test_atomic_subscription_charge_is_tenant_scoped(client):
     org_b = create_org(client, "Atomic B", "atomic-b")
     a_headers = {"X-Organization-Id": org_a["id"]}
     b_headers = {"X-Organization-Id": org_b["id"]}
-    student_a = client.post("/students", headers=a_headers, json={"first_name": "А"}).json()
+    student_a = client.post("/students", headers=a_headers, json={"first_name": "Анна"}).json()
     foreign_plan = client.post(
         "/subscription-plans",
         headers=b_headers,
@@ -742,7 +742,7 @@ def test_overview_report_is_tenant_scoped(client):
     a_headers = {"X-Organization-Id": org_a["id"]}
     b_headers = {"X-Organization-Id": org_b["id"]}
 
-    student_a = client.post("/students", headers=a_headers, json={"first_name": "A"}).json()
+    student_a = client.post("/students", headers=a_headers, json={"first_name": "Anna"}).json()
     client.patch(
         f"/students/{student_a['id']}/crm-status",
         headers=a_headers,
@@ -758,7 +758,7 @@ def test_overview_report_is_tenant_scoped(client):
     client.post("/locations", headers=a_headers, json={"name": "A Location"})
     client.post("/staff", headers=a_headers, json={"full_name": "Teacher A", "role": "teacher"})
 
-    student_b = client.post("/students", headers=b_headers, json={"first_name": "B"}).json()
+    student_b = client.post("/students", headers=b_headers, json={"first_name": "Bohdan"}).json()
     client.post(
         "/payments",
         headers=b_headers,
