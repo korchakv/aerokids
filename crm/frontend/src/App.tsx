@@ -112,7 +112,7 @@ const initialLeads: Lead[] = [
   { id: "9", child: "Назар", age: 10, parent: "Олена", phone: "+380 95 700 10 09", status: "Зарахований", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
 ];
 
-const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне заплановано", "Після пробного", "Очікує групу", "Зарахований", "Не відповідає", "Відмовились", "Неактуально"];
+const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне заплановано", "Після пробного", "Очікує групу"];
 
 function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession());
@@ -2004,6 +2004,19 @@ function leadNextAction(lead: Lead) {
   return "Продовжити контакт";
 }
 
+function closeReasonLabel(reason: string | null | undefined) {
+  const labels: Record<string, string> = {
+    price: "Ціна",
+    schedule: "Не підходить графік",
+    child_not_interested: "Дитині не цікаво",
+    parents_changed_mind: "Батьки передумали",
+    location: "Не підходить локація",
+    other_club: "Обрали інший гурток",
+    other: "Інше",
+  };
+  return reason ? (labels[reason] ?? reason) : "Не вказано";
+}
+
 function leadSourceLabel(source: string | null | undefined) {
   const labels: Record<string, string> = {
     phone: "Телефон",
@@ -2160,6 +2173,7 @@ function auditEventLabel(type: string) {
     "trial.rescheduled": "Пробне перенесено",
     "trial.completed": "Пробне пройдено",
     "trial.no_show": "Не прийшов на пробне",
+    "lead.outcome_updated": "Рішення по заявці",
     "student.enrolled": "Зараховано до групи",
     "student.transferred": "Переведено в іншу групу",
     "student.status_changed": "Статус учня змінено",
@@ -2173,7 +2187,19 @@ function auditEventDetail(event: ApiAuditEvent) {
   const payload = event.payload ?? {};
   if (typeof payload["group_name"] === "string") return payload["group_name"];
   if (typeof payload["to_group_name"] === "string") return payload["to_group_name"];
-  if (typeof payload["crm_status"] === "string") return String(payload["crm_status"]);
+  if (typeof payload["crm_status"] === "string") {
+    const labels: Record<string, string> = {
+      contacted: "Зв'язались",
+      trial_completed: "Після пробного",
+      waiting_for_group: "Очікує групу",
+      declined: "Відмовились",
+      no_response: "Не відповідає",
+      not_relevant: "Неактуально",
+    };
+    const status = labels[String(payload["crm_status"])] ?? String(payload["crm_status"]);
+    const reason = typeof payload["close_reason"] === "string" ? ` · ${closeReasonLabel(String(payload["close_reason"]))}` : "";
+    return status + reason;
+  }
   if (typeof payload["student_status"] === "string") return String(payload["student_status"]);
   if (typeof payload["recommended_level"] === "string") return String(payload["recommended_level"]);
   if (typeof payload["amount_minor"] === "number") return formatMoney(Number(payload["amount_minor"]) / 100);
