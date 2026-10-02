@@ -4,7 +4,7 @@
 Use one canonical AeroKids logo everywhere.
 
 Canonical web asset:
-`https://aerokids.space/assets/logo/aerokids-logo-original.png`
+`https://aerokids.space/assets/logo/aerokids-logo-master.webp`
 
 The logo is a **circle**. Do not treat a square screenshot background as part of the logo.
 
@@ -18,6 +18,7 @@ Never:
 
 Allowed:
 - scale proportionally;
+- create size-optimized derivatives only from the canonical master without changing artwork, color, proportions or internal composition;
 - mask/crop only the outside screenshot background to the circular boundary;
 - place the unchanged logo on approved brand backgrounds.
 
