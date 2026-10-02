@@ -572,7 +572,8 @@ function App() {
       setWorkspaceError("Вкажіть дату наступного контакту.");
       return;
     }
-    void saveLeadOutcome("trial_completed", { nextContactAt: followUpAt });
+    const status = selected?.trialResult === "no_show" ? "contacted" : "trial_completed";
+    void saveLeadOutcome(status, { nextContactAt: followUpAt });
   };
 
   const closeLead = () => {
@@ -1802,12 +1803,13 @@ function App() {
             <small>Заявка залишається активною. Можна перезаписати пробне або закрити її після контакту.</small>
             <div className="postTrialActions">
               <button className="primary" onClick={() => setTrialMode("schedule")}>Перезаписати пробне</button>
+              <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
               <button className="search" onClick={() => { setCloseKind("no_response"); setPostTrialMode("close"); setWorkspaceError(""); }}>Закрити заявку</button>
             </div>
           </div>}
 
           {postTrialMode === "thinking" && <div className="workflowBox">
-            <div className="workflowHead"><h3>Ще думають</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
+            <div className="workflowHead"><h3>{selected.trialResult === "no_show" ? "Передзвонити пізніше" : "Ще думають"}</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
             <p className="softPreferenceHint">Залишаємо заявку в роботі й ставимо дату, коли треба зв’язатися з батьками знову.</p>
             <DateTimeEditor label="Наступний контакт" value={followUpAt} onChange={setFollowUpAt} />
             <button className="primary full" disabled={!followUpAt} onClick={saveThinkingFollowUp}>Зберегти нагадування</button>
