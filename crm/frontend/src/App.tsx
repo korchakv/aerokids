@@ -2017,11 +2017,15 @@ function App() {
           <button className="drawerClose" onClick={() => setShowLeadForm(false)}>×</button>
           <p className="eyebrow">Нова заявка</p><h2>Додати дитину</h2>
           <div className="formTwo">
-            <label>Ім’я дитини *<input className={leadChildName && personNameError(leadChildName, "Ім’я дитини") ? "inputInvalid" : ""} value={leadChildName} maxLength={120} autoComplete="off" onChange={(e) => setLeadChildName(e.target.value)} placeholder="Максим" />{leadChildName && personNameError(leadChildName, "Ім’я дитини") && <small className="fieldError">{personNameError(leadChildName, "Ім’я дитини")}</small>}</label>
-            <label>Вік<input type="number" min={3} max={25} value={leadAge} onChange={(e) => setLeadAge(Number(e.target.value))} /></label>
+            <label>Ім’я дитини *<input className={leadChildName && personNameError(leadChildName, "Ім’я дитини") ? "inputInvalid" : ""} value={leadChildName} maxLength={120} onChange={(e) => setLeadChildName(e.target.value)} placeholder="Максим" />{leadChildName && personNameError(leadChildName, "Ім’я дитини") && <small className="fieldError">{personNameError(leadChildName, "Ім’я дитини")}</small>}</label>
+            <label>Прізвище дитини<input className={leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") ? "inputInvalid" : ""} value={leadChildLastName} maxLength={120} onChange={(e) => setLeadChildLastName(e.target.value)} placeholder="Коваль" />{leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") && <small className="fieldError">{personNameError(leadChildLastName, "Прізвище дитини")}</small>}</label>
           </div>
-          <label>Контактна особа *<input className={leadContactName && personNameError(leadContactName, "Контактна особа") ? "inputInvalid" : ""} value={leadContactName} maxLength={160} autoComplete="name" onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана Петренко" />{leadContactName && personNameError(leadContactName, "Контактна особа") && <small className="fieldError">{personNameError(leadContactName, "Контактна особа")}</small>}</label>
-          <label>Телефон *<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={leadPhone && uaPhoneError(leadPhone) ? "inputInvalid" : ""} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadPhone)) setLeadPhone(formatUaPhone(leadPhone)); }} placeholder="+380 67 123 45 67" />{leadPhone && uaPhoneError(leadPhone) && <small className="fieldError">{uaPhoneError(leadPhone)}</small>}<small className="fieldHint">Приймаємо: 0671234567, 380671234567 або +380 67 123 45 67</small></label>
+          <div className="formTwo">
+            <label>Вік<input type="number" min={3} max={25} value={leadAge} onChange={(e) => setLeadAge(Number(e.target.value))} /></label>
+            <label>Телефон дитини <small>(необов’язково)</small><input type="tel" inputMode="tel" maxLength={19} className={leadChildPhone && uaPhoneError(leadChildPhone, false) ? "inputInvalid" : ""} value={leadChildPhone} onChange={(e) => setLeadChildPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadChildPhone)) setLeadChildPhone(formatUaPhone(leadChildPhone)); }} placeholder="+380 67 123 45 67" />{leadChildPhone && uaPhoneError(leadChildPhone, false) && <small className="fieldError">{uaPhoneError(leadChildPhone, false)}</small>}</label>
+          </div>
+          <label>Ім’я та прізвище відповідального *<input className={leadContactName && personNameError(leadContactName, "Ім’я та прізвище відповідального") ? "inputInvalid" : ""} value={leadContactName} maxLength={160} autoComplete="name" onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана Петренко" />{leadContactName && personNameError(leadContactName, "Ім’я та прізвище відповідального") && <small className="fieldError">{personNameError(leadContactName, "Ім’я та прізвище відповідального")}</small>}</label>
+          <label>Телефон відповідального *<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={leadPhone && uaPhoneError(leadPhone) ? "inputInvalid" : ""} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadPhone)) setLeadPhone(formatUaPhone(leadPhone)); }} placeholder="+380 67 123 45 67" />{leadPhone && uaPhoneError(leadPhone) && <small className="fieldError">{uaPhoneError(leadPhone)}</small>}</label>
           <label>Джерело<select value={leadSource} onChange={(e) => setLeadSource(e.target.value)}>
             <option value="phone">Телефон</option>
             <option value="website">Сайт</option>
@@ -2030,7 +2034,7 @@ function App() {
             <option value="walk-in">Зайшли особисто</option>
           </select></label>
           <label>Коментар<textarea value={leadComment} onChange={(e) => setLeadComment(e.target.value)} placeholder="Що цікавить, бажаний час, примітки…" /></label>
-          <button className="primary full" disabled={Boolean(personNameError(leadChildName, "Ім’я дитини") || personNameError(leadContactName, "Контактна особа") || uaPhoneError(leadPhone))} onClick={createManualLead}>Створити заявку</button>
+          <button className="primary full" disabled={Boolean(personNameError(leadChildName, "Ім’я дитини") || (leadChildLastName.trim() && personNameError(leadChildLastName, "Прізвище дитини")) || uaPhoneError(leadChildPhone, false) || personNameError(leadContactName, "Ім’я та прізвище відповідального") || uaPhoneError(leadPhone))} onClick={createManualLead}>Створити заявку</button>
         </div>
       </div>}
 
