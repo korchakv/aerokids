@@ -1073,6 +1073,31 @@ def list_student_subscriptions(db: Session, org_id: UUID, student_id: UUID | Non
     return list(db.scalars(stmt.order_by(StudentSubscription.starts_on.desc())))
 
 
+def set_subscription_auto_renew(
+    db: Session,
+    org_id: UUID,
+    subscription_id: UUID,
+    auto_renew: bool,
+    actor_user_id: UUID | None = None,
+) -> StudentSubscription:
+    subscription = scoped_get(db, StudentSubscription, org_id, subscription_id)
+    if subscription.status == SubscriptionStatus.CANCELLED:
+        raise HTTPException(status_code=409, detail="Cancelled subscription cannot be renewed")
+    subscription.auto_renew = auto_renew
+    record_audit(
+        db,
+        org_id,
+        "student",
+        subscription.student_id,
+        "subscription.auto_renew_changed",
+        {"subscription_id": str(subscription.id), "auto_renew": auto_renew},
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(subscription)
+    return subscription
+
+
 def pause_subscription(
     db: Session,
     org_id: UUID,
