@@ -617,6 +617,7 @@ class BillingRenewalRun(BaseModel):
 class BillingRenewalResult(BaseModel):
     resumed_subscriptions: int
     created_subscriptions: int
+    skipped_stale_subscriptions: int = 0
     created_payment_ids: list[UUID] = Field(default_factory=list)
 
 
