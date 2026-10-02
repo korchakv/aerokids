@@ -1583,6 +1583,7 @@ function App() {
   const canManageLeads = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const canManageStudents = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
+  const canManageStaff = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
   const searchTerm = searchQuery.trim().toLocaleLowerCase("uk-UA");
   const searchLeads = searchTerm ? leads.filter((item) =>
     [item.child, item.parent, item.phone, item.source].some((value) => value.toLocaleLowerCase("uk-UA").includes(searchTerm))
