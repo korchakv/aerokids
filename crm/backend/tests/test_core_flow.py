@@ -1755,3 +1755,154 @@ def test_admin_cannot_reset_owner_password(client):
         json={"email": "protected-owner@example.com"},
     )
     assert blocked.status_code == 403
+
+
+def test_duplicate_subscription_charge_same_period_is_rejected(client):
+    org = create_org(client, "Duplicate Billing", "duplicate-billing")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Олег"}).json()
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Monthly", "price_minor": 180000, "period_days": 30},
+    ).json()
+    payload = {
+        "student_id": student["id"],
+        "plan_id": plan["id"],
+        "starts_on": "2026-10-01",
+        "due_date": "2026-10-05",
+    }
+    first = client.post("/billing/charges", headers=headers, json=payload)
+    second = client.post("/billing/charges", headers=headers, json=payload)
+    assert first.status_code == 201, first.text
+    assert second.status_code == 409, second.text
+    assert len(client.get(f"/payments?student_id={student['id']}", headers=headers).json()) == 1
+
+
+def test_cancel_pending_charge_cancels_linked_subscription(client):
+    org = create_org(client, "Cancel Billing", "cancel-billing")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Ірина"}).json()
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Monthly", "price_minor": 150000, "period_days": 30},
+    ).json()
+    charge = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={"student_id": student["id"], "plan_id": plan["id"], "starts_on": "2026-10-01"},
+    ).json()
+
+    cancelled = client.patch(
+        f"/payments/{charge['payment']['id']}/cancel",
+        headers=headers,
+        json={"reason": "Створено помилково"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "cancelled"
+
+    subscriptions = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    assert subscriptions[0]["status"] == "cancelled"
+
+    paid = client.patch(
+        f"/payments/{charge['payment']['id']}/paid",
+        headers=headers,
+        json={"method": "cash"},
+    )
+    assert paid.status_code == 409
+
+
+def test_payment_reminder_queue_is_staged_and_deduplicated(client):
+    org = create_org(client, "Reminder Billing", "reminder-billing")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Марко"}).json()
+    payment = client.post(
+        "/payments",
+        headers=headers,
+        json={"student_id": student["id"], "amount_minor": 120000, "due_date": "2000-01-01"},
+    ).json()
+
+    queue = client.get("/payment-reminders", headers=headers)
+    assert queue.status_code == 200, queue.text
+    assert len(queue.json()) == 1
+    reminder = queue.json()[0]
+    assert reminder["payment_id"] == payment["id"]
+    assert reminder["stage"] == "overdue_30"
+
+    sent = client.post(
+        f"/payments/{payment['id']}/reminders",
+        headers=headers,
+        json={"stage": "overdue_30", "channel": "phone"},
+    )
+    assert sent.status_code == 201, sent.text
+
+    queue_after = client.get("/payment-reminders", headers=headers)
+    assert queue_after.status_code == 200
+    assert queue_after.json() == []
+
+    duplicate = client.post(
+        f"/payments/{payment['id']}/reminders",
+        headers=headers,
+        json={"stage": "overdue_30", "channel": "phone"},
+    )
+    assert duplicate.status_code == 409
+
+
+def test_group_detail_contains_attendance_and_billing(client):
+    org = create_org(client, "Group Detail", "group-detail")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post(
+        "/students",
+        headers=headers,
+        json={"first_name": "Софія", "age_at_inquiry": 10},
+    ).json()
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "FPV Detail", "capacity": 8, "student_ids": [student["id"]]},
+    ).json()
+    group_id = formed["group"]["id"]
+    session = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={"group_id": group_id, "starts_at": "2026-09-30T17:00:00+03:00"},
+    ).json()
+    client.put(
+        f"/lesson-sessions/{session['id']}/attendance",
+        headers=headers,
+        json={"items": [{"student_id": student["id"], "status": "absent"}]},
+    )
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "8 занять", "price_minor": 180000, "period_days": 30},
+    ).json()
+    client.post(
+        "/billing/charges",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "plan_id": plan["id"],
+            "starts_on": "2026-10-01",
+            "due_date": "2000-01-01",
+        },
+    )
+
+    detail = client.get(f"/groups/{group_id}/detail", headers=headers)
+    assert detail.status_code == 200, detail.text
+    body = detail.json()
+    assert body["group"]["id"] == group_id
+    assert len(body["members"]) == 1
+    member = body["members"][0]
+    assert member["student_id"] == student["id"]
+    assert member["attendance"]["absent"] == 1
+    assert member["attendance"]["total"] == 1
+    assert member["billing"]["status"] == "overdue"
+    assert member["billing"]["amount_due_minor"] == 180000
+    assert len(member["payments"]) == 1
