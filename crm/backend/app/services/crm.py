@@ -529,6 +529,7 @@ def list_waiting_candidates(db: Session, org_id: UUID) -> list[dict]:
         )
         result.append({
             "student_id": student.id,
+            "created_at": student.created_at,
             "first_name": student.first_name,
             "last_name": student.last_name,
             "age": student.age_at_inquiry,
