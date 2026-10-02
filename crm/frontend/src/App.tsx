@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadOperations, loadOverviewReport, loadSession, loadTeaching, loadWorkspace, login, refreshMe, resetPassword, type ApiAuditEvent, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, type ApiAuditEvent, type ApiGroupDetail, type ApiPaymentReminder, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
@@ -185,6 +185,11 @@ function App() {
     { id: "2", fullName: "Адміністратор AeroKiDS", role: "Адміністратор", email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: ["1"], groupIds: [], isActive: true },
   ]);
   const [selectedStaffId, setSelectedStaffId] = useState<EntityId | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<EntityId | null>(null);
+  const [groupDetail, setGroupDetail] = useState<ApiGroupDetail | null>(null);
+  const [groupDetailLoading, setGroupDetailLoading] = useState(false);
+  const [paymentReminders, setPaymentReminders] = useState<ApiPaymentReminder[]>([]);
+  const [reminderSavingId, setReminderSavingId] = useState<EntityId | null>(null);
   const [showStaffForm, setShowStaffForm] = useState(false);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -253,11 +258,12 @@ function App() {
     setWorkspaceLoading(true);
     setWorkspaceError("");
     try {
-      const [bundle, operations, teaching, report] = await Promise.all([
+      const [bundle, operations, teaching, report, reminders] = await Promise.all([
         loadWorkspace(currentSession),
         loadOperations(currentSession),
         loadTeaching(currentSession),
         loadOverviewReport(currentSession),
+        loadPaymentReminders(currentSession).catch(() => []),
       ]);
       applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
       applyOperations(operations, setLocations, setStaff, setPlans, setPayments);
@@ -275,6 +281,7 @@ function App() {
       if (!groupLocationId && operations.locations[0]) setGroupLocationId(operations.locations[0].id);
       applyTeaching(teaching, setLessons, setGroups);
       setOverviewReport(report);
+      setPaymentReminders(reminders);
       setSelectedLessonId((current) => teaching.lessons.some((item) => item.id === current) ? current : (teaching.lessons[0]?.id ?? ""));
       setWorkspaceLoaded(true);
     } catch (error) {
@@ -847,6 +854,33 @@ function App() {
     }
   };
 
+  const openGroup = async (groupId: EntityId) => {
+    setSelectedGroupId(groupId);
+    setGroupDetail(null);
+    if (!apiEnabled || !session) return;
+    setGroupDetailLoading(true);
+    try {
+      setGroupDetail(await loadGroupDetail(groupId, session));
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити групу.");
+    } finally {
+      setGroupDetailLoading(false);
+    }
+  };
+
+  const markReminderHandled = async (reminder: ApiPaymentReminder) => {
+    if (!session || reminderSavingId) return;
+    setReminderSavingId(reminder.payment_id);
+    try {
+      await recordPaymentReminder(reminder.payment_id, reminder.stage, "phone", session);
+      setPaymentReminders(await loadPaymentReminders(session));
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зафіксувати нагадування.");
+    } finally {
+      setReminderSavingId(null);
+    }
+  };
+
   const markPaymentPaid = async (id: EntityId) => {
     if (apiEnabled && session) {
       try {
@@ -981,6 +1015,7 @@ function App() {
   const occupancy = totalCapacity ? Math.round(occupiedSeats / totalCapacity * 100) : 0;
 
   const selectedStaff = staff.find((item) => item.id === selectedStaffId) ?? null;
+  const selectedGroup = groups.find((item) => item.id === selectedGroupId) ?? null;
 
   const createStaffMember = async () => {
     if (!staffName.trim()) return;
@@ -1366,6 +1401,16 @@ function App() {
               <article><span>Очікується</span><strong>{money(paymentTotals.pending)}</strong><small>{payments.filter((x) => x.status === "pending").length} рахунків</small></article>
               <article><span>Прострочено</span><strong>{money(paymentTotals.overdue)}</strong><small>{payments.filter((x) => x.status === "overdue").length} боргів</small></article>
             </section>
+            {paymentReminders.length > 0 && <article className="panel reminderPanel">
+              <div className="panelHead"><div><p className="eyebrow">Контроль оплат</p><h2>Потрібно нагадати</h2></div><span className="counter">{paymentReminders.length}</span></div>
+              <p className="reminderIntro">CRM показує лише актуальний етап нагадування. Після фіксації дзвінка цей етап зникає і не дублюється; наступне нагадування з’явиться лише на наступному етапі прострочення.</p>
+              <div className="reminderList">{paymentReminders.map((reminder) => <div className="reminderRow" key={reminder.payment_id + reminder.stage}>
+                <div><b>{reminder.student_name}</b><small>{reminder.contact_name ?? "Контакт не вказано"}{reminder.contact_phone ? " · " + reminder.contact_phone : ""}</small></div>
+                <span><b>{money(reminder.amount_minor / 100)}</b><small>до {new Date(reminder.due_date + "T00:00:00").toLocaleDateString("uk-UA")}</small></span>
+                <span className={"reminderStage " + (reminder.days_from_due > 0 ? "overdue" : "upcoming")}>{reminder.label}</span>
+                <div className="reminderActions">{reminder.contact_phone && <a className="link" href={"tel:" + reminder.contact_phone.replace(/\s/g, "")}>Подзвонити</a>}<button className="search" disabled={reminderSavingId === reminder.payment_id} onClick={() => markReminderHandled(reminder)}>{reminderSavingId === reminder.payment_id ? "Зберігаємо…" : "Дзвінок зроблено"}</button></div>
+              </div>)}</div>
+            </article>}
             <article className="panel paymentsPanel">
               <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати учнів</h2></div><button className="primary" onClick={openPaymentForm}>+ Нарахування</button></div>
               <div className="paymentTable">
@@ -1566,11 +1611,12 @@ function App() {
             <article className="panel">
               <div className="panelHead"><div><p className="eyebrow">Активні</p><h2>Групи</h2></div><span className="counter">{groups.length}</span></div>
               <div className="groupCards">
-                {groups.map((group) => <div className="groupCard" key={group.id}>
+                {groups.map((group) => <button className="groupCard groupCardButton" key={group.id} onClick={() => openGroup(group.id)}>
                   <div><b>{group.name}</b><span>{group.schedule}</span></div>
                   <div className="capacity"><strong>{group.members.length}/{group.capacity}</strong><span>{group.location}</span></div>
                   <div className="capacityTrack"><i style={{ width: Math.min(100, group.members.length / group.capacity * 100) + "%" }} /></div>
-                </div>)}
+                  <small className="groupOpenHint">Відкрити групу →</small>
+                </button>)}
               </div>
             </article>
           </div>
@@ -1599,7 +1645,7 @@ function App() {
           </div>}
           {searchGroups.length > 0 && <div className="searchResults">
             <h3>Групи</h3>
-            {searchGroups.map((item) => <button key={item.id} onClick={() => { setActive("Групи"); setShowSearch(false); }}>
+            {searchGroups.map((item) => <button key={item.id} onClick={() => { setActive("Групи"); setShowSearch(false); openGroup(item.id); }}>
               <span><b>{item.name}</b><small>{item.ages} · {item.location}</small></span><i>{item.members.length}/{item.capacity}</i>
             </button>)}
           </div>}
@@ -1668,6 +1714,44 @@ function App() {
           <label>Адреса<input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="Івано-Франківськ" /></label>
           <button className="primary full" disabled={!locationName.trim()} onClick={createLocationDemo}>Створити локацію</button>
         </div>
+      </div>}
+
+      {selectedGroupId && <div className="drawerBackdrop" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); }}>
+        <aside className="drawer groupDetailDrawer" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); }}>×</button>
+          <p className="eyebrow">Група</p>
+          <div className="groupDetailHero">
+            <div><h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2><p>{selectedGroup?.location ?? "Локація не вказана"} · {selectedGroup?.schedule ?? "Розклад не вказаний"}</p></div>
+            <strong>{groupDetail?.members.length ?? selectedGroup?.members.length ?? 0}/{groupDetail?.group.capacity ?? selectedGroup?.capacity ?? "—"}</strong>
+          </div>
+          {groupDetailLoading && <div className="emptyState">Завантажуємо дані групи…</div>}
+          {!apiEnabled && selectedGroup && <div className="groupMemberList">{selectedGroup.members.map((studentId) => {
+            const student = leads.find((item) => item.id === studentId);
+            const studentPayments = payments.filter((item) => item.studentId === studentId);
+            const due = studentPayments.find((item) => item.status === "overdue") ?? studentPayments.find((item) => item.status === "pending");
+            return <article className="groupMemberCard" key={studentId}>
+              <div className="groupMemberTop"><span className="candidateAvatar">{student?.child?.[0] ?? "?"}</span><div><b>{student?.child ?? "Учень"}</b><small>{student?.age ?? "—"} років · {student?.parent ?? "Контакт не вказано"}</small></div></div>
+              <div className="groupMemberMetrics"><span>Оплата <b>{due ? (due.status === "overdue" ? "прострочена" : "очікується") : "✓"}</b></span><span>До дати <b>{due?.dueDate ? new Date(due.dueDate).toLocaleDateString("uk-UA") : "—"}</b></span></div>
+              <button className="link" onClick={() => { setSelectedStudentId(studentId); setSelectedGroupId(null); }}>Відкрити учня →</button>
+            </article>;
+          })}</div>}
+          {apiEnabled && groupDetail && <div className="groupMemberList">
+            {groupDetail.members.length === 0 && <div className="emptyState">У групі немає активних або призупинених учнів.</div>}
+            {groupDetail.members.map((member) => {
+              const billingLabel = member.billing?.status === "overdue" ? "Прострочено" : member.billing?.status === "due" ? "Оплата сьогодні" : member.billing?.status === "upcoming" ? "Очікується" : member.billing?.status === "current" ? "Сплачено" : "Без тарифу";
+              return <article className="groupMemberCard" key={member.student_id}>
+                <div className="groupMemberTop"><span className="candidateAvatar">{member.first_name[0]}</span><div><b>{member.first_name} {member.last_name ?? ""}</b><small>{member.age ?? "—"} років · у групі з {new Date(member.enrollment_started_at + "T00:00:00").toLocaleDateString("uk-UA")}</small><small>{member.contact_name ?? "Контакт не вказано"}{member.contact_phone ? " · " + member.contact_phone : ""}</small></div></div>
+                <div className="groupMemberMetrics">
+                  <span>Відвідування <b>{member.attendance.attendance_rate}%</b><small>{member.attendance.present} був · {member.attendance.late} запізн. · {member.attendance.absent} пропусків · {member.attendance.excused} поважних</small></span>
+                  {member.billing ? <span>Оплата <b className={"billingText " + member.billing.status}>{billingLabel}</b><small>{member.billing.plan_name ?? "Тариф не вказано"}{member.billing.next_due_date ? " · до " + new Date(member.billing.next_due_date + "T00:00:00").toLocaleDateString("uk-UA") : ""}</small></span> : <span>Оплата <b>Приховано для ролі</b><small>Фінансові дані недоступні викладачу</small></span>}
+                  {member.billing && <span>Борг <b>{money(member.billing.amount_due_minor / 100)}</b><small>{member.billing.last_paid_at ? "Остання оплата " + new Date(member.billing.last_paid_at).toLocaleDateString("uk-UA") : "Оплат ще не було"}</small></span>}
+                </div>
+                {member.payments.length > 0 && <details className="memberPayments"><summary>Історія оплат ({member.payments.length})</summary><div>{member.payments.map((payment) => <p key={payment.id}><span>{payment.note ?? "Нарахування"}<small>{payment.due_date ? "До " + new Date(payment.due_date + "T00:00:00").toLocaleDateString("uk-UA") : "Без дати"}</small></span><b>{money(payment.amount_minor / 100)}<small>{payment.status === "paid" ? "Сплачено" : payment.status === "cancelled" ? "Скасовано" : payment.status === "refunded" ? "Повернено" : payment.due_date && payment.due_date < localDateInput(new Date()) ? "Прострочено" : "Очікується"}</small></b></p>)}</div></details>}
+                <button className="link" onClick={() => { setSelectedStudentId(member.student_id); setSelectedGroupId(null); setGroupDetail(null); }}>Відкрити картку учня →</button>
+              </article>;
+            })}
+          </div>}
+        </aside>
       </div>}
 
       {selectedStaff && <div className="drawerBackdrop" onClick={() => setSelectedStaffId(null)}>
