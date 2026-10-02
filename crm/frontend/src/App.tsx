@@ -334,11 +334,29 @@ function App() {
     .slice(0, 5), [leads]);
 
   const visibleLeads = useMemo(() => {
-    if (leadFilter === "new") return leads.filter((item) => item.status === "Нова");
-    if (leadFilter === "trial") return leads.filter((item) => item.status === "Пробне заплановано");
-    if (leadFilter === "waiting") return leads.filter((item) => item.status === "Очікує групу");
-    return leads;
-  }, [leads, leadFilter]);
+    const closed = new Set<LeadStatus>(["Відмовились", "Не відповідає", "Неактуально", "Зарахований"]);
+    let items = leads.filter((item) => {
+      if (leadFilter === "action") return !closed.has(item.status);
+      if (leadFilter === "new") return item.status === "Нова";
+      if (leadFilter === "trial") return item.status === "Пробне заплановано";
+      if (leadFilter === "no_show") return item.trialResult === "no_show";
+      if (leadFilter === "after_trial") return item.status === "Після пробного";
+      if (leadFilter === "waiting") return item.status === "Очікує групу";
+      if (leadFilter === "closed") return ["Відмовились", "Не відповідає", "Неактуально"].includes(item.status);
+      return true;
+    });
+
+    items = [...items].sort((a, b) => {
+      if (leadSort === "newest") return dateValue(b.createdAt) - dateValue(a.createdAt);
+      if (leadSort === "oldest") return dateValue(a.createdAt) - dateValue(b.createdAt);
+      if (leadSort === "trial") return dateValue(a.trialAt, Number.MAX_SAFE_INTEGER) - dateValue(b.trialAt, Number.MAX_SAFE_INTEGER);
+      if (leadSort === "age") return a.age - b.age;
+      const priority = leadActionPriority(a) - leadActionPriority(b);
+      if (priority !== 0) return priority;
+      return dateValue(b.createdAt) - dateValue(a.createdAt);
+    });
+    return items;
+  }, [leads, leadFilter, leadSort]);
 
   const visibleStudents = useMemo(() => activeStudents.filter((item) => {
     const state = studentStates[item.id] ?? "Активний";
@@ -1816,6 +1834,45 @@ function staffRoleValue(role: StaffRoleDemo) {
     "Бухгалтер": "accountant",
   };
   return values[role];
+}
+
+function dateValue(value?: string, fallback = 0) {
+  if (!value) return fallback;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : fallback;
+}
+
+function leadActionPriority(lead: Lead) {
+  const now = Date.now();
+  if (lead.nextContactAt && dateValue(lead.nextContactAt) <= now) return 0;
+  if (lead.trialResult === "no_show") return 1;
+  if (lead.status === "Після пробного") return 2;
+  if (lead.status === "Нова") return 3;
+  if (lead.status === "Пробне заплановано") return 4;
+  if (lead.status === "Зв'язались") return 5;
+  if (lead.status === "Очікує групу") return 6;
+  return 9;
+}
+
+function leadNextAction(lead: Lead) {
+  if (lead.status === "Відмовились") return "Закрито: відмовились";
+  if (lead.status === "Не відповідає") return "Закрито: не відповідає";
+  if (lead.status === "Неактуально") return "Закрито: неактуально";
+  if (lead.status === "Зарахований") return "Учень зарахований";
+  if (lead.nextContactAt) {
+    const when = new Date(lead.nextContactAt);
+    const overdue = when.getTime() < Date.now();
+    return `${overdue ? "Прострочено: " : "Зв'язатися: "}${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · ${when.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}`;
+  }
+  if (lead.trialResult === "no_show") return "Зателефонувати / перезаписати";
+  if (lead.status === "Після пробного") return "Уточнити рішення";
+  if (lead.status === "Нова") return "Перший контакт";
+  if (lead.status === "Пробне заплановано" && lead.trialAt) {
+    const when = new Date(lead.trialAt);
+    return `Пробне ${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · ${when.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}`;
+  }
+  if (lead.status === "Очікує групу") return "Підібрати групу";
+  return "Продовжити контакт";
 }
 
 function leadSourceLabel(source: string | null | undefined) {
