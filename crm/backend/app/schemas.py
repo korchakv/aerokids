@@ -971,6 +971,8 @@ class GroupOverviewItem(BaseModel):
     enrolled_count: int
     min_age: int | None
     max_age: int | None
+    primary_teacher_id: UUID | None = None
+    primary_teacher_name: str | None = None
 
 
 class AuditEventRead(ORMModel):
