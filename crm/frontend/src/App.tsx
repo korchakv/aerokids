@@ -264,6 +264,9 @@ function App() {
   const [selectedGroupId, setSelectedGroupId] = useState<EntityId | null>(null);
   const [groupDetail, setGroupDetail] = useState<ApiGroupDetail | null>(null);
   const [groupDetailLoading, setGroupDetailLoading] = useState(false);
+  const [showGroupCandidatePicker, setShowGroupCandidatePicker] = useState(false);
+  const [groupCandidateId, setGroupCandidateId] = useState<EntityId | "">("");
+  const [groupCandidateSaving, setGroupCandidateSaving] = useState(false);
   const [paymentReminders, setPaymentReminders] = useState<ApiPaymentReminder[]>([]);
   const [reminderSavingId, setReminderSavingId] = useState<EntityId | null>(null);
   const [showStaffForm, setShowStaffForm] = useState(false);
@@ -1020,6 +1023,8 @@ function App() {
   const openGroup = async (groupId: EntityId) => {
     setSelectedGroupId(groupId);
     setGroupDetail(null);
+    setShowGroupCandidatePicker(false);
+    setGroupCandidateId("");
     if (!apiEnabled || !session) return;
     setGroupDetailLoading(true);
     try {
@@ -1028,6 +1033,34 @@ function App() {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити групу.");
     } finally {
       setGroupDetailLoading(false);
+    }
+  };
+
+  const addCandidateToExistingGroup = async () => {
+    if (!selectedGroupId || !groupCandidateId || groupCandidateSaving) return;
+    const candidate = leads.find((lead) => lead.id === groupCandidateId);
+    if (!candidate) return;
+    setGroupCandidateSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiPost("/enrollments", {
+          student_id: groupCandidateId,
+          group_id: selectedGroupId,
+          started_at: localDateInput(new Date()),
+        }, session);
+        await syncWorkspace(session);
+        setGroupDetail(await loadGroupDetail(selectedGroupId, session));
+      } else {
+        setGroups((items) => items.map((group) => group.id === selectedGroupId ? { ...group, members: Array.from(new Set([...group.members, groupCandidateId])) } : group));
+        setLeads((items) => items.map((lead) => lead.id === groupCandidateId ? { ...lead, status: "Зарахований" } : lead));
+      }
+      setGroupCandidateId("");
+      setShowGroupCandidatePicker(false);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося додати учня до групи.");
+    } finally {
+      setGroupCandidateSaving(false);
     }
   };
 
@@ -1279,6 +1312,16 @@ function App() {
 
   const selectedStaff = staff.find((item) => item.id === selectedStaffId) ?? null;
   const selectedGroup = groups.find((item) => item.id === selectedGroupId) ?? null;
+  const existingGroupCandidates = useMemo(() => {
+    if (!selectedGroupId) return [];
+    const memberIds = new Set(groupDetail?.members.map((member) => member.student_id) ?? selectedGroup?.members ?? []);
+    return leads
+      .filter((lead) => !memberIds.has(lead.id) && (lead.status === "Після пробного" || lead.status === "Очікує групу"))
+      .sort((a, b) => {
+        if (a.status !== b.status) return a.status === "Очікує групу" ? -1 : 1;
+        return a.child.localeCompare(b.child, "uk-UA");
+      });
+  }, [leads, selectedGroupId, selectedGroup?.members, groupDetail?.members]);
 
   const createStaffMember = async () => {
     const nameError = personNameError(staffName, "Ім’я та прізвище");
@@ -2016,14 +2059,30 @@ function App() {
         </div>
       </div>}
 
-      {selectedGroupId && <div className="drawerBackdrop" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); }}>
+      {selectedGroupId && <div className="drawerBackdrop" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>
         <aside className="drawer groupDetailDrawer" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); }}>×</button>
+          <button className="drawerClose" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>×</button>
           <p className="eyebrow">Група</p>
           <div className="groupDetailHero">
             <div><h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2><p>{selectedGroup?.location ?? "Локація не вказана"} · {selectedGroup?.schedule ?? "Розклад не вказаний"}</p></div>
-            <strong>{groupDetail?.members.length ?? selectedGroup?.members.length ?? 0}/{groupDetail?.group.capacity ?? selectedGroup?.capacity ?? "—"}</strong>
+            <div className="groupDetailHeroActions"><strong>{groupDetail?.members.length ?? selectedGroup?.members.length ?? 0}/{groupDetail?.group.capacity ?? selectedGroup?.capacity ?? "—"}</strong><button className="primary compact" onClick={() => { setShowGroupCandidatePicker((value) => !value); setGroupCandidateId(existingGroupCandidates[0]?.id ?? ""); }}>+ Додати учня</button></div>
           </div>
+          {showGroupCandidatePicker && <div className="groupCandidatePicker">
+            <div className="groupCandidatePickerHead"><div><b>Додати в існуючу групу</b><small>Доступні діти, які пройшли пробне або вже очікують групу.</small></div><span>{existingGroupCandidates.length} кандидатів</span></div>
+            {existingGroupCandidates.length === 0 ? <div className="emptyState compactEmpty">Немає кандидатів після пробного, яких можна додати до цієї групи.</div> : <>
+              <label>Кандидат<select value={groupCandidateId} onChange={(e) => setGroupCandidateId(e.target.value)}>
+                {existingGroupCandidates.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.child} · {candidate.age} років · {candidate.recommendedLevel ?? "рівень не вказано"} · {candidate.status}</option>)}
+              </select></label>
+              {groupCandidateId && (() => {
+                const candidate = existingGroupCandidates.find((item) => item.id === groupCandidateId);
+                if (!candidate) return null;
+                const slots = (groupDetail?.schedules ?? []).map((slot) => ({ weekday: slot.weekday, start_time: slot.start_time.slice(0,5), duration_minutes: slot.duration_minutes }));
+                const match = candidateCompatibility(candidate, slots, groupDetail?.group.location_id ?? null);
+                return <div className="groupCandidatePreview"><span className="candidateAvatar">{candidate.child[0]}</span><div><b>{candidate.child}</b><small>{candidate.parent} · {candidate.phone}</small><small>{availabilityLabel(candidate.availability ?? [])}</small></div><MatchBadge match={match} /></div>;
+              })()}
+              <div className="groupCandidatePickerActions"><button className="search" onClick={() => { setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>Скасувати</button><button className="primary" disabled={!groupCandidateId || groupCandidateSaving} onClick={addCandidateToExistingGroup}>{groupCandidateSaving ? "Додаємо…" : "Додати до групи"}</button></div>
+            </>}
+          </div>}
           {groupDetailLoading && <div className="emptyState">Завантажуємо дані групи…</div>}
           {!apiEnabled && selectedGroup && <div className="groupMemberList">{selectedGroup.members.map((studentId) => {
             const student = leads.find((item) => item.id === studentId);
@@ -2047,7 +2106,7 @@ function App() {
                   {member.billing && <span>Борг <b>{money(member.billing.amount_due_minor / 100)}</b><small>{member.billing.last_paid_at ? "Остання оплата " + new Date(member.billing.last_paid_at).toLocaleDateString("uk-UA") : "Оплат ще не було"}</small></span>}
                 </div>
                 {member.payments.length > 0 && <details className="memberPayments"><summary>Історія оплат ({member.payments.length})</summary><div>{member.payments.map((payment) => <p key={payment.id}><span>{payment.note ?? "Нарахування"}<small>{payment.due_date ? "До " + new Date(payment.due_date + "T00:00:00").toLocaleDateString("uk-UA") : "Без дати"}</small></span><b>{money(payment.adjusted_amount_minor / 100)}<small>{payment.balance_minor > 0 ? "Залишок " + money(payment.balance_minor / 100) : payment.status === "cancelled" ? "Скасовано" : payment.status === "refunded" ? "Повернено" : "Сплачено"}{payment.refunded_minor > 0 ? " · повернено " + money(payment.refunded_minor / 100) : ""}</small></b></p>)}</div></details>}
-                <button className="link" onClick={() => { setSelectedStudentId(member.student_id); setSelectedGroupId(null); setGroupDetail(null); }}>Відкрити картку учня →</button>
+                <button className="link" onClick={() => { setSelectedStudentId(member.student_id); setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>Відкрити картку учня →</button>
               </article>;
             })}
           </div>}
