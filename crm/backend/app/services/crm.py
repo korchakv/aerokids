@@ -981,7 +981,7 @@ def _materialize_legacy_settlement(db: Session, org_id: UUID, payment: Payment) 
         student_id=payment.student_id,
         kind="payment",
         amount_minor=payment.amount_minor,
-        method=payment.method,
+        method=payment.method.value if payment.method else None,
         note="Legacy full payment migrated to ledger",
         occurred_at=payment.paid_at or payment.created_at,
     ))
@@ -1507,7 +1507,7 @@ def add_payment_receipt(
         student_id=payment.student_id,
         kind="payment",
         amount_minor=amount_minor,
-        method=method,
+        method=method.value,
         note=note,
         occurred_at=occurred_at,
         actor_user_id=actor_user_id,
