@@ -753,6 +753,13 @@ class OrganizationMembershipCreate(BaseModel):
     full_name: str | None = Field(default=None, max_length=160)
     role: StaffRole
 
+    _email = field_validator("email")(normalize_email)
+
+    @field_validator("full_name")
+    @classmethod
+    def valid_full_name(cls, value: str | None) -> str | None:
+        return normalize_person_name(value) if value else None
+
 
 class OrganizationMembershipRead(BaseModel):
     id: UUID
