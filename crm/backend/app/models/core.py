@@ -329,7 +329,7 @@ class PaymentTransaction(Base):
     student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
     kind: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
     amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
-    method: Mapped[PaymentMethod | None] = mapped_column(Enum(PaymentMethod))
+    method: Mapped[str | None] = mapped_column(String(20))
     note: Mapped[str | None] = mapped_column(String(300))
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
