@@ -1785,14 +1785,14 @@ function App() {
             <article className="panel paymentsPanel">
               <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати учнів</h2></div><button className="primary" onClick={openPaymentForm}>+ Нарахування</button></div>
               <div className="paymentTable">
-                <div className="paymentRow paymentHead"><span>Учень</span><span>Абонемент</span><span>Нараховано / залишок</span><span>До дати</span><span>Статус</span><span>Дії</span></div>
+                <div className="paymentRow paymentHead"><span>Дитина / відповідальний</span><span>Абонемент</span><span>Нараховано / залишок</span><span>До дати</span><span>Статус</span><span>Дії</span></div>
                 {payments.map((payment) => {
                   const student = leads.find((lead) => lead.id === payment.studentId);
                   const plan = plans.find((item) => item.id === payment.planId);
                   const subscription = payment.subscriptionId ? subscriptions.find((item) => item.id === payment.subscriptionId) : undefined;
                   const statusLabel = payment.status === "paid" ? "Сплачено" : payment.status === "overdue" ? "Прострочено" : payment.status === "refunded" ? "Повернено" : payment.status === "cancelled" ? "Скасовано" : "Очікується";
                   return <div className="paymentRow" key={payment.id}>
-                    <span><b>{student?.child ?? "Учень"}</b><small>{student?.parent}</small></span>
+                    <span className="paymentIdentity"><b>{student?.child ?? "Учень"}</b><small>Дитина{student?.childPhone ? " · " + formatUaPhone(student.childPhone) : ""}</small><small><strong>Відповідальний:</strong> {student?.parent ?? "Не вказано"}{student?.phone ? " · " + formatUaPhone(student.phone) : ""}</small></span>
                     <span className="paymentPlanCell"><b>{plan?.name ?? "—"}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}</span>
                     <span className="paymentAmountCell"><b>{money(payment.adjustedAmount)}</b><small>{payment.balanceAmount > 0 ? <>Залишок: {money(payment.balanceAmount)}</> : <>Внесено: {money(Math.max(0, payment.paidAmount - payment.refundedAmount))}</>}{payment.refundedAmount > 0 ? " · повернено " + money(payment.refundedAmount) : ""}</small></span>
                     <span>{payment.dueDate ? new Date(payment.dueDate + "T00:00:00").toLocaleDateString("uk-UA") : "—"}</span>
@@ -2145,7 +2145,7 @@ function App() {
               const billingLabel = member.billing?.status === "overdue" ? "Прострочено" : member.billing?.status === "due" ? "Оплата сьогодні" : member.billing?.status === "upcoming" ? "Очікується" : member.billing?.status === "current" ? "Сплачено" : "Без тарифу";
               return <article className="groupMemberCard groupMemberCardCompact" key={member.student_id}>
                 <div className="groupMemberHeaderRow">
-                  <div className="groupMemberTop"><span className="candidateAvatar">{member.first_name[0]}</span><div><b>{member.first_name} {member.last_name ?? ""}</b><small>{member.age ?? "—"} років · у групі з {new Date(member.enrollment_started_at + "T00:00:00").toLocaleDateString("uk-UA")}</small><small>{member.contact_name ?? "Контакт не вказано"}{member.contact_phone ? " · " + member.contact_phone : ""}</small></div></div>
+                  <div className="groupMemberTop"><span className="candidateAvatar">{member.first_name[0]}</span><div><b>{member.first_name} {member.last_name ?? ""}</b><small>{member.age ?? "—"} років · у групі з {new Date(member.enrollment_started_at + "T00:00:00").toLocaleDateString("uk-UA")}</small><small>Дитина: {member.student_phone ? formatUaPhone(member.student_phone) : "телефон не вказано"}</small><small>Відповідальний: {member.contact_name ?? "не вказано"}{member.contact_phone ? " · " + formatUaPhone(member.contact_phone) : ""}</small></div></div>
                   <button className="link groupMemberOpen" onClick={() => { setSelectedStudentId(member.student_id); setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>Відкрити картку →</button>
                 </div>
                 <div className="groupMemberMetrics groupMemberMetricsCompact">
@@ -2209,7 +2209,7 @@ function App() {
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
           <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
-          <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(e.target.value)}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · {student.parent}</option>)}</select></label>
+          <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(e.target.value)}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · відповідальний: {student.parent}</option>)}</select></label>
           <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.filter((plan) => plan.price > 0).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {money(plan.price)}</option>)}</select></label>
           <label>Оплатити до<input type="date" value={paymentDueDate} min={localDateInput(new Date())} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
           <label className="toggleRow"><input type="checkbox" checked={paymentAutoRenew} onChange={(e) => setPaymentAutoRenew(e.target.checked)} /><span><b>Автопродовження</b><small>Наступне нарахування створиться автоматично перед завершенням цього періоду.</small></span></label>
