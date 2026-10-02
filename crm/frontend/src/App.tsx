@@ -61,6 +61,7 @@ type GroupItem = {
   location: string;
   capacity: number;
   members: EntityId[];
+  teacherName?: string;
 };
 
 type AttendanceValue = "present" | "absent" | "late" | "excused";
@@ -1991,11 +1992,11 @@ function App() {
               <span>Виберіть дітей зі списку очікування нижче та сформуйте першу групу.</span>
             </div> : <div className="groupCards groupCardsPrimary">
               {groups.map((group) => {
-                const teacher = groupTeacher(group.id);
+                const teacherName = group.teacherName ?? groupTeacher(group.id)?.fullName;
                 return <button className="groupCard groupCardButton groupCardPrimary groupCardWide" key={group.id} onClick={() => openGroup(group.id)}>
                   <div className="groupCardTitleBlock">
                     <span className="groupCardIcon">{group.name.slice(0,1)}</span>
-                    <div><b>{group.name}</b><small>{teacher ? "Викладач: " + teacher.fullName : "Викладач не призначений"}</small></div>
+                    <div><b>{group.name}</b><small>{teacherName ? "Викладач: " + teacherName : "Викладач не призначений"}</small></div>
                   </div>
                   <div className="groupCardFact"><small>Розклад</small><b>{group.schedule}</b></div>
                   <div className="groupCardFact"><small>Локація</small><b>{group.location}</b></div>
@@ -2156,7 +2157,7 @@ function App() {
           <button className="drawerClose" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>×</button>
           <p className="eyebrow">Група</p>
           <div className="groupDetailHero">
-            <div><h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2><p>{selectedGroup?.location ?? "Локація не вказана"} · {selectedGroup?.schedule ?? "Розклад не вказаний"}{selectedTeacher ? " · Викладач: " + selectedTeacher.fullName : ""}</p></div>
+            <div><h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2><p>{selectedGroup?.location ?? "Локація не вказана"} · {selectedGroup?.schedule ?? "Розклад не вказаний"}{selectedGroup?.teacherName ? " · Викладач: " + selectedGroup.teacherName : selectedTeacher ? " · Викладач: " + selectedTeacher.fullName : ""}</p></div>
             <div className="groupDetailHeroActions"><strong>{groupDetail?.members.length ?? selectedGroup?.members.length ?? 0}/{groupDetail?.group.capacity ?? selectedGroup?.capacity ?? "—"}</strong>{canManageLeads && <button className="primary compact" onClick={() => { setShowGroupCandidatePicker((value) => !value); setGroupCandidateId(existingGroupCandidates[0]?.id ?? ""); }}>+ Додати учня</button>}</div>
           </div>
           {canManageStaff && <div className="groupTeacherAssign">
@@ -2881,6 +2882,7 @@ function applyWorkspace(
     location: group.location_name ?? "Локацію не вказано",
     capacity: group.capacity ?? Math.max(group.enrolled_count, 1),
     members: bundle.students.filter((student) => student.group_id === group.group_id).map((student) => student.student_id),
+    teacherName: group.primary_teacher_name ?? undefined,
   }));
 
   setLeads([...prospects, ...students]);
