@@ -522,6 +522,70 @@ def test_subscription_and_payment_flow(client):
     assert summary_after.json()["pending_minor"] == 0
 
 
+def test_atomic_subscription_charge_flow(client):
+    org = create_org(client, "Atomic Billing", "atomic-billing")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Олена"}).json()
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Місячний", "price_minor": 200000, "period_days": 30, "lessons_included": 8},
+    ).json()
+
+    response = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "plan_id": plan["id"],
+            "starts_on": "2026-10-01",
+            "due_date": "2026-10-05",
+            "discount_minor": 20000,
+            "discount_label": "Сімейна знижка",
+            "note": "Жовтень",
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["subscription"]["student_id"] == student["id"]
+    assert body["subscription"]["plan_id"] == plan["id"]
+    assert body["subscription"]["discount_minor"] == 20000
+    assert body["payment"]["subscription_id"] == body["subscription"]["id"]
+    assert body["payment"]["plan_id"] == plan["id"]
+    assert body["payment"]["amount_minor"] == 180000
+    assert body["payment"]["status"] == "pending"
+
+
+def test_atomic_subscription_charge_is_tenant_scoped(client):
+    org_a = create_org(client, "Atomic A", "atomic-a")
+    org_b = create_org(client, "Atomic B", "atomic-b")
+    a_headers = {"X-Organization-Id": org_a["id"]}
+    b_headers = {"X-Organization-Id": org_b["id"]}
+    student_a = client.post("/students", headers=a_headers, json={"first_name": "А"}).json()
+    foreign_plan = client.post(
+        "/subscription-plans",
+        headers=b_headers,
+        json={"name": "Foreign", "price_minor": 100000, "period_days": 30},
+    ).json()
+
+    response = client.post(
+        "/billing/charges",
+        headers=a_headers,
+        json={
+            "student_id": student_a["id"],
+            "plan_id": foreign_plan["id"],
+            "starts_on": "2026-10-01",
+        },
+    )
+    assert response.status_code == 404
+    subscriptions = client.get(f"/student-subscriptions?student_id={student_a['id']}", headers=a_headers)
+    payments = client.get(f"/payments?student_id={student_a['id']}", headers=a_headers)
+    assert subscriptions.status_code == 200
+    assert subscriptions.json() == []
+    assert payments.status_code == 200
+    assert payments.json() == []
+
+
 def test_payment_subscription_tenant_isolation(client):
     org_a = create_org(client, "School A", "payments-a")
     org_b = create_org(client, "School B", "payments-b")

@@ -436,6 +436,21 @@ class PaymentCreate(BaseModel):
     note: str | None = Field(default=None, max_length=300)
 
 
+class SubscriptionChargeCreate(BaseModel):
+    student_id: UUID
+    plan_id: UUID
+    starts_on: date
+    due_date: date | None = None
+    discount_minor: int = Field(default=0, ge=0)
+    discount_label: str | None = Field(default=None, max_length=160)
+    note: str | None = Field(default=None, max_length=300)
+
+
+class SubscriptionChargeResult(BaseModel):
+    subscription: StudentSubscriptionRead
+    payment: PaymentRead
+
+
 class PaymentMarkPaid(BaseModel):
     method: PaymentMethod
     paid_at: datetime | None = None

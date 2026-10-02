@@ -890,17 +890,12 @@ function App() {
       setPaymentSaving(true);
       try {
         setWorkspaceError("");
-        const subscription = await apiPost<{ id: string }>("/student-subscriptions", {
+        await apiPost("/billing/charges", {
           student_id: paymentStudentId,
           plan_id: paymentPlanId,
           starts_on: localDateInput(new Date()),
-          discount_minor: 0,
-        }, session);
-        await apiPost("/payments", {
-          student_id: paymentStudentId,
-          subscription_id: subscription.id,
-          amount_minor: Math.round(plan.price * 100),
           due_date: paymentDueDate || null,
+          discount_minor: 0,
           note: plan.name,
         }, session);
         await syncWorkspace(session);

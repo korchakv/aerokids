@@ -891,6 +891,63 @@ def list_student_subscriptions(db: Session, org_id: UUID, student_id: UUID | Non
     return list(db.scalars(stmt.order_by(StudentSubscription.starts_on.desc())))
 
 
+def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> tuple[StudentSubscription, Payment]:
+    organization = require_organization(db, org_id)
+    student = scoped_get(db, Student, org_id, data.student_id)
+    plan = scoped_get(db, SubscriptionPlan, org_id, data.plan_id)
+    if data.discount_minor > plan.price_minor:
+        raise HTTPException(status_code=422, detail="Discount cannot exceed subscription price")
+
+    amount_minor = plan.price_minor - data.discount_minor
+    if amount_minor <= 0:
+        raise HTTPException(status_code=422, detail="Charge amount must be greater than zero")
+
+    subscription = StudentSubscription(
+        organization_id=org_id,
+        student_id=student.id,
+        plan_id=plan.id,
+        starts_on=data.starts_on,
+        ends_on=data.starts_on + timedelta(days=plan.period_days - 1),
+        price_minor=plan.price_minor,
+        discount_minor=data.discount_minor,
+        discount_label=data.discount_label,
+    )
+    db.add(subscription)
+    db.flush()
+
+    payment = Payment(
+        organization_id=org_id,
+        student_id=student.id,
+        subscription_id=subscription.id,
+        amount_minor=amount_minor,
+        currency=organization.currency,
+        due_date=data.due_date,
+        note=data.note or plan.name,
+    )
+    db.add(payment)
+    db.flush()
+    record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        "payment.created",
+        {
+            "payment_id": str(payment.id),
+            "subscription_id": str(subscription.id),
+            "plan_id": str(plan.id),
+            "amount_minor": amount_minor,
+            "due_date": payment.due_date.isoformat() if payment.due_date else None,
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(subscription)
+    db.refresh(payment)
+    payment.plan_id = plan.id
+    return subscription, payment
+
+
 def create_payment(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> Payment:
     organization = require_organization(db, org_id)
     student = scoped_get(db, Student, org_id, data.student_id)
