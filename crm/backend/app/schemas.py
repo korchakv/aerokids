@@ -117,6 +117,9 @@ class StudentRead(ORMModel):
     preferred_location_id: UUID | None
     crm_status: CrmStatus
     student_status: StudentStatus
+    next_contact_at: datetime | None
+    lead_close_reason: str | None
+    lead_close_note: str | None
     notes: str | None
 
 
@@ -200,6 +203,32 @@ class IntakeResult(BaseModel):
 
 class StudentStatusUpdate(BaseModel):
     crm_status: CrmStatus
+
+
+class LeadOutcomeUpdate(BaseModel):
+    crm_status: CrmStatus
+    next_contact_at: datetime | None = None
+    close_reason: str | None = Field(default=None, max_length=80)
+    close_note: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_outcome(self):
+        allowed = {
+            CrmStatus.CONTACTED,
+            CrmStatus.TRIAL_COMPLETED,
+            CrmStatus.WAITING_FOR_GROUP,
+            CrmStatus.DECLINED,
+            CrmStatus.NO_RESPONSE,
+            CrmStatus.NOT_RELEVANT,
+        }
+        if self.crm_status not in allowed:
+            raise ValueError("Unsupported lead outcome status")
+        if self.crm_status == CrmStatus.DECLINED and not self.close_reason:
+            raise ValueError("close_reason is required when lead is declined")
+        if self.crm_status not in {CrmStatus.DECLINED, CrmStatus.NO_RESPONSE, CrmStatus.NOT_RELEVANT}:
+            self.close_reason = None
+            self.close_note = None
+        return self
 
 
 class TrialLessonUpdate(BaseModel):
@@ -607,9 +636,14 @@ class LeadListItem(BaseModel):
     contact_phone: str | None
     latest_trial_id: UUID | None
     latest_trial_at: datetime | None
+    latest_trial_status: TrialStatus | None
     trial_location_id: UUID | None
     trial_location_name: str | None
     recommended_level: str | None
+    teacher_notes: str | None
+    next_contact_at: datetime | None
+    close_reason: str | None
+    close_note: str | None
 
 
 class StudentOverviewItem(BaseModel):
