@@ -132,6 +132,7 @@ def test_no_show_stays_active_and_can_be_rescheduled(client):
         json={"starts_at": "2026-10-08T18:00:00+03:00"},
     )
     assert rescheduled.status_code == 200, rescheduled.text
+    assert rescheduled.json()["status"] == "scheduled"
     detail_after = client.get(f"/students/{student['id']}", headers=headers).json()
     assert detail_after["crm_status"] == "trial_scheduled"
 
