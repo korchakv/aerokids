@@ -1072,6 +1072,256 @@ def list_student_subscriptions(db: Session, org_id: UUID, student_id: UUID | Non
     return list(db.scalars(stmt.order_by(StudentSubscription.starts_on.desc())))
 
 
+def pause_subscription(
+    db: Session,
+    org_id: UUID,
+    subscription_id: UUID,
+    starts_on: date,
+    resume_on: date | None = None,
+    note: str | None = None,
+    actor_user_id: UUID | None = None,
+) -> SubscriptionPause:
+    subscription = scoped_get(db, StudentSubscription, org_id, subscription_id)
+    if subscription.status in {SubscriptionStatus.CANCELLED, SubscriptionStatus.EXPIRED}:
+        raise HTTPException(status_code=409, detail="Subscription cannot be paused")
+    if starts_on < subscription.starts_on or starts_on > subscription.ends_on:
+        raise HTTPException(status_code=422, detail="Pause must start inside the subscription period")
+
+    existing = db.scalar(select(SubscriptionPause).where(
+        SubscriptionPause.organization_id == org_id,
+        SubscriptionPause.subscription_id == subscription.id,
+        SubscriptionPause.resumed_at.is_(None),
+    ))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Subscription already has an active or scheduled pause")
+
+    ends_on = resume_on - timedelta(days=1) if resume_on else None
+    pause = SubscriptionPause(
+        organization_id=org_id,
+        subscription_id=subscription.id,
+        student_id=subscription.student_id,
+        starts_on=starts_on,
+        ends_on=ends_on,
+        note=note,
+    )
+    db.add(pause)
+    today = date.today()
+    if starts_on <= today and (ends_on is None or today <= ends_on):
+        subscription.status = SubscriptionStatus.PAUSED
+    record_audit(
+        db,
+        org_id,
+        "student",
+        subscription.student_id,
+        "subscription.paused",
+        {
+            "subscription_id": str(subscription.id),
+            "starts_on": starts_on.isoformat(),
+            "resume_on": resume_on.isoformat() if resume_on else None,
+            "note": note,
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(pause)
+    return pause
+
+
+def _finish_subscription_pause(
+    db: Session,
+    org_id: UUID,
+    subscription: StudentSubscription,
+    pause: SubscriptionPause,
+    resumes_on: date,
+    actor_user_id: UUID | None = None,
+    automatic: bool = False,
+) -> None:
+    if resumes_on <= pause.starts_on:
+        raise HTTPException(status_code=422, detail="Resume date must be after pause start")
+    pause_end = resumes_on - timedelta(days=1)
+    if pause.ends_on is not None and pause_end > pause.ends_on:
+        pause_end = pause.ends_on
+        resumes_on = pause_end + timedelta(days=1)
+    pause.ends_on = pause_end
+    pause.resumed_at = datetime.now(timezone.utc)
+    paused_days = (pause_end - pause.starts_on).days + 1
+    subscription.ends_on = subscription.ends_on + timedelta(days=paused_days)
+    subscription.status = SubscriptionStatus.ACTIVE if subscription.ends_on >= resumes_on else SubscriptionStatus.EXPIRED
+    record_audit(
+        db,
+        org_id,
+        "student",
+        subscription.student_id,
+        "subscription.resumed",
+        {
+            "subscription_id": str(subscription.id),
+            "resumes_on": resumes_on.isoformat(),
+            "paused_days": paused_days,
+            "automatic": automatic,
+        },
+        actor_user_id=actor_user_id,
+    )
+
+
+def resume_subscription(
+    db: Session,
+    org_id: UUID,
+    subscription_id: UUID,
+    resumes_on: date | None = None,
+    actor_user_id: UUID | None = None,
+) -> StudentSubscription:
+    subscription = scoped_get(db, StudentSubscription, org_id, subscription_id)
+    pause = db.scalar(select(SubscriptionPause).where(
+        SubscriptionPause.organization_id == org_id,
+        SubscriptionPause.subscription_id == subscription.id,
+        SubscriptionPause.resumed_at.is_(None),
+    ).order_by(SubscriptionPause.created_at.desc()))
+    if pause is None:
+        raise HTTPException(status_code=409, detail="Subscription has no active pause")
+
+    resume_date = resumes_on or date.today()
+    _finish_subscription_pause(db, org_id, subscription, pause, resume_date, actor_user_id)
+    db.commit()
+    db.refresh(subscription)
+    return subscription
+
+
+def _resume_due_pauses(db: Session, org_id: UUID, today: date, actor_user_id: UUID | None = None) -> int:
+    rows = list(db.scalars(select(SubscriptionPause).where(
+        SubscriptionPause.organization_id == org_id,
+        SubscriptionPause.resumed_at.is_(None),
+        SubscriptionPause.ends_on.is_not(None),
+        SubscriptionPause.ends_on < today,
+    )))
+    count = 0
+    for pause in rows:
+        subscription = scoped_get(db, StudentSubscription, org_id, pause.subscription_id)
+        _finish_subscription_pause(
+            db,
+            org_id,
+            subscription,
+            pause,
+            pause.ends_on + timedelta(days=1),
+            actor_user_id,
+            automatic=True,
+        )
+        count += 1
+    if count:
+        db.commit()
+    return count
+
+
+def run_billing_renewals(
+    db: Session,
+    org_id: UUID,
+    through_date: date | None = None,
+    actor_user_id: UUID | None = None,
+) -> dict:
+    organization = require_organization(db, org_id)
+    today = date.today()
+    horizon = through_date or (today + timedelta(days=7))
+    if horizon < today:
+        raise HTTPException(status_code=422, detail="through_date cannot be in the past")
+
+    resumed = _resume_due_pauses(db, org_id, today, actor_user_id)
+    created_payment_ids: list[UUID] = []
+    created_subscriptions = 0
+
+    candidates = list(db.scalars(select(StudentSubscription).where(
+        StudentSubscription.organization_id == org_id,
+        StudentSubscription.auto_renew.is_(True),
+        StudentSubscription.status == SubscriptionStatus.ACTIVE,
+        StudentSubscription.ends_on <= horizon,
+    ).order_by(StudentSubscription.ends_on, StudentSubscription.created_at)))
+
+    for original in candidates:
+        current = original
+        while current.auto_renew and current.status == SubscriptionStatus.ACTIVE and current.ends_on <= horizon:
+            open_pause = db.scalar(select(SubscriptionPause.id).where(
+                SubscriptionPause.organization_id == org_id,
+                SubscriptionPause.subscription_id == current.id,
+                SubscriptionPause.resumed_at.is_(None),
+            ))
+            if open_pause is not None:
+                break
+
+            existing_child = db.scalar(select(StudentSubscription).where(
+                StudentSubscription.organization_id == org_id,
+                StudentSubscription.renewal_of_id == current.id,
+                StudentSubscription.status != SubscriptionStatus.CANCELLED,
+            ))
+            if existing_child is not None:
+                current = existing_child
+                continue
+
+            student = scoped_get(db, Student, org_id, current.student_id)
+            if student.student_status != StudentStatus.ACTIVE:
+                break
+            active_enrollment = db.scalar(select(Enrollment.id).where(
+                Enrollment.organization_id == org_id,
+                Enrollment.student_id == student.id,
+                Enrollment.status == EnrollmentStatus.ACTIVE,
+            ))
+            if active_enrollment is None:
+                break
+
+            plan = scoped_get(db, SubscriptionPlan, org_id, current.plan_id)
+            next_start = current.ends_on + timedelta(days=1)
+            next_subscription = StudentSubscription(
+                organization_id=org_id,
+                student_id=student.id,
+                plan_id=plan.id,
+                status=SubscriptionStatus.ACTIVE,
+                starts_on=next_start,
+                ends_on=next_start + timedelta(days=plan.period_days - 1),
+                price_minor=plan.price_minor,
+                discount_minor=0,
+                discount_label=None,
+                auto_renew=True,
+                renewal_of_id=current.id,
+            )
+            db.add(next_subscription)
+            db.flush()
+            payment = Payment(
+                organization_id=org_id,
+                student_id=student.id,
+                subscription_id=next_subscription.id,
+                amount_minor=plan.price_minor,
+                currency=organization.currency,
+                due_date=next_start,
+                note=f"{plan.name} · автоматичне продовження",
+            )
+            db.add(payment)
+            db.flush()
+            current.status = SubscriptionStatus.EXPIRED
+            record_audit(
+                db,
+                org_id,
+                "student",
+                student.id,
+                "subscription.renewed",
+                {
+                    "previous_subscription_id": str(current.id),
+                    "subscription_id": str(next_subscription.id),
+                    "payment_id": str(payment.id),
+                    "starts_on": next_start.isoformat(),
+                    "amount_minor": plan.price_minor,
+                },
+                actor_user_id=actor_user_id,
+            )
+            created_payment_ids.append(payment.id)
+            created_subscriptions += 1
+            current = next_subscription
+
+    if created_subscriptions:
+        db.commit()
+    return {
+        "resumed_subscriptions": resumed,
+        "created_subscriptions": created_subscriptions,
+        "created_payment_ids": created_payment_ids,
+    }
+
+
 def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> tuple[StudentSubscription, Payment]:
     organization = require_organization(db, org_id)
     student = scoped_get(db, Student, org_id, data.student_id)
@@ -1163,7 +1413,7 @@ def create_payment(db: Session, org_id: UUID, data, actor_user_id: UUID | None =
     db.commit()
     db.refresh(item)
     item.plan_id = subscription.plan_id if data.subscription_id is not None else None
-    return item
+    return _attach_payment_financials(db, org_id, item)
 
 
 def list_payments(db: Session, org_id: UUID, student_id: UUID | None = None, status: PaymentStatus | None = None) -> list[Payment]:
