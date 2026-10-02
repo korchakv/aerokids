@@ -446,11 +446,6 @@ class SubscriptionChargeCreate(BaseModel):
     note: str | None = Field(default=None, max_length=300)
 
 
-class SubscriptionChargeResult(BaseModel):
-    subscription: StudentSubscriptionRead
-    payment: PaymentRead
-
-
 class PaymentMarkPaid(BaseModel):
     method: PaymentMethod
     paid_at: datetime | None = None
@@ -469,6 +464,11 @@ class PaymentRead(ORMModel):
     due_date: date | None
     paid_at: datetime | None
     note: str | None
+
+
+class SubscriptionChargeResult(BaseModel):
+    subscription: StudentSubscriptionRead
+    payment: PaymentRead
 
 
 class PaymentSummary(BaseModel):
