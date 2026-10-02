@@ -178,6 +178,8 @@ export type WorkspaceGroup = {
   enrolled_count: number;
   min_age: number | null;
   max_age: number | null;
+  primary_teacher_id: string | null;
+  primary_teacher_name: string | null;
 };
 
 export type WorkspaceBundle = {
