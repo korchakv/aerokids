@@ -104,3 +104,22 @@ jobs:
           Base.metadata.drop_all(bind=engine)
           PY
           alembic upgrade head
+
+
+  full-stack-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start full CRM stack
+        working-directory: crm
+        run: docker compose up -d --build
+      - name: Run end-to-end smoke flow
+        run: python crm/scripts/smoke.py
+      - name: Show stack logs on failure
+        if: failure()
+        working-directory: crm
+        run: docker compose logs --no-color
+      - name: Stop full CRM stack
+        if: always()
+        working-directory: crm
+        run: docker compose down -v
