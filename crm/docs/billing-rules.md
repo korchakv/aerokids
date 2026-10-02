@@ -152,19 +152,83 @@ A dedicated refund/credit-note flow should be implemented before live payment-pr
 
 ## Recurring billing
 
-Automatic creation of the next monthly charge is **not yet implemented**.
+Recurring billing is implemented through an idempotent renewal service.
 
-Before enabling it, add an idempotent recurring-billing service that:
+A subscription can have `auto_renew=true`. `POST /billing/renewals/run`:
 
-- finds subscriptions/renewals requiring the next period;
-- creates at most one charge per billing period;
-- respects paused/cancelled students;
-- does not create charges after enrollment has finished;
-- supports discounts deliberately rather than copying them accidentally;
-- records an audit event;
-- can safely retry after a crash.
+- resumes planned pauses that have ended;
+- looks ahead up to 7 days by default;
+- creates at most one child subscription for the current period using `renewal_of_id`;
+- creates the linked charge atomically in the same run;
+- requires the student to be active and to have an active enrollment;
+- skips cancelled subscriptions and unresolved pauses;
+- does not copy one-off discounts automatically;
+- marks the previous period expired after the next period is created;
+- is safe to call repeatedly without duplicate renewals.
 
-Until then, staff creates the next subscription/charge manually and the reminder engine works against those created charges.
+The web app runs this renewal check when an owner, admin or accountant synchronizes the workspace. This makes normal CRM use automatic and idempotent.
+
+For production SaaS where billing must run even if nobody opens the CRM, the same renewal service should additionally be invoked once per day by a server-side scheduler/cron. The business logic is already centralized in the backend; only unattended infrastructure scheduling remains.
+
+### Stale renewal guard
+
+The CRM intentionally does not silently backfill many old months of debt.
+
+If a subscription ended more than one plan period ago, the renewal run reports it as a stale subscription requiring review instead of generating a chain of historical invoices. This avoids surprising families with accidental mass billing after a long pause in automation.
+
+## Partial payments and money ledger
+
+`Payment` remains the charge: the amount the family owes. Actual movements of money are immutable `PaymentTransaction` rows.
+
+Supported ledger events:
+
+- `payment` — money received;
+- `refund` — money returned;
+- `adjustment_increase` — charge correction upward;
+- `adjustment_decrease` — charge correction downward.
+
+The original charge amount is never overwritten. The CRM derives:
+
+- adjusted charge amount;
+- total received;
+- total refunded;
+- net received;
+- outstanding balance.
+
+A partial receipt keeps the charge pending and reminders use only the remaining balance. A final receipt changes it to paid.
+
+A correction cannot silently reduce a charge below money already received. The overpaid portion must be refunded first.
+
+For old records that were marked paid before the ledger existed, the backend materializes a legacy full-payment transaction on the first refund/correction, preserving historical settlement correctly.
+
+## Refunds and corrections
+
+A refund is recorded as an immutable money-out transaction. By default it also creates an equal downward charge adjustment, which means a valid refund for unused service does not accidentally create a new debt.
+
+Use a pure adjustment when the amount owed was entered incorrectly but no corresponding money movement occurred.
+
+Paid history is never deleted or rewritten.
+
+## Subscription pause
+
+Pauses are stored separately from the subscription rather than changing historical dates.
+
+A pause has:
+
+- start date;
+- optional planned resume date;
+- note/reason;
+- actual resume timestamp.
+
+When the subscription resumes, its end date is extended by the actual number of paused days. Auto-renewal does not create the next period while an unresolved pause exists.
+
+A planned pause can be automatically resumed by the renewal service after its end date, or staff can resume it manually.
+
+## Auto-renew controls
+
+Auto-renewal can be enabled when creating a charge/subscription and can later be switched on or off through the subscription API/UI.
+
+Turning it off prevents subsequent automatic periods without deleting the current subscription or its billing history.
 
 ## Future payment-provider integration
 
