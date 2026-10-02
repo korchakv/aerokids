@@ -277,6 +277,9 @@ def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate, actor_user_
     db.add(item)
     db.flush()
     student.crm_status = CrmStatus.TRIAL_SCHEDULED
+    student.next_contact_at = None
+    student.lead_close_reason = None
+    student.lead_close_note = None
     record_audit(db, org_id, "student", student.id, "trial.scheduled", {"trial_id": str(item.id), "starts_at": item.starts_at.isoformat()}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(item)
@@ -292,6 +295,9 @@ def update_trial(db: Session, org_id: UUID, trial_id: UUID, starts_at: datetime 
         trial.starts_at = starts_at
     student = scoped_get(db, Student, org_id, trial.student_id)
     student.crm_status = CrmStatus.TRIAL_SCHEDULED
+    student.next_contact_at = None
+    student.lead_close_reason = None
+    student.lead_close_note = None
     record_audit(db, org_id, "student", student.id, "trial.rescheduled", {
         "trial_id": str(trial.id),
         "starts_at": trial.starts_at.isoformat(),
@@ -444,14 +450,64 @@ def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommende
     trial.recommended_level = recommended_level
     trial.teacher_notes = teacher_notes
     student = scoped_get(db, Student, org_id, trial.student_id)
+    student.lead_close_reason = None
+    student.lead_close_note = None
     if status.value == "completed":
-        student.crm_status = CrmStatus.WAITING_FOR_GROUP
+        # A completed trial still needs an explicit business decision:
+        # ready for a group, thinking/follow-up, or declined.
+        student.crm_status = CrmStatus.TRIAL_COMPLETED
+        student.next_contact_at = None
     elif status.value == "no_show":
+        # No-show remains an active lead that needs contact/rescheduling.
         student.crm_status = CrmStatus.CONTACTED
-    record_audit(db, org_id, "student", student.id, f"trial.{status.value}", {"trial_id": str(trial.id), "recommended_level": recommended_level, "teacher_notes": teacher_notes}, actor_user_id=actor_user_id)
+        student.next_contact_at = None
+    elif status.value == "cancelled":
+        student.crm_status = CrmStatus.CONTACTED
+        student.next_contact_at = None
+    record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        f"trial.{status.value}",
+        {"trial_id": str(trial.id), "recommended_level": recommended_level, "teacher_notes": teacher_notes},
+        actor_user_id=actor_user_id,
+    )
     db.commit()
     db.refresh(trial)
     return trial
+
+
+def update_lead_outcome(db: Session, org_id: UUID, student_id: UUID, data, actor_user_id: UUID | None = None) -> Student:
+    student = scoped_get(db, Student, org_id, student_id)
+    student.crm_status = data.crm_status
+    student.next_contact_at = data.next_contact_at
+
+    if data.crm_status in {CrmStatus.DECLINED, CrmStatus.NO_RESPONSE, CrmStatus.NOT_RELEVANT}:
+        student.lead_close_reason = data.close_reason
+        student.lead_close_note = data.close_note
+        student.next_contact_at = None
+    else:
+        student.lead_close_reason = None
+        student.lead_close_note = None
+
+    record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        "lead.outcome_updated",
+        {
+            "crm_status": data.crm_status.value,
+            "next_contact_at": data.next_contact_at.isoformat() if data.next_contact_at else None,
+            "close_reason": data.close_reason,
+            "close_note": data.close_note,
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(student)
+    return student
 
 
 def list_waiting_candidates(db: Session, org_id: UUID) -> list[dict]:
@@ -1294,9 +1350,14 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             "contact_phone": contact.phone if contact else None,
             "latest_trial_id": trial.id if trial else None,
             "latest_trial_at": trial.starts_at if trial else None,
+            "latest_trial_status": trial.status if trial else None,
             "trial_location_id": trial.location_id if trial else None,
             "trial_location_name": trial_location.name if trial_location else None,
             "recommended_level": trial.recommended_level if trial else None,
+            "teacher_notes": trial.teacher_notes if trial else None,
+            "next_contact_at": student.next_contact_at,
+            "close_reason": student.lead_close_reason,
+            "close_note": student.lead_close_note,
         })
     return result
 
