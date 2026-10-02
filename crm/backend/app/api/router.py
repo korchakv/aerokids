@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, get_org_id, require_org_access_roles, require_org_roles
 from app.models.core import Organization, PaymentStatus, StaffRole, User
-from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, BillingRenewalResult, BillingRenewalRun, PaymentAdjustmentCreate, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentReceiptCreate, PaymentRefundCreate, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, PaymentTransactionRead, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionPauseCreate, SubscriptionPauseRead, SubscriptionResumeCreate, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
+from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, BillingRenewalResult, BillingRenewalRun, PaymentAdjustmentCreate, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentReceiptCreate, PaymentRefundCreate, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, PaymentTransactionRead, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionAutoRenewUpdate, SubscriptionPauseCreate, SubscriptionPauseRead, SubscriptionResumeCreate, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
 from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
@@ -400,6 +400,22 @@ def create_student_subscription(data: StudentSubscriptionCreate, org_id: UUID = 
 @router.get("/student-subscriptions", response_model=list[StudentSubscriptionRead])
 def student_subscriptions(student_id: UUID | None = None, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.list_student_subscriptions(db, org_id, student_id)
+
+
+@router.patch("/student-subscriptions/{subscription_id}/auto-renew", response_model=StudentSubscriptionRead)
+def update_subscription_auto_renew(
+    subscription_id: UUID,
+    data: SubscriptionAutoRenewUpdate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)),
+    db: Session = Depends(get_db),
+):
+    return crm.set_subscription_auto_renew(
+        db,
+        access.organization_id,
+        subscription_id,
+        data.auto_renew,
+        access.user_id,
+    )
 
 
 @router.post("/student-subscriptions/{subscription_id}/pause", response_model=SubscriptionPauseRead, status_code=201)
