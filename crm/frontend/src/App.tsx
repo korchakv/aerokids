@@ -1855,6 +1855,7 @@ function applyWorkspace(
 ) {
   const prospects: Lead[] = bundle.leads.map((item) => ({
     id: item.student_id,
+    createdAt: item.created_at,
     child: [item.first_name, item.last_name].filter(Boolean).join(" "),
     age: item.age ?? 0,
     parent: item.contact_name ?? "Контакт не вказано",
@@ -1876,7 +1877,11 @@ function applyWorkspace(
     trialLocationId: item.trial_location_id ?? undefined,
     trialLocation: item.trial_location_name ?? undefined,
     recommendedLevel: item.recommended_level ?? undefined,
-    trialResult: item.crm_status === "waiting_for_group" || item.crm_status === "enrolled" ? "completed" : item.latest_trial_at ? "scheduled" : undefined,
+    teacherNotes: item.teacher_notes ?? undefined,
+    trialResult: item.latest_trial_status ?? undefined,
+    nextContactAt: item.next_contact_at ?? undefined,
+    closeReason: item.close_reason ?? undefined,
+    closeNote: item.close_note ?? undefined,
   }));
 
   const students: Lead[] = bundle.students.map((item) => ({
@@ -1914,9 +1919,12 @@ function crmStatusValue(status: LeadStatus) {
     "Нова": "new",
     "Зв'язались": "contacted",
     "Пробне заплановано": "trial_scheduled",
-    "Пробне пройдено": "trial_completed",
+    "Після пробного": "trial_completed",
     "Очікує групу": "waiting_for_group",
     "Зарахований": "enrolled",
+    "Не відповідає": "no_response",
+    "Відмовились": "declined",
+    "Неактуально": "not_relevant",
   };
   return values[status];
 }
@@ -1926,12 +1934,12 @@ function crmStatusLabel(status: WorkspaceBundle["leads"][number]["crm_status"]):
     new: "Нова",
     contacted: "Зв'язались",
     trial_scheduled: "Пробне заплановано",
-    trial_completed: "Пробне пройдено",
+    trial_completed: "Після пробного",
     waiting_for_group: "Очікує групу",
     enrolled: "Зарахований",
-    no_response: "Зв'язались",
-    declined: "Зв'язались",
-    not_relevant: "Зв'язались",
+    no_response: "Не відповідає",
+    declined: "Відмовились",
+    not_relevant: "Неактуально",
   };
   return labels[status];
 }
