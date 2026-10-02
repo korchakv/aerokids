@@ -1735,6 +1735,8 @@ function App() {
             </select>
           </label>
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
+          {selected.nextContactAt && <div className="noteBox followUpBox"><span>Наступний контакт</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>}
+          {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}</div>}
           {selected.comment && <div className="noteBox"><span>Коментар</span><p>{selected.comment}</p></div>}
           {selected.trialAt && <div className="trialSummary"><span>Пробне заняття</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
           <div className="preferenceSummary">
@@ -1849,7 +1851,7 @@ function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) =>
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span><span>Наступна дія</span></div>
     {leads.length === 0 && <div className="emptyState">За цим фільтром заявок немає.</div>}
     {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}>
-      <b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{leadSourceLabel(lead.source)}</span><span className="pill">{lead.status}</span><span className={"nextAction " + (lead.nextContactAt && dateValue(lead.nextContactAt) < Date.now() ? "overdue" : "")}>{leadNextAction(lead)}</span>
+      <b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{leadSourceLabel(lead.source)}</span><span className="pill">{leadDisplayStatus(lead)}</span><span className={"nextAction " + (lead.nextContactAt && dateValue(lead.nextContactAt) < Date.now() ? "overdue" : "")}>{leadNextAction(lead)}</span>
     </button>)}
   </div>;
 }
@@ -1981,6 +1983,11 @@ function leadActionPriority(lead: Lead) {
   if (lead.status === "Зв'язались") return 5;
   if (lead.status === "Очікує групу") return 6;
   return 9;
+}
+
+function leadDisplayStatus(lead: Lead) {
+  if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "Не прийшов";
+  return lead.status;
 }
 
 function leadNextAction(lead: Lead) {
