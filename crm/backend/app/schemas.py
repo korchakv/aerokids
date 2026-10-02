@@ -480,6 +480,69 @@ class PaymentSummary(BaseModel):
     overdue_count: int
 
 
+class GroupMemberAttendanceSummary(BaseModel):
+    present: int
+    absent: int
+    late: int
+    excused: int
+    total: int
+    attendance_rate: float
+
+
+class GroupMemberBillingSummary(BaseModel):
+    status: Literal["current", "upcoming", "due", "overdue", "no_plan"]
+    plan_name: str | None = None
+    amount_due_minor: int = 0
+    next_due_date: date | None = None
+    last_paid_at: datetime | None = None
+    last_paid_minor: int | None = None
+    subscription_ends_on: date | None = None
+
+
+class GroupMemberDetail(BaseModel):
+    student_id: UUID
+    first_name: str
+    last_name: str | None
+    age: int | None
+    contact_name: str | None
+    contact_phone: str | None
+    enrollment_started_at: date
+    enrollment_status: EnrollmentStatus
+    attendance: GroupMemberAttendanceSummary
+    billing: GroupMemberBillingSummary | None = None
+    payments: list[PaymentRead] = Field(default_factory=list)
+
+
+class GroupDetail(BaseModel):
+    group: GroupRead
+    schedules: list[GroupScheduleRead] = Field(default_factory=list)
+    members: list[GroupMemberDetail] = Field(default_factory=list)
+
+
+class PaymentReminderCandidate(BaseModel):
+    payment_id: UUID
+    student_id: UUID
+    student_name: str
+    contact_name: str | None
+    contact_phone: str | None
+    amount_minor: int
+    currency: str
+    due_date: date
+    days_from_due: int
+    stage: Literal["upcoming_3", "due_today", "overdue_1", "overdue_3", "overdue_7", "overdue_14", "overdue_30"]
+    label: str
+    last_reminder_at: datetime | None = None
+
+
+class PaymentReminderMark(BaseModel):
+    stage: Literal["upcoming_3", "due_today", "overdue_1", "overdue_3", "overdue_7", "overdue_14", "overdue_30"]
+    channel: Literal["manual", "sms", "email", "messenger", "phone"] = "manual"
+
+
+class PaymentCancel(BaseModel):
+    reason: str = Field(min_length=2, max_length=300)
+
+
 class StaffCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=160)
     email: str | None = Field(default=None, max_length=255)
