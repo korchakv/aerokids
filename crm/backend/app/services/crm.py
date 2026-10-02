@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentReminder, PaymentStatus, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, TrialStatus, User
+from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentReminder, PaymentStatus, PaymentTransaction, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPause, SubscriptionPlan, SubscriptionStatus, TrialLesson, TrialStatus, User
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 from app.services.schedule_matching import enrollment_schedule_note, evaluate_schedule_match
 
@@ -959,6 +959,66 @@ def list_attendance(db: Session, org_id: UUID, session_id: UUID, user_id: UUID |
     ))
 
 
+def _payment_transactions(db: Session, org_id: UUID, payment_id: UUID) -> list[PaymentTransaction]:
+    return list(db.scalars(
+        select(PaymentTransaction)
+        .where(
+            PaymentTransaction.organization_id == org_id,
+            PaymentTransaction.payment_id == payment_id,
+        )
+        .order_by(PaymentTransaction.occurred_at, PaymentTransaction.id)
+    ))
+
+
+def payment_financials(db: Session, org_id: UUID, payment: Payment) -> dict:
+    transactions = _payment_transactions(db, org_id, payment.id)
+    increases = sum(item.amount_minor for item in transactions if item.kind == "adjustment_increase")
+    decreases = sum(item.amount_minor for item in transactions if item.kind == "adjustment_decrease")
+    adjusted_amount = max(0, payment.amount_minor + increases - decreases)
+    paid_minor = sum(item.amount_minor for item in transactions if item.kind == "payment")
+    refunded_minor = sum(item.amount_minor for item in transactions if item.kind == "refund")
+
+    # Backward compatibility for charges that were fully paid before ledger transactions existed.
+    if not transactions and payment.status == PaymentStatus.PAID:
+        paid_minor = adjusted_amount
+
+    net_paid = max(0, paid_minor - refunded_minor)
+    balance = max(0, adjusted_amount - net_paid)
+    return {
+        "adjusted_amount_minor": adjusted_amount,
+        "paid_minor": paid_minor,
+        "refunded_minor": refunded_minor,
+        "net_paid_minor": net_paid,
+        "balance_minor": balance,
+        "transactions": transactions,
+    }
+
+
+def _sync_payment_state(db: Session, org_id: UUID, payment: Payment) -> dict:
+    finance = payment_financials(db, org_id, payment)
+    if payment.status != PaymentStatus.CANCELLED:
+        if finance["adjusted_amount_minor"] == 0 and finance["net_paid_minor"] == 0 and finance["refunded_minor"] > 0:
+            payment.status = PaymentStatus.REFUNDED
+        elif finance["balance_minor"] == 0 and finance["adjusted_amount_minor"] > 0:
+            payment.status = PaymentStatus.PAID
+        else:
+            payment.status = PaymentStatus.PENDING
+    payment.adjusted_amount_minor = finance["adjusted_amount_minor"]
+    payment.paid_minor = finance["paid_minor"]
+    payment.refunded_minor = finance["refunded_minor"]
+    payment.balance_minor = finance["balance_minor"]
+    return finance
+
+
+def _attach_payment_financials(db: Session, org_id: UUID, payment: Payment) -> Payment:
+    finance = payment_financials(db, org_id, payment)
+    payment.adjusted_amount_minor = finance["adjusted_amount_minor"]
+    payment.paid_minor = finance["paid_minor"]
+    payment.refunded_minor = finance["refunded_minor"]
+    payment.balance_minor = finance["balance_minor"]
+    return payment
+
+
 def create_subscription_plan(db: Session, org_id: UUID, data) -> SubscriptionPlan:
     require_organization(db, org_id)
     item = SubscriptionPlan(organization_id=org_id, **data.model_dump())
@@ -996,6 +1056,7 @@ def create_student_subscription(db: Session, org_id: UUID, data) -> StudentSubsc
         price_minor=price_minor,
         discount_minor=data.discount_minor,
         discount_label=data.discount_label,
+        auto_renew=getattr(data, "auto_renew", False),
     )
     db.add(item)
     db.commit()
@@ -1041,6 +1102,7 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
         price_minor=plan.price_minor,
         discount_minor=data.discount_minor,
         discount_label=data.discount_label,
+        auto_renew=getattr(data, "auto_renew", False),
     )
     db.add(subscription)
     db.flush()
@@ -1075,6 +1137,7 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
     db.refresh(subscription)
     db.refresh(payment)
     payment.plan_id = plan.id
+    _attach_payment_financials(db, org_id, payment)
     return subscription, payment
 
 
@@ -1117,17 +1180,60 @@ def list_payments(db: Session, org_id: UUID, student_id: UUID | None = None, sta
             row.plan_id = subscription.plan_id
         else:
             row.plan_id = None
+        _attach_payment_financials(db, org_id, row)
     return rows
 
 
-def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: PaymentMethod, paid_at: datetime | None = None, actor_user_id: UUID | None = None) -> Payment:
+def add_payment_receipt(
+    db: Session,
+    org_id: UUID,
+    payment_id: UUID,
+    amount_minor: int,
+    method: PaymentMethod,
+    paid_at: datetime | None = None,
+    note: str | None = None,
+    actor_user_id: UUID | None = None,
+) -> Payment:
     payment = scoped_get(db, Payment, org_id, payment_id)
-    if payment.status != PaymentStatus.PENDING:
-        raise HTTPException(status_code=409, detail="Only pending payments can be marked as paid")
-    payment.status = PaymentStatus.PAID
+    if payment.status in {PaymentStatus.CANCELLED, PaymentStatus.REFUNDED}:
+        raise HTTPException(status_code=409, detail="This charge cannot accept payments")
+
+    finance = payment_financials(db, org_id, payment)
+    if amount_minor > finance["balance_minor"]:
+        raise HTTPException(status_code=422, detail="Payment amount exceeds outstanding balance")
+
+    occurred_at = paid_at or datetime.now(timezone.utc)
+    transaction = PaymentTransaction(
+        organization_id=org_id,
+        payment_id=payment.id,
+        student_id=payment.student_id,
+        kind="payment",
+        amount_minor=amount_minor,
+        method=method,
+        note=note,
+        occurred_at=occurred_at,
+        actor_user_id=actor_user_id,
+    )
+    db.add(transaction)
+    db.flush()
+    finance = _sync_payment_state(db, org_id, payment)
     payment.method = method
-    payment.paid_at = paid_at or datetime.now(timezone.utc)
-    record_audit(db, org_id, "student", payment.student_id, "payment.paid", {"payment_id": str(payment.id), "amount_minor": payment.amount_minor, "method": method.value}, actor_user_id=actor_user_id)
+    payment.paid_at = occurred_at if finance["balance_minor"] == 0 else None
+    record_audit(
+        db,
+        org_id,
+        "student",
+        payment.student_id,
+        "payment.received",
+        {
+            "payment_id": str(payment.id),
+            "transaction_id": str(transaction.id),
+            "amount_minor": amount_minor,
+            "balance_minor": finance["balance_minor"],
+            "method": method.value,
+        },
+        actor_user_id=actor_user_id,
+    )
     db.commit()
     db.refresh(payment)
     if payment.subscription_id is not None:
@@ -1135,30 +1241,189 @@ def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: Payme
         payment.plan_id = subscription.plan_id
     else:
         payment.plan_id = None
-    return payment
+    return _attach_payment_financials(db, org_id, payment)
+
+
+def mark_payment_paid(db: Session, org_id: UUID, payment_id: UUID, method: PaymentMethod, paid_at: datetime | None = None, actor_user_id: UUID | None = None) -> Payment:
+    payment = scoped_get(db, Payment, org_id, payment_id)
+    finance = payment_financials(db, org_id, payment)
+    if payment.status in {PaymentStatus.CANCELLED, PaymentStatus.REFUNDED}:
+        raise HTTPException(status_code=409, detail="This charge cannot be marked as paid")
+    if finance["balance_minor"] <= 0:
+        raise HTTPException(status_code=409, detail="Payment is already fully settled")
+    return add_payment_receipt(
+        db,
+        org_id,
+        payment_id,
+        finance["balance_minor"],
+        method,
+        paid_at,
+        "Full settlement",
+        actor_user_id,
+    )
+
+
+def add_payment_adjustment(
+    db: Session,
+    org_id: UUID,
+    payment_id: UUID,
+    direction: str,
+    amount_minor: int,
+    reason: str,
+    actor_user_id: UUID | None = None,
+) -> Payment:
+    payment = scoped_get(db, Payment, org_id, payment_id)
+    if payment.status == PaymentStatus.CANCELLED:
+        raise HTTPException(status_code=409, detail="Cancelled charge cannot be adjusted")
+    finance = payment_financials(db, org_id, payment)
+    if direction == "decrease" and amount_minor > finance["adjusted_amount_minor"]:
+        raise HTTPException(status_code=422, detail="Adjustment exceeds charge amount")
+
+    kind = "adjustment_increase" if direction == "increase" else "adjustment_decrease"
+    db.add(PaymentTransaction(
+        organization_id=org_id,
+        payment_id=payment.id,
+        student_id=payment.student_id,
+        kind=kind,
+        amount_minor=amount_minor,
+        note=reason,
+        actor_user_id=actor_user_id,
+    ))
+    db.flush()
+    finance = _sync_payment_state(db, org_id, payment)
+    if payment.status != PaymentStatus.PAID:
+        payment.paid_at = None
+    record_audit(
+        db,
+        org_id,
+        "student",
+        payment.student_id,
+        "payment.adjusted",
+        {
+            "payment_id": str(payment.id),
+            "direction": direction,
+            "amount_minor": amount_minor,
+            "balance_minor": finance["balance_minor"],
+            "reason": reason,
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(payment)
+    if payment.subscription_id:
+        payment.plan_id = scoped_get(db, StudentSubscription, org_id, payment.subscription_id).plan_id
+    else:
+        payment.plan_id = None
+    return _attach_payment_financials(db, org_id, payment)
+
+
+def refund_payment(
+    db: Session,
+    org_id: UUID,
+    payment_id: UUID,
+    amount_minor: int,
+    note: str,
+    occurred_at: datetime | None = None,
+    reduce_charge: bool = True,
+    actor_user_id: UUID | None = None,
+) -> Payment:
+    payment = scoped_get(db, Payment, org_id, payment_id)
+    if payment.status == PaymentStatus.CANCELLED:
+        raise HTTPException(status_code=409, detail="Cancelled charge cannot be refunded")
+    finance = payment_financials(db, org_id, payment)
+    if amount_minor > finance["net_paid_minor"]:
+        raise HTTPException(status_code=422, detail="Refund exceeds net amount received")
+
+    db.add(PaymentTransaction(
+        organization_id=org_id,
+        payment_id=payment.id,
+        student_id=payment.student_id,
+        kind="refund",
+        amount_minor=amount_minor,
+        note=note,
+        occurred_at=occurred_at or datetime.now(timezone.utc),
+        actor_user_id=actor_user_id,
+    ))
+    if reduce_charge:
+        db.add(PaymentTransaction(
+            organization_id=org_id,
+            payment_id=payment.id,
+            student_id=payment.student_id,
+            kind="adjustment_decrease",
+            amount_minor=amount_minor,
+            note=f"Refund adjustment: {note}",
+            actor_user_id=actor_user_id,
+        ))
+    db.flush()
+    finance = _sync_payment_state(db, org_id, payment)
+    if finance["balance_minor"] > 0:
+        payment.paid_at = None
+    record_audit(
+        db,
+        org_id,
+        "student",
+        payment.student_id,
+        "payment.refunded",
+        {
+            "payment_id": str(payment.id),
+            "amount_minor": amount_minor,
+            "reduce_charge": reduce_charge,
+            "balance_minor": finance["balance_minor"],
+            "reason": note,
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(payment)
+    if payment.subscription_id:
+        payment.plan_id = scoped_get(db, StudentSubscription, org_id, payment.subscription_id).plan_id
+    else:
+        payment.plan_id = None
+    return _attach_payment_financials(db, org_id, payment)
+
+
+def list_payment_transactions(db: Session, org_id: UUID, payment_id: UUID) -> list[PaymentTransaction]:
+    scoped_get(db, Payment, org_id, payment_id)
+    return _payment_transactions(db, org_id, payment_id)
 
 
 def payment_summary(db: Session, org_id: UUID) -> dict:
     rows = list(db.scalars(select(Payment).where(Payment.organization_id == org_id)))
     today = date.today()
-    paid = [row for row in rows if row.status == PaymentStatus.PAID]
-    pending = [row for row in rows if row.status == PaymentStatus.PENDING]
-    overdue = [row for row in pending if row.due_date is not None and row.due_date < today]
+    paid_minor = 0
+    pending_minor = 0
+    overdue_minor = 0
+    paid_count = 0
+    pending_count = 0
+    overdue_count = 0
+    for row in rows:
+        if row.status == PaymentStatus.CANCELLED:
+            continue
+        finance = payment_financials(db, org_id, row)
+        paid_minor += finance["net_paid_minor"]
+        if finance["balance_minor"] > 0:
+            pending_minor += finance["balance_minor"]
+            pending_count += 1
+            if row.due_date is not None and row.due_date < today:
+                overdue_minor += finance["balance_minor"]
+                overdue_count += 1
+        elif finance["adjusted_amount_minor"] > 0:
+            paid_count += 1
     return {
-        "paid_minor": sum(row.amount_minor for row in paid),
-        "pending_minor": sum(row.amount_minor for row in pending),
-        "overdue_minor": sum(row.amount_minor for row in overdue),
-        "paid_count": len(paid),
-        "pending_count": len(pending),
-        "overdue_count": len(overdue),
+        "paid_minor": paid_minor,
+        "pending_minor": pending_minor,
+        "overdue_minor": overdue_minor,
+        "paid_count": paid_count,
+        "pending_count": pending_count,
+        "overdue_count": overdue_count,
     }
-
 
 
 def cancel_payment(db: Session, org_id: UUID, payment_id: UUID, reason: str, actor_user_id: UUID | None = None) -> Payment:
     payment = scoped_get(db, Payment, org_id, payment_id)
-    if payment.status != PaymentStatus.PENDING:
-        raise HTTPException(status_code=409, detail="Only pending charges can be cancelled")
+    finance = payment_financials(db, org_id, payment)
+    if payment.status != PaymentStatus.PENDING or finance["net_paid_minor"] > 0:
+        raise HTTPException(status_code=409, detail="Only unpaid pending charges can be cancelled")
 
     payment.status = PaymentStatus.CANCELLED
     if payment.subscription_id is not None:
@@ -1214,6 +1479,9 @@ def payment_reminder_queue(db: Session, org_id: UUID) -> list[dict]:
     ))
     result = []
     for payment in payments:
+        finance = payment_financials(db, org_id, payment)
+        if finance["balance_minor"] <= 0:
+            continue
         stage_info = _payment_reminder_stage(payment.due_date, today)
         if stage_info is None:
             continue
@@ -1237,7 +1505,7 @@ def payment_reminder_queue(db: Session, org_id: UUID) -> list[dict]:
             "student_name": " ".join(filter(None, [student.first_name, student.last_name])),
             "contact_name": contact.full_name if contact else None,
             "contact_phone": contact.phone if contact else None,
-            "amount_minor": payment.amount_minor,
+            "amount_minor": finance["balance_minor"],
             "currency": payment.currency,
             "due_date": payment.due_date,
             "days_from_due": (today - payment.due_date).days,
