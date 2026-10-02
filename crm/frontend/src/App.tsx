@@ -1862,11 +1862,11 @@ function App() {
           <button className="drawerClose" onClick={() => setShowLeadForm(false)}>×</button>
           <p className="eyebrow">Нова заявка</p><h2>Додати дитину</h2>
           <div className="formTwo">
-            <label>Ім’я дитини<input value={leadChildName} onChange={(e) => setLeadChildName(e.target.value)} placeholder="Максим" /></label>
+            <label>Ім’я дитини *<input className={leadChildName && personNameError(leadChildName, "Ім’я дитини") ? "inputInvalid" : ""} value={leadChildName} maxLength={120} autoComplete="off" onChange={(e) => setLeadChildName(e.target.value)} placeholder="Максим" />{leadChildName && personNameError(leadChildName, "Ім’я дитини") && <small className="fieldError">{personNameError(leadChildName, "Ім’я дитини")}</small>}</label>
             <label>Вік<input type="number" min={3} max={25} value={leadAge} onChange={(e) => setLeadAge(Number(e.target.value))} /></label>
           </div>
-          <label>Контактна особа<input value={leadContactName} onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана" /></label>
-          <label>Телефон<input type="tel" value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} placeholder="+380 67 123 45 67" /></label>
+          <label>Контактна особа *<input className={leadContactName && personNameError(leadContactName, "Контактна особа") ? "inputInvalid" : ""} value={leadContactName} maxLength={160} autoComplete="name" onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана Петренко" />{leadContactName && personNameError(leadContactName, "Контактна особа") && <small className="fieldError">{personNameError(leadContactName, "Контактна особа")}</small>}</label>
+          <label>Телефон *<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={leadPhone && uaPhoneError(leadPhone) ? "inputInvalid" : ""} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadPhone)) setLeadPhone(formatUaPhone(leadPhone)); }} placeholder="+380 67 123 45 67" />{leadPhone && uaPhoneError(leadPhone) && <small className="fieldError">{uaPhoneError(leadPhone)}</small>}<small className="fieldHint">Приймаємо: 0671234567, 380671234567 або +380 67 123 45 67</small></label>
           <label>Джерело<select value={leadSource} onChange={(e) => setLeadSource(e.target.value)}>
             <option value="phone">Телефон</option>
             <option value="website">Сайт</option>
@@ -1875,7 +1875,7 @@ function App() {
             <option value="walk-in">Зайшли особисто</option>
           </select></label>
           <label>Коментар<textarea value={leadComment} onChange={(e) => setLeadComment(e.target.value)} placeholder="Що цікавить, бажаний час, примітки…" /></label>
-          <button className="primary full" disabled={!leadChildName.trim() || !leadContactName.trim() || !leadPhone.trim()} onClick={createManualLead}>Створити заявку</button>
+          <button className="primary full" disabled={Boolean(personNameError(leadChildName, "Ім’я дитини") || personNameError(leadContactName, "Контактна особа") || uaPhoneError(leadPhone))} onClick={createManualLead}>Створити заявку</button>
         </div>
       </div>}
 
@@ -1884,9 +1884,9 @@ function App() {
           <button className="drawerClose" onClick={() => setShowInviteForm(false)}>×</button>
           <p className="eyebrow">Доступ до CRM</p><h2>Запросити працівника</h2>
           {!inviteLink ? <>
-            <label>Email<input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="teacher@example.com" /></label>
+            <label>Email *<input type="email" autoComplete="email" maxLength={255} className={inviteEmail && emailError(inviteEmail, true) ? "inputInvalid" : ""} value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="teacher@example.com" />{inviteEmail && emailError(inviteEmail, true) && <small className="fieldError">{emailError(inviteEmail, true)}</small>}</label>
             <label>Роль<select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as StaffRoleDemo)}>{["Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
-            <button className="primary full" disabled={!inviteEmail.trim()} onClick={createInvitation}>Створити запрошення</button>
+            <button className="primary full" disabled={Boolean(emailError(inviteEmail, true))} onClick={createInvitation}>Створити запрошення</button>
           </> : <>
             <div className="inviteSuccess"><b>Запрошення готове</b><p>Надішліть це посилання працівнику. Воно одноразове та діє 7 днів.</p><code>{inviteLink}</code></div>
             <button className="primary full" onClick={() => navigator.clipboard?.writeText(inviteLink)}>Копіювати посилання</button>
@@ -1898,10 +1898,10 @@ function App() {
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowStaffForm(false)}>×</button>
           <p className="eyebrow">Команда</p><h2>Новий працівник</h2>
-          <label>Ім’я та прізвище<input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="Іван Петренко" /></label>
+          <label>Ім’я та прізвище *<input autoComplete="name" maxLength={160} className={staffName && personNameError(staffName, "Ім’я та прізвище") ? "inputInvalid" : ""} value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="Іван Петренко" />{staffName && personNameError(staffName, "Ім’я та прізвище") && <small className="fieldError">{personNameError(staffName, "Ім’я та прізвище")}</small>}</label>
           <label>Роль<select value={staffRole} onChange={(e) => setStaffRole(e.target.value as StaffRoleDemo)}>{["Власник","Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
-          <div className="formTwo"><label>Email<input type="email" value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} /></label><label>Телефон<input value={staffPhone} onChange={(e) => setStaffPhone(e.target.value)} /></label></div>
-          <button className="primary full" disabled={!staffName.trim()} onClick={createStaffMember}>Додати працівника</button>
+          <div className="formTwo"><label>Email<input type="email" autoComplete="email" maxLength={255} className={staffEmail && emailError(staffEmail) ? "inputInvalid" : ""} value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} />{staffEmail && emailError(staffEmail) && <small className="fieldError">{emailError(staffEmail)}</small>}</label><label>Телефон<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={staffPhone && uaPhoneError(staffPhone, false) ? "inputInvalid" : ""} value={staffPhone} onChange={(e) => setStaffPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(staffPhone)) setStaffPhone(formatUaPhone(staffPhone)); }} placeholder="+380 67 123 45 67" />{staffPhone && uaPhoneError(staffPhone, false) && <small className="fieldError">{uaPhoneError(staffPhone, false)}</small>}</label></div><div className="formNotice">Для працівника потрібно вказати хоча б email або телефон.</div>
+          <button className="primary full" disabled={Boolean(personNameError(staffName, "Ім’я та прізвище") || emailError(staffEmail) || uaPhoneError(staffPhone, false) || (!staffEmail.trim() && !staffPhone.trim()))} onClick={createStaffMember}>Додати працівника</button>
         </div>
       </div>}
 
