@@ -326,15 +326,64 @@ def list_groups(db: Session, org_id: UUID) -> list[Group]:
     return list(db.scalars(select(Group).where(Group.organization_id == org_id, Group.is_active.is_(True)).order_by(Group.name)))
 
 
-def create_enrollment(db: Session, org_id: UUID, data: EnrollmentCreate) -> Enrollment:
-    scoped_get(db, Student, org_id, data.student_id)
+def create_enrollment(
+    db: Session,
+    org_id: UUID,
+    data: EnrollmentCreate,
+    actor_user_id: UUID | None = None,
+) -> Enrollment:
+    student = scoped_get(db, Student, org_id, data.student_id)
     group = scoped_get(db, Group, org_id, data.group_id)
+    if student.crm_status not in {CrmStatus.TRIAL_COMPLETED, CrmStatus.WAITING_FOR_GROUP}:
+        raise HTTPException(status_code=409, detail="Student must complete the trial before enrollment")
+
     ensure_group_capacity(db, org_id, group, data.student_id)
-    payload = data.model_dump()
-    if payload["started_at"] is None:
-        payload["started_at"] = date.today()
-    item = Enrollment(organization_id=org_id, **payload)
+    existing = db.scalar(select(Enrollment).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.student_id == student.id,
+        Enrollment.group_id == group.id,
+        Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+    ))
+    if existing is not None:
+        return existing
+
+    group_slots = list(db.scalars(select(GroupSchedule).where(
+        GroupSchedule.organization_id == org_id,
+        GroupSchedule.group_id == group.id,
+        GroupSchedule.is_active.is_(True),
+    ).order_by(GroupSchedule.weekday, GroupSchedule.start_time)))
+    windows = list(db.scalars(select(StudentAvailability).where(
+        StudentAvailability.organization_id == org_id,
+        StudentAvailability.student_id == student.id,
+    )))
+    match = evaluate_schedule_match(group_slots, windows, group.location_id, student.preferred_location_id)
+    note = enrollment_schedule_note(match, group_slots, windows)
+
+    item = Enrollment(
+        organization_id=org_id,
+        student_id=student.id,
+        group_id=group.id,
+        started_at=data.started_at or date.today(),
+        schedule_match=match.status,
+        schedule_note=note,
+    )
     db.add(item)
+    student.crm_status = CrmStatus.ENROLLED
+    student.student_status = StudentStatus.ACTIVE
+    record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        "student.enrolled",
+        {
+            "group_id": str(group.id),
+            "group_name": group.name,
+            "schedule_match": match.status,
+            "schedule_note": note,
+        },
+        actor_user_id=actor_user_id,
+    )
     try:
         db.commit()
     except IntegrityError as exc:
