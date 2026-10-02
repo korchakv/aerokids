@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentStatus, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, TrialStatus, User
+from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentReminder, PaymentStatus, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPlan, SubscriptionStatus, TrialLesson, TrialStatus, User
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 from app.services.schedule_matching import enrollment_schedule_note, evaluate_schedule_match
 
@@ -755,6 +755,126 @@ def group_roster(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
     } for student in rows]
 
 
+def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> dict:
+    if role == StaffRole.ACCOUNTANT:
+        group = scoped_get(db, Group, org_id, group_id)
+    else:
+        group = ensure_group_access(db, org_id, user_id, role, group_id)
+
+    schedules = list(db.scalars(
+        select(GroupSchedule)
+        .where(
+            GroupSchedule.organization_id == org_id,
+            GroupSchedule.group_id == group.id,
+            GroupSchedule.is_active.is_(True),
+        )
+        .order_by(GroupSchedule.weekday, GroupSchedule.start_time)
+    ))
+    enrollments = list(db.scalars(
+        select(Enrollment)
+        .where(
+            Enrollment.organization_id == org_id,
+            Enrollment.group_id == group.id,
+            Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+        )
+        .order_by(Enrollment.started_at, Enrollment.id)
+    ))
+    finance_visible = role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.ACCOUNTANT}
+    members = []
+    today = date.today()
+
+    for enrollment in enrollments:
+        student = scoped_get(db, Student, org_id, enrollment.student_id)
+        contact = _primary_contact_for_student(db, org_id, student.id)
+
+        attendance_rows = list(db.scalars(
+            select(Attendance)
+            .join(LessonSession, LessonSession.id == Attendance.session_id)
+            .where(
+                Attendance.organization_id == org_id,
+                Attendance.student_id == student.id,
+                LessonSession.organization_id == org_id,
+                LessonSession.group_id == group.id,
+            )
+        ))
+        attendance_counts = {
+            "present": sum(row.status == AttendanceStatus.PRESENT for row in attendance_rows),
+            "absent": sum(row.status == AttendanceStatus.ABSENT for row in attendance_rows),
+            "late": sum(row.status == AttendanceStatus.LATE for row in attendance_rows),
+            "excused": sum(row.status == AttendanceStatus.EXCUSED for row in attendance_rows),
+        }
+        attendance_total = len(attendance_rows)
+        attended = attendance_counts["present"] + attendance_counts["late"]
+        attendance_summary = {
+            **attendance_counts,
+            "total": attendance_total,
+            "attendance_rate": round(attended / attendance_total * 100, 1) if attendance_total else 0.0,
+        }
+
+        billing = None
+        payment_rows: list[Payment] = []
+        if finance_visible:
+            payment_rows = list(db.scalars(
+                select(Payment)
+                .where(Payment.organization_id == org_id, Payment.student_id == student.id)
+                .order_by(Payment.created_at.desc())
+            ))
+            subscriptions = list(db.scalars(
+                select(StudentSubscription)
+                .where(StudentSubscription.organization_id == org_id, StudentSubscription.student_id == student.id)
+                .order_by(StudentSubscription.starts_on.desc())
+            ))
+            subscription_by_id = {item.id: item for item in subscriptions}
+            for payment in payment_rows:
+                linked = subscription_by_id.get(payment.subscription_id) if payment.subscription_id else None
+                payment.plan_id = linked.plan_id if linked else None
+
+            latest_subscription = subscriptions[0] if subscriptions else None
+            plan = scoped_get(db, SubscriptionPlan, org_id, latest_subscription.plan_id) if latest_subscription else None
+            pending = [item for item in payment_rows if item.status == PaymentStatus.PENDING]
+            dated_pending = [item for item in pending if item.due_date is not None]
+            overdue = [item for item in dated_pending if item.due_date < today]
+            due_today = [item for item in dated_pending if item.due_date == today]
+            next_due_date = min((item.due_date for item in dated_pending), default=None)
+            last_paid = next((item for item in payment_rows if item.status == PaymentStatus.PAID), None)
+            if overdue:
+                billing_status = "overdue"
+            elif due_today:
+                billing_status = "due"
+            elif pending:
+                billing_status = "upcoming"
+            elif latest_subscription and latest_subscription.status == SubscriptionStatus.ACTIVE:
+                billing_status = "current"
+            else:
+                billing_status = "no_plan"
+
+            billing = {
+                "status": billing_status,
+                "plan_name": plan.name if plan else None,
+                "amount_due_minor": sum(item.amount_minor for item in pending),
+                "next_due_date": next_due_date,
+                "last_paid_at": last_paid.paid_at if last_paid else None,
+                "last_paid_minor": last_paid.amount_minor if last_paid else None,
+                "subscription_ends_on": latest_subscription.ends_on if latest_subscription else None,
+            }
+
+        members.append({
+            "student_id": student.id,
+            "first_name": student.first_name,
+            "last_name": student.last_name,
+            "age": student.age_at_inquiry,
+            "contact_name": contact.full_name if contact else None,
+            "contact_phone": contact.phone if contact else None,
+            "enrollment_started_at": enrollment.started_at,
+            "enrollment_status": enrollment.status,
+            "attendance": attendance_summary,
+            "billing": billing,
+            "payments": payment_rows,
+        })
+
+    return {"group": group, "schedules": schedules, "members": members}
+
+
 def create_lesson_session(db: Session, org_id: UUID, data, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> LessonSession:
     group = ensure_group_access(db, org_id, user_id, role, data.group_id)
     location_id = data.location_id if data.location_id is not None else group.location_id
@@ -902,6 +1022,16 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
     if amount_minor <= 0:
         raise HTTPException(status_code=422, detail="Charge amount must be greater than zero")
 
+    duplicate_subscription = db.scalar(select(StudentSubscription).where(
+        StudentSubscription.organization_id == org_id,
+        StudentSubscription.student_id == student.id,
+        StudentSubscription.plan_id == plan.id,
+        StudentSubscription.starts_on == data.starts_on,
+        StudentSubscription.status != SubscriptionStatus.CANCELLED,
+    ))
+    if duplicate_subscription is not None:
+        raise HTTPException(status_code=409, detail="This subscription period has already been charged")
+
     subscription = StudentSubscription(
         organization_id=org_id,
         student_id=student.id,
@@ -1022,6 +1152,147 @@ def payment_summary(db: Session, org_id: UUID) -> dict:
         "pending_count": len(pending),
         "overdue_count": len(overdue),
     }
+
+
+
+def cancel_payment(db: Session, org_id: UUID, payment_id: UUID, reason: str, actor_user_id: UUID | None = None) -> Payment:
+    payment = scoped_get(db, Payment, org_id, payment_id)
+    if payment.status != PaymentStatus.PENDING:
+        raise HTTPException(status_code=409, detail="Only pending charges can be cancelled")
+
+    payment.status = PaymentStatus.CANCELLED
+    if payment.subscription_id is not None:
+        subscription = scoped_get(db, StudentSubscription, org_id, payment.subscription_id)
+        subscription.status = SubscriptionStatus.CANCELLED
+        payment.plan_id = subscription.plan_id
+    else:
+        payment.plan_id = None
+
+    record_audit(
+        db,
+        org_id,
+        "student",
+        payment.student_id,
+        "payment.cancelled",
+        {"payment_id": str(payment.id), "reason": reason, "subscription_id": str(payment.subscription_id) if payment.subscription_id else None},
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+
+def _payment_reminder_stage(due_date: date, today: date) -> tuple[str, str] | None:
+    delta = (today - due_date).days
+    if -3 <= delta <= -1:
+        return "upcoming_3", "Оплата наближається"
+    if delta == 0:
+        return "due_today", "Оплата сьогодні"
+    if 1 <= delta <= 2:
+        return "overdue_1", "Прострочено"
+    if 3 <= delta <= 6:
+        return "overdue_3", "Прострочено 3+ дні"
+    if 7 <= delta <= 13:
+        return "overdue_7", "Прострочено 7+ днів"
+    if 14 <= delta <= 29:
+        return "overdue_14", "Прострочено 14+ днів"
+    if delta >= 30:
+        return "overdue_30", "Прострочено 30+ днів"
+    return None
+
+
+def payment_reminder_queue(db: Session, org_id: UUID) -> list[dict]:
+    today = date.today()
+    payments = list(db.scalars(
+        select(Payment)
+        .where(
+            Payment.organization_id == org_id,
+            Payment.status == PaymentStatus.PENDING,
+            Payment.due_date.is_not(None),
+        )
+        .order_by(Payment.due_date, Payment.created_at)
+    ))
+    result = []
+    for payment in payments:
+        stage_info = _payment_reminder_stage(payment.due_date, today)
+        if stage_info is None:
+            continue
+        stage, label = stage_info
+        already_sent = db.scalar(select(PaymentReminder.id).where(
+            PaymentReminder.organization_id == org_id,
+            PaymentReminder.payment_id == payment.id,
+            PaymentReminder.stage == stage,
+        ))
+        if already_sent is not None:
+            continue
+        student = scoped_get(db, Student, org_id, payment.student_id)
+        contact = _primary_contact_for_student(db, org_id, student.id)
+        last_reminder_at = db.scalar(select(func.max(PaymentReminder.sent_at)).where(
+            PaymentReminder.organization_id == org_id,
+            PaymentReminder.payment_id == payment.id,
+        ))
+        result.append({
+            "payment_id": payment.id,
+            "student_id": student.id,
+            "student_name": " ".join(filter(None, [student.first_name, student.last_name])),
+            "contact_name": contact.full_name if contact else None,
+            "contact_phone": contact.phone if contact else None,
+            "amount_minor": payment.amount_minor,
+            "currency": payment.currency,
+            "due_date": payment.due_date,
+            "days_from_due": (today - payment.due_date).days,
+            "stage": stage,
+            "label": label,
+            "last_reminder_at": last_reminder_at,
+        })
+    return result
+
+
+def mark_payment_reminder_sent(
+    db: Session,
+    org_id: UUID,
+    payment_id: UUID,
+    stage: str,
+    channel: str,
+    actor_user_id: UUID | None = None,
+) -> PaymentReminder:
+    payment = scoped_get(db, Payment, org_id, payment_id)
+    if payment.status != PaymentStatus.PENDING or payment.due_date is None:
+        raise HTTPException(status_code=409, detail="Payment no longer needs a reminder")
+
+    expected = _payment_reminder_stage(payment.due_date, date.today())
+    if expected is None or expected[0] != stage:
+        raise HTTPException(status_code=409, detail="Reminder stage is no longer current")
+
+    existing = db.scalar(select(PaymentReminder).where(
+        PaymentReminder.organization_id == org_id,
+        PaymentReminder.payment_id == payment.id,
+        PaymentReminder.stage == stage,
+    ))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="This reminder stage was already recorded")
+
+    item = PaymentReminder(
+        organization_id=org_id,
+        payment_id=payment.id,
+        student_id=payment.student_id,
+        stage=stage,
+        channel=channel,
+        created_by_user_id=actor_user_id,
+    )
+    db.add(item)
+    record_audit(
+        db,
+        org_id,
+        "student",
+        payment.student_id,
+        "payment.reminder_sent",
+        {"payment_id": str(payment.id), "stage": stage, "channel": channel},
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 def create_staff(db: Session, org_id: UUID, data) -> Staff:
