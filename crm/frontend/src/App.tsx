@@ -1925,6 +1925,7 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
   const [organizationName, setOrganizationName] = useState("AeroKiDS");
   const [organizationSlug, setOrganizationSlug] = useState("aerokids");
   const [ownerName, setOwnerName] = useState("");
+  const [bootstrapSecret, setBootstrapSecret] = useState("");
 
   useEffect(() => {
     if (inviteToken || resetToken) {
@@ -2000,7 +2001,7 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
         full_name: ownerName.trim(),
         email,
         password,
-      }));
+      }, bootstrapSecret.trim() || undefined));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не вдалося створити першу організацію");
     } finally {
@@ -2028,6 +2029,8 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
         <form onSubmit={acceptInvitation}>
           <label>Ваше ім’я<input autoComplete="name" value={inviteName} onChange={(e) => setInviteName(e.target.value)} required /></label>
           <label>Пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          <label>Ключ першого запуску<input type="password" autoComplete="off" value={bootstrapSecret} onChange={(e) => setBootstrapSecret(e.target.value)} placeholder="Задається під час розгортання CRM" /></label>
+          <small className="setupHint">Для локальної розробки поле можна залишити порожнім. На тестовому/production сервері використовуйте BOOTSTRAP_SECRET.</small>
           {error && <div className="loginError">{error}</div>}
           <button className="primary full" disabled={loading}>{loading ? "Створюємо доступ…" : "Прийняти запрошення"}</button>
         </form>
