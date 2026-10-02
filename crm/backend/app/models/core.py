@@ -297,6 +297,8 @@ class StudentSubscription(Base):
     price_minor: Mapped[int] = mapped_column(Integer, nullable=False)
     discount_minor: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     discount_label: Mapped[str | None] = mapped_column(String(160))
+    auto_renew: Mapped[bool] = mapped_column(default=False, nullable=False)
+    renewal_of_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("student_subscriptions.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
@@ -316,6 +318,35 @@ class Payment(Base):
     note: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
+
+
+class PaymentTransaction(Base):
+    __tablename__ = "payment_transactions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    payment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("payments.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    method: Mapped[PaymentMethod | None] = mapped_column(Enum(PaymentMethod))
+    note: Mapped[str | None] = mapped_column(String(300))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+
+
+class SubscriptionPause(Base):
+    __tablename__ = "subscription_pauses"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    subscription_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("student_subscriptions.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    starts_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[date | None] = mapped_column(Date)
+    resumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
 class PaymentReminder(Base):
