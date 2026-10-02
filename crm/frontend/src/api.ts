@@ -313,7 +313,7 @@ export async function bootstrapOwner(input: {
   full_name: string;
   email: string;
   password: string;
-}): Promise<Session> {
+}, bootstrapSecret?: string): Promise<Session> {
   const result = await request<{
     organization_id: string;
     user_id: string;
@@ -321,6 +321,7 @@ export async function bootstrapOwner(input: {
     token_type: string;
   }>("/auth/bootstrap", {
     method: "POST",
+    headers: bootstrapSecret ? { "X-Bootstrap-Secret": bootstrapSecret } : undefined,
     body: JSON.stringify(input),
   });
 
