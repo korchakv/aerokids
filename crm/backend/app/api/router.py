@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, get_org_id, require_org_access_roles, require_org_roles
 from app.models.core import Organization, PaymentStatus, StaffRole, User
-from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
+from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, BillingRenewalResult, BillingRenewalRun, PaymentAdjustmentCreate, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentReceiptCreate, PaymentRefundCreate, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, PaymentTransactionRead, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionPauseCreate, SubscriptionPauseRead, SubscriptionResumeCreate, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
 from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
@@ -402,6 +402,43 @@ def student_subscriptions(student_id: UUID | None = None, org_id: UUID = Depends
     return crm.list_student_subscriptions(db, org_id, student_id)
 
 
+@router.post("/student-subscriptions/{subscription_id}/pause", response_model=SubscriptionPauseRead, status_code=201)
+def pause_student_subscription(
+    subscription_id: UUID,
+    data: SubscriptionPauseCreate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)),
+    db: Session = Depends(get_db),
+):
+    return crm.pause_subscription(
+        db,
+        access.organization_id,
+        subscription_id,
+        data.starts_on,
+        data.resume_on,
+        data.note,
+        access.user_id,
+    )
+
+
+@router.post("/student-subscriptions/{subscription_id}/resume", response_model=StudentSubscriptionRead)
+def resume_student_subscription(
+    subscription_id: UUID,
+    data: SubscriptionResumeCreate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)),
+    db: Session = Depends(get_db),
+):
+    return crm.resume_subscription(db, access.organization_id, subscription_id, data.resumes_on, access.user_id)
+
+
+@router.post("/billing/renewals/run", response_model=BillingRenewalResult)
+def run_billing_renewals(
+    data: BillingRenewalRun,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)),
+    db: Session = Depends(get_db),
+):
+    return crm.run_billing_renewals(db, access.organization_id, data.through_date, access.user_id)
+
+
 @router.post("/billing/charges", response_model=SubscriptionChargeResult, status_code=201)
 def create_subscription_charge(
     data: SubscriptionChargeCreate,
@@ -420,6 +457,71 @@ def create_payment(data: PaymentCreate, access: OrgAccess = Depends(require_org_
 @router.get("/payments", response_model=list[PaymentRead])
 def payments(student_id: UUID | None = None, status: PaymentStatus | None = None, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.list_payments(db, org_id, student_id, status)
+
+
+@router.post("/payments/{payment_id}/receipts", response_model=PaymentRead, status_code=201)
+def add_payment_receipt(
+    payment_id: UUID,
+    data: PaymentReceiptCreate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)),
+    db: Session = Depends(get_db),
+):
+    return crm.add_payment_receipt(
+        db,
+        access.organization_id,
+        payment_id,
+        data.amount_minor,
+        data.method,
+        data.paid_at,
+        data.note,
+        access.user_id,
+    )
+
+
+@router.post("/payments/{payment_id}/refunds", response_model=PaymentRead, status_code=201)
+def refund_payment(
+    payment_id: UUID,
+    data: PaymentRefundCreate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)),
+    db: Session = Depends(get_db),
+):
+    return crm.refund_payment(
+        db,
+        access.organization_id,
+        payment_id,
+        data.amount_minor,
+        data.note,
+        data.occurred_at,
+        data.reduce_charge,
+        access.user_id,
+    )
+
+
+@router.post("/payments/{payment_id}/adjustments", response_model=PaymentRead, status_code=201)
+def adjust_payment(
+    payment_id: UUID,
+    data: PaymentAdjustmentCreate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)),
+    db: Session = Depends(get_db),
+):
+    return crm.add_payment_adjustment(
+        db,
+        access.organization_id,
+        payment_id,
+        data.direction,
+        data.amount_minor,
+        data.reason,
+        access.user_id,
+    )
+
+
+@router.get("/payments/{payment_id}/transactions", response_model=list[PaymentTransactionRead])
+def payment_transactions(
+    payment_id: UUID,
+    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)),
+    db: Session = Depends(get_db),
+):
+    return crm.list_payment_transactions(db, org_id, payment_id)
 
 
 @router.patch("/payments/{payment_id}/paid", response_model=PaymentRead)
