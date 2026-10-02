@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadOperations, loadOverviewReport, loadSession, loadTeaching, loadWorkspace, login, refreshMe, resetPassword, type ApiAuditEvent, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
-type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Пробне пройдено" | "Очікує групу" | "Зарахований";
+type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
 type EntityId = string;
 
@@ -17,6 +17,7 @@ type DraftScheduleSlot = { weekday: number; start_time: string; duration_minutes
 
 type Lead = {
   id: EntityId;
+  createdAt?: string;
   child: string;
   age: number;
   parent: string;
@@ -31,9 +32,12 @@ type Lead = {
   trialAt?: string;
   trialLocationId?: string;
   trialLocation?: string;
-  trialResult?: "scheduled" | "completed" | "no_show";
+  trialResult?: "scheduled" | "completed" | "no_show" | "cancelled";
   recommendedLevel?: string;
   teacherNotes?: string;
+  nextContactAt?: string;
+  closeReason?: string;
+  closeNote?: string;
 };
 
 type GroupItem = {
@@ -108,7 +112,7 @@ const initialLeads: Lead[] = [
   { id: "9", child: "Назар", age: 10, parent: "Олена", phone: "+380 95 700 10 09", status: "Зарахований", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
 ];
 
-const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне заплановано", "Пробне пройдено", "Очікує групу", "Зарахований"];
+const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне заплановано", "Після пробного", "Очікує групу", "Зарахований", "Не відповідає", "Відмовились", "Неактуально"];
 
 function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession());
@@ -124,7 +128,8 @@ function App() {
   const [organizationCurrency, setOrganizationCurrency] = useState("UAH");
   const [organizationLocale, setOrganizationLocale] = useState("uk-UA");
   const [organizationSaving, setOrganizationSaving] = useState(false);
-  const [leadFilter, setLeadFilter] = useState<"all" | "new" | "trial" | "waiting">("all");
+  const [leadFilter, setLeadFilter] = useState<"action" | "new" | "trial" | "no_show" | "after_trial" | "waiting" | "closed">("action");
+  const [leadSort, setLeadSort] = useState<"priority" | "newest" | "oldest" | "trial" | "age">("priority");
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateFilter, setCandidateFilter] = useState<"all" | "8-10" | "11-13" | "beginner">("all");
   const [candidateMatchFilter, setCandidateMatchFilter] = useState<"all" | "match" | "partial" | "conflict" | "unknown">("all");
@@ -193,6 +198,11 @@ function App() {
   const [studentStates, setStudentStates] = useState<Record<EntityId, "Активний" | "Пауза" | "Архів">>({});
   const [transferGroupId, setTransferGroupId] = useState<EntityId | null>(null);
   const [trialMode, setTrialMode] = useState<"schedule" | "complete" | null>(null);
+  const [postTrialMode, setPostTrialMode] = useState<"thinking" | "close" | null>(null);
+  const [followUpAt, setFollowUpAt] = useState("");
+  const [closeKind, setCloseKind] = useState<"declined" | "no_response" | "not_relevant">("declined");
+  const [closeReason, setCloseReason] = useState("schedule");
+  const [closeNote, setCloseNote] = useState("");
   const [preferenceMode, setPreferenceMode] = useState(false);
   const [preferenceLocationId, setPreferenceLocationId] = useState<EntityId | "">("");
   const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilitySlot[]>([]);
