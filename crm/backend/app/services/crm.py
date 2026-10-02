@@ -1267,6 +1267,22 @@ def run_billing_renewals(
         raise HTTPException(status_code=422, detail="through_date cannot be in the past")
 
     resumed = _resume_due_pauses(db, org_id, today, actor_user_id)
+    expired_rows = list(db.scalars(select(StudentSubscription).where(
+        StudentSubscription.organization_id == org_id,
+        StudentSubscription.status == SubscriptionStatus.ACTIVE,
+        StudentSubscription.ends_on < today,
+    )))
+    for expired in expired_rows:
+        open_pause = db.scalar(select(SubscriptionPause.id).where(
+            SubscriptionPause.organization_id == org_id,
+            SubscriptionPause.subscription_id == expired.id,
+            SubscriptionPause.resumed_at.is_(None),
+        ))
+        if open_pause is None:
+            expired.status = SubscriptionStatus.EXPIRED
+    if expired_rows:
+        db.flush()
+
     created_payment_ids: list[UUID] = []
     created_subscriptions = 0
     skipped_stale_subscriptions = 0
@@ -1340,7 +1356,8 @@ def run_billing_renewals(
             )
             db.add(payment)
             db.flush()
-            current.status = SubscriptionStatus.EXPIRED
+            if current.ends_on < today:
+                current.status = SubscriptionStatus.EXPIRED
             record_audit(
                 db,
                 org_id,
