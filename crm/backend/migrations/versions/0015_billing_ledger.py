@@ -13,16 +13,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("student_subscriptions", sa.Column("auto_renew", sa.Boolean(), nullable=False, server_default=sa.false()))
-    op.add_column("student_subscriptions", sa.Column("renewal_of_id", sa.Uuid(), nullable=True))
-    op.create_foreign_key(
-        "fk_student_subscriptions_renewal_of_id",
-        "student_subscriptions",
-        "student_subscriptions",
-        ["renewal_of_id"],
-        ["id"],
-    )
-    op.create_index("ix_student_subscriptions_renewal_of_id", "student_subscriptions", ["renewal_of_id"])
+    with op.batch_alter_table("student_subscriptions") as batch:
+        batch.add_column(sa.Column("auto_renew", sa.Boolean(), nullable=False, server_default=sa.false()))
+        batch.add_column(sa.Column("renewal_of_id", sa.Uuid(), nullable=True))
+        batch.create_foreign_key(
+            "fk_student_subscriptions_renewal_of_id",
+            "student_subscriptions",
+            ["renewal_of_id"],
+            ["id"],
+        )
+        batch.create_index("ix_student_subscriptions_renewal_of_id", ["renewal_of_id"])
 
     op.create_table(
         "payment_transactions",
@@ -73,7 +73,8 @@ def downgrade() -> None:
     op.drop_index("ix_payment_transactions_organization_id", table_name="payment_transactions")
     op.drop_table("payment_transactions")
 
-    op.drop_index("ix_student_subscriptions_renewal_of_id", table_name="student_subscriptions")
-    op.drop_constraint("fk_student_subscriptions_renewal_of_id", "student_subscriptions", type_="foreignkey")
-    op.drop_column("student_subscriptions", "renewal_of_id")
-    op.drop_column("student_subscriptions", "auto_renew")
+    with op.batch_alter_table("student_subscriptions") as batch:
+        batch.drop_index("ix_student_subscriptions_renewal_of_id")
+        batch.drop_constraint("fk_student_subscriptions_renewal_of_id", type_="foreignkey")
+        batch.drop_column("renewal_of_id")
+        batch.drop_column("auto_renew")
