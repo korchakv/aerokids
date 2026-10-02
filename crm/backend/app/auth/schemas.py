@@ -1,8 +1,24 @@
 from uuid import UUID
+import re
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.core import StaffRole
+
+
+def normalize_email(value: str) -> str:
+    value = value.strip().lower()
+    if len(value) > 255 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]{2,}", value):
+        raise ValueError("Некоректна email-адреса")
+    return value
+
+
+def normalize_name(value: str) -> str:
+    value = re.sub(r"\s+", " ", value.strip())
+    if len(value) < 2 or not re.fullmatch(r"[A-Za-zА-Яа-яІіЇїЄєҐґ'’\- ]+", value):
+        raise ValueError("Ім’я може містити лише літери, пробіл, апостроф і дефіс")
+    return value
+
 
 
 class BootstrapOwnerCreate(BaseModel):
@@ -12,10 +28,15 @@ class BootstrapOwnerCreate(BaseModel):
     email: str = Field(min_length=5, max_length=255)
     password: str = Field(min_length=10, max_length=200)
 
+    _full_name = field_validator("full_name")(normalize_name)
+    _email = field_validator("email")(normalize_email)
+
 
 class LoginCreate(BaseModel):
     email: str = Field(min_length=5, max_length=255)
     password: str = Field(min_length=1, max_length=200)
+
+    _email = field_validator("email")(normalize_email)
 
 
 class AuthMembershipInfo(BaseModel):
@@ -52,6 +73,8 @@ class OrganizationInvitationCreate(BaseModel):
     email: str = Field(min_length=5, max_length=255)
     role: StaffRole
 
+    _email = field_validator("email")(normalize_email)
+
 
 class OrganizationInvitationResult(BaseModel):
     invitation_id: UUID
@@ -66,6 +89,8 @@ class AcceptInvitationCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=160)
     password: str = Field(min_length=10, max_length=200)
 
+    _full_name = field_validator("full_name")(normalize_name)
+
 
 class BootstrapStatus(BaseModel):
     available: bool
@@ -73,6 +98,8 @@ class BootstrapStatus(BaseModel):
 
 class PasswordResetLinkCreate(BaseModel):
     email: str = Field(min_length=5, max_length=255)
+
+    _email = field_validator("email")(normalize_email)
 
 
 class PasswordResetLinkResult(BaseModel):
