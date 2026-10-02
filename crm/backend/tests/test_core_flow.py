@@ -2227,3 +2227,118 @@ def test_auto_renewal_handles_recently_expired_period(client):
     assert len(subscriptions) == 2
     assert subscriptions[1]["status"] == "expired"
     assert subscriptions[0]["renewal_of_id"] == subscriptions[1]["id"]
+
+
+def test_ukrainian_phone_formats_normalize_to_one_contact(client):
+    org = create_org(client, "Phone Validation", "phone-validation")
+    headers = {"X-Organization-Id": org["id"]}
+
+    first = client.post(
+        "/contacts",
+        headers=headers,
+        json={"full_name": "Оксана Петренко", "phone": "067 123 45 67"},
+    )
+    assert first.status_code == 201, first.text
+    assert first.json()["phone"] == "+380671234567"
+
+    second = client.post(
+        "/contacts",
+        headers=headers,
+        json={"full_name": "Оксана Петренко", "phone": "+380 (67) 123-45-67"},
+    )
+    assert second.status_code == 201, second.text
+    assert second.json()["id"] == first.json()["id"]
+
+
+def test_invalid_ukrainian_phone_is_rejected(client):
+    org = create_org(client, "Bad Phone", "bad-phone")
+    headers = {"X-Organization-Id": org["id"]}
+
+    for phone in ["12345", "+48123123123", "0012345678", "+380001234567"]:
+        response = client.post(
+            "/contacts",
+            headers=headers,
+            json={"full_name": "Ірина Тест", "phone": phone},
+        )
+        assert response.status_code == 422, (phone, response.text)
+
+
+def test_person_names_reject_digits_and_noise(client):
+    org = create_org(client, "Name Validation", "name-validation")
+    headers = {"X-Organization-Id": org["id"]}
+
+    bad_contact = client.post(
+        "/contacts",
+        headers=headers,
+        json={"full_name": "Оксана123", "phone": "0671234567"},
+    )
+    assert bad_contact.status_code == 422
+
+    bad_student = client.post(
+        "/students",
+        headers=headers,
+        json={"first_name": "!!!"},
+    )
+    assert bad_student.status_code == 422
+
+    good_student = client.post(
+        "/students",
+        headers=headers,
+        json={"first_name": "  Марія   Анна  "},
+    )
+    assert good_student.status_code == 201, good_student.text
+    assert good_student.json()["first_name"] == "Марія Анна"
+
+
+def test_staff_identity_fields_are_validated_and_normalized(client):
+    org = create_org(client, "Staff Validation", "staff-validation")
+    headers = {"X-Organization-Id": org["id"]}
+
+    bad_email = client.post(
+        "/staff",
+        headers=headers,
+        json={"full_name": "Іван Петренко", "role": "teacher", "email": "wrong-email"},
+    )
+    assert bad_email.status_code == 422
+
+    bad_phone = client.post(
+        "/staff",
+        headers=headers,
+        json={"full_name": "Іван Петренко", "role": "teacher", "phone": "+12025550123"},
+    )
+    assert bad_phone.status_code == 422
+
+    good = client.post(
+        "/staff",
+        headers=headers,
+        json={
+            "full_name": "  Іван   Петренко ",
+            "role": "teacher",
+            "email": "IVAN@EXAMPLE.COM ",
+            "phone": "050 123 45 67",
+        },
+    )
+    assert good.status_code == 201, good.text
+    assert good.json()["full_name"] == "Іван Петренко"
+    assert good.json()["email"] == "ivan@example.com"
+    assert good.json()["phone"] == "+380501234567"
+
+
+def test_intake_rejects_invalid_identity_before_creating_records(client):
+    org = create_org(client, "Intake Validation", "intake-validation")
+    headers = {"X-Organization-Id": org["id"]}
+
+    invalid = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Максим7",
+            "child_age": 9,
+            "contact_name": "Оксана",
+            "phone": "0671234567",
+            "source": "phone",
+        },
+    )
+    assert invalid.status_code == 422
+    assert client.get("/students", headers=headers).json() == []
+    assert client.get("/contacts", headers=headers).json() == []
