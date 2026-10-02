@@ -1,10 +1,22 @@
 from datetime import date, datetime, time
+from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.core import AttendanceStatus, CrmStatus, EnrollmentStatus, LessonStatus, PaymentMethod, PaymentStatus, StaffRole, StudentStatus, SubscriptionStatus, TrialStatus
+from app.models.core import AttendanceStatus, AvailabilityPreference, CrmStatus, EnrollmentStatus, LessonStatus, PaymentMethod, PaymentStatus, StaffRole, StudentStatus, SubscriptionStatus, TrialStatus
+
+
+def validate_quarter_hour(value: time) -> time:
+    if value.minute % 15 or value.second or value.microsecond:
+        raise ValueError("time must be on a 15-minute boundary")
+    return value
+
+
+def validate_datetime_quarter_hour(value: datetime) -> datetime:
+    validate_quarter_hour(value.timetz().replace(tzinfo=None))
+    return value
 
 
 class ORMModel(BaseModel):
@@ -119,6 +131,8 @@ class TrialLessonCreate(BaseModel):
     location_id: UUID | None = None
     starts_at: datetime
 
+    _quarter_hour = field_validator("starts_at")(validate_datetime_quarter_hour)
+
 
 class TrialLessonRead(ORMModel):
     id: UUID
@@ -164,6 +178,8 @@ class EnrollmentRead(ORMModel):
     status: EnrollmentStatus
     started_at: date
     ended_at: date | None
+    schedule_match: str | None
+    schedule_note: str | None
 
 
 class IntakeCreate(BaseModel):
@@ -189,6 +205,11 @@ class StudentStatusUpdate(BaseModel):
 class TrialLessonUpdate(BaseModel):
     starts_at: datetime | None = None
     location_id: UUID | None = None
+
+    @field_validator("starts_at")
+    @classmethod
+    def quarter_hour(cls, value: datetime | None) -> datetime | None:
+        return validate_datetime_quarter_hour(value) if value else value
 
 
 class TrialLessonComplete(BaseModel):
@@ -216,6 +237,12 @@ class GroupFormationScheduleSlot(BaseModel):
     start_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     duration_minutes: int = Field(default=60, ge=15, le=360)
 
+    @field_validator("start_time")
+    @classmethod
+    def quarter_hour(cls, value: str) -> str:
+        validate_quarter_hour(time.fromisoformat(value))
+        return value
+
 
 class GroupFormationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
@@ -225,6 +252,13 @@ class GroupFormationCreate(BaseModel):
     max_age: int | None = Field(default=None, ge=3, le=30)
     student_ids: list[UUID] = Field(min_length=1)
     schedule_slots: list[GroupFormationScheduleSlot] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def unique_schedule_slots(self):
+        keys = [(slot.weekday, slot.start_time) for slot in self.schedule_slots]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Duplicate group schedule slots are not allowed")
+        return self
 
 
 class GroupFormationResult(BaseModel):
@@ -260,6 +294,12 @@ class GroupScheduleCreate(BaseModel):
     start_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     duration_minutes: int = Field(default=60, ge=15, le=360)
 
+    @field_validator("start_time")
+    @classmethod
+    def quarter_hour(cls, value: str) -> str:
+        validate_quarter_hour(time.fromisoformat(value))
+        return value
+
 
 class GroupScheduleRead(ORMModel):
     id: UUID
@@ -278,6 +318,8 @@ class LessonSessionCreate(BaseModel):
     duration_minutes: int = Field(default=60, ge=15, le=360)
     topic: str | None = Field(default=None, max_length=240)
     notes: str | None = None
+
+    _quarter_hour = field_validator("starts_at")(validate_datetime_quarter_hour)
 
 
 class LessonSessionRead(ORMModel):
@@ -494,6 +536,11 @@ class StudentAvailabilitySlot(BaseModel):
     weekday: int = Field(ge=0, le=6)
     start_time: time
     end_time: time
+    preference: AvailabilityPreference = AvailabilityPreference.PREFERRED
+    note: str | None = Field(default=None, max_length=300)
+
+    _start_quarter = field_validator("start_time")(validate_quarter_hour)
+    _end_quarter = field_validator("end_time")(validate_quarter_hour)
 
     @model_validator(mode="after")
     def validate_time_range(self):
@@ -511,6 +558,38 @@ class StudentPreferencesRead(BaseModel):
     preferred_location_id: UUID | None
     preferred_location_name: str | None
     availability: list[StudentAvailabilitySlot]
+
+
+class ScheduleMatchSlot(BaseModel):
+    weekday: int
+    start_time: str
+    end_time: str
+    detail: str
+
+
+class GroupMatchPreviewRequest(BaseModel):
+    location_id: UUID | None = None
+    schedule_slots: list[GroupFormationScheduleSlot]
+    student_ids: list[UUID] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_students(self):
+        if len(self.student_ids) != len(set(self.student_ids)):
+            raise ValueError("Duplicate students are not allowed")
+        return self
+
+
+class StudentScheduleMatch(BaseModel):
+    student_id: UUID
+    status: Literal["match", "partial", "conflict", "unknown"]
+    summary: str
+    matching_slots: list[ScheduleMatchSlot]
+    partial_slots: list[ScheduleMatchSlot]
+    conflicting_slots: list[ScheduleMatchSlot]
+
+
+class GroupMatchPreviewResponse(BaseModel):
+    students: list[StudentScheduleMatch]
 
 
 class LeadListItem(BaseModel):

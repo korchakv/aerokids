@@ -124,6 +124,8 @@ export type StudentAvailabilitySlot = {
   weekday: number;
   start_time: string;
   end_time: string;
+  preference: "preferred" | "possible" | "avoid";
+  note: string | null;
 };
 
 export type WorkspaceLead = {

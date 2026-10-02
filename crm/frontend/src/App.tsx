@@ -9,7 +9,11 @@ type AvailabilitySlot = {
   weekday: number;
   start_time: string;
   end_time: string;
+  preference: "preferred" | "possible" | "avoid";
+  note?: string | null;
 };
+
+type DraftScheduleSlot = { weekday: number; start_time: string; duration_minutes: number };
 
 type Lead = {
   id: EntityId;
@@ -123,6 +127,7 @@ function App() {
   const [leadFilter, setLeadFilter] = useState<"all" | "new" | "trial" | "waiting">("all");
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateFilter, setCandidateFilter] = useState<"all" | "8-10" | "11-13" | "beginner">("all");
+  const [candidateMatchFilter, setCandidateMatchFilter] = useState<"all" | "match" | "partial" | "conflict" | "unknown">("all");
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showLeadForm, setShowLeadForm] = useState(false);
@@ -190,9 +195,7 @@ function App() {
   const [trialMode, setTrialMode] = useState<"schedule" | "complete" | null>(null);
   const [preferenceMode, setPreferenceMode] = useState(false);
   const [preferenceLocationId, setPreferenceLocationId] = useState<EntityId | "">("");
-  const [availabilityDays, setAvailabilityDays] = useState<number[]>([]);
-  const [availabilityStart, setAvailabilityStart] = useState("16:00");
-  const [availabilityEnd, setAvailabilityEnd] = useState("20:00");
+  const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilitySlot[]>([]);
   const [preferenceSaving, setPreferenceSaving] = useState(false);
   const [trialAt, setTrialAt] = useState("2026-10-05T17:00");
   const [trialLocation, setTrialLocation] = useState("Основна локація");
@@ -201,16 +204,21 @@ function App() {
   const [teacherNotes, setTeacherNotes] = useState("");
   const [selectedCandidates, setSelectedCandidates] = useState<EntityId[]>([]);
   const [groupName, setGroupName] = useState("FPV Start 8–10");
-  const [groupSchedule, setGroupSchedule] = useState("Пн / Ср · 17:00");
+  const [groupSchedule, setGroupSchedule] = useState<DraftScheduleSlot[]>([
+    { weekday: 0, start_time: "17:00", duration_minutes: 60 },
+    { weekday: 2, start_time: "17:00", duration_minutes: 60 },
+  ]);
   const [groupCapacity, setGroupCapacity] = useState(8);
   const [groupLocationId, setGroupLocationId] = useState<EntityId | "">("");
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [newLessonGroupId, setNewLessonGroupId] = useState<EntityId>("1");
   const [newLessonAt, setNewLessonAt] = useState("2026-10-07T17:00");
+  const [newLessonDuration, setNewLessonDuration] = useState(60);
   const [newLessonTopic, setNewLessonTopic] = useState("FPV / електроніка");
   const [scheduleGroupId, setScheduleGroupId] = useState<EntityId>("1");
   const [scheduleWeekday, setScheduleWeekday] = useState(0);
   const [scheduleTime, setScheduleTime] = useState("17:00");
+  const [scheduleDuration, setScheduleDuration] = useState(60);
   useEffect(() => {
     setStaffResetLink("");
   }, [selectedStaffId]);
@@ -325,7 +333,8 @@ function App() {
     if (candidateFilter === "11-13") return item.age >= 11 && item.age <= 13;
     if (candidateFilter === "beginner") return item.recommendedLevel === "Початковий";
     return true;
-  }), [waiting, candidateFilter]);
+  }).filter((item) => candidateMatchFilter === "all" || candidateCompatibility(item, groupSchedule, groupLocationId || null).state === candidateMatchFilter)
+    .sort((a, b) => ["match", "partial", "unknown", "conflict"].indexOf(candidateCompatibility(a, groupSchedule, groupLocationId || null).state) - ["match", "partial", "unknown", "conflict"].indexOf(candidateCompatibility(b, groupSchedule, groupLocationId || null).state)), [waiting, candidateFilter, candidateMatchFilter, groupSchedule, groupLocationId]);
 
   const saveOrganizationSettings = async () => {
     if (!session || !organizationName.trim()) return;
@@ -471,9 +480,7 @@ function App() {
     if (lead?.recommendedLevel) setRecommendedLevel(lead.recommendedLevel);
     setTeacherNotes(lead?.teacherNotes ?? "");
     setPreferenceLocationId(lead?.preferredLocationId ?? "");
-    setAvailabilityDays(Array.from(new Set((lead?.availability ?? []).map((slot) => slot.weekday))));
-    setAvailabilityStart(lead?.availability?.[0]?.start_time ?? "16:00");
-    setAvailabilityEnd(lead?.availability?.[0]?.end_time ?? "20:00");
+    setAvailabilityWindows(lead?.availability ?? []);
   };
 
   const toggleCandidate = (id: EntityId) => {
@@ -487,11 +494,7 @@ function App() {
     try {
       await apiPut(`/students/${selected.id}/preferences`, {
         preferred_location_id: preferenceLocationId || null,
-        availability: availabilityDays.map((weekday) => ({
-          weekday,
-          start_time: availabilityStart,
-          end_time: availabilityEnd,
-        })),
+        availability: availabilityWindows,
       }, session);
       await syncWorkspace(session);
       setPreferenceMode(false);
@@ -500,10 +503,6 @@ function App() {
     } finally {
       setPreferenceSaving(false);
     }
-  };
-
-  const toggleAvailabilityDay = (weekday: number) => {
-    setAvailabilityDays((days) => days.includes(weekday) ? days.filter((day) => day !== weekday) : [...days, weekday].sort());
   };
 
   const createGroupFromCandidates = async () => {
@@ -518,7 +517,7 @@ function App() {
           min_age: selectedLeadRows.length ? Math.min(...selectedLeadRows.map((x) => x.age)) : null,
           max_age: selectedLeadRows.length ? Math.max(...selectedLeadRows.map((x) => x.age)) : null,
           student_ids: selectedCandidates,
-          schedule_slots: parseScheduleText(groupSchedule),
+          schedule_slots: groupSchedule,
         }, session);
         await syncWorkspace(session);
         setSelectedCandidates([]);
@@ -533,7 +532,7 @@ function App() {
       id: nextId,
       name: groupName.trim(),
       ages: selectedCandidates.length ? ageRange(selectedLeadRows) : "—",
-      schedule: groupSchedule,
+      schedule: scheduleDraftLabel(groupSchedule),
       location: locations.find((location) => location.id === groupLocationId)?.name ?? "Локацію не вказано",
       capacity: groupCapacity,
       members: selectedCandidates,
@@ -627,7 +626,7 @@ function App() {
           group_id: scheduleGroupId,
           weekday: scheduleWeekday,
           start_time: scheduleTime,
-          duration_minutes: 60,
+          duration_minutes: scheduleDuration,
         }, session);
         await syncWorkspace(session);
         return;
@@ -652,7 +651,7 @@ function App() {
         const created = await apiPost<{ id: string }>("/lesson-sessions", {
           group_id: newLessonGroupId,
           starts_at: new Date(newLessonAt).toISOString(),
-          duration_minutes: 60,
+          duration_minutes: newLessonDuration,
           topic: newLessonTopic.trim() || "Заняття",
         }, session);
         await syncWorkspace(session);
@@ -668,7 +667,7 @@ function App() {
       id: nextId,
       groupId: newLessonGroupId,
       startsAt: newLessonAt,
-      duration: 60,
+      duration: newLessonDuration,
       topic: newLessonTopic.trim() || "Заняття",
     }]);
     setSelectedLessonId(nextId);
@@ -1104,14 +1103,16 @@ function App() {
               <label>Група<select value={scheduleGroupId} onChange={(e) => setScheduleGroupId(e.target.value)}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
               <div className="formTwo">
                 <label>День<select value={scheduleWeekday} onChange={(e) => setScheduleWeekday(Number(e.target.value))}>{["Пн","Вт","Ср","Чт","Пт","Сб","Нд"].map((day,index) => <option value={index} key={day}>{day}</option>)}</select></label>
-                <label>Час<input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} /></label>
+                <TimeSelect label="Час" value={scheduleTime} onChange={setScheduleTime} />
               </div>
+              <DurationSelect value={scheduleDuration} onChange={setScheduleDuration} />
               <button className="search full" onClick={createGroupSchedule}>Додати в розклад</button>
             </article>}
             <article className="panel lessonCreate">
               <p className="eyebrow">Нове заняття</p><h2>Додати заняття</h2>
               <label>Група<select value={newLessonGroupId} onChange={(e) => setNewLessonGroupId(e.target.value)}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
-              <label>Дата і час<input type="datetime-local" value={newLessonAt} onChange={(e) => setNewLessonAt(e.target.value)} /></label>
+              <DateTimeEditor label="Дата і час" value={newLessonAt} onChange={setNewLessonAt} />
+              <DurationSelect value={newLessonDuration} onChange={setNewLessonDuration} />
               <label>Тема<input value={newLessonTopic} onChange={(e) => setNewLessonTopic(e.target.value)} /></label>
               <button className="primary full" onClick={createLesson}>Створити заняття</button>
             </article>
@@ -1322,14 +1323,17 @@ function App() {
               <button className={"chip " + (candidateFilter === "11-13" ? "active" : "")} onClick={() => setCandidateFilter("11-13")}>11–13 років</button>
               <button className={"chip " + (candidateFilter === "beginner" ? "active" : "")} onClick={() => setCandidateFilter("beginner")}>Початковий</button>
             </div>
+            <div className="candidateFilters" aria-label="Фільтр за збігом графіка">
+              {([['all','Усі збіги'],['match','Підходить'],['partial','Частково'],['conflict','Узгодити'],['unknown','Невідомо']] as const).map(([value,label]) => <button className={"chip " + (candidateMatchFilter === value ? "active" : "")} onClick={() => setCandidateMatchFilter(value)} key={value}>{label}</button>)}
+            </div>
             <div className="candidateList">
               {visibleWaiting.length === 0 && <div className="emptyState">За цим фільтром кандидатів немає.</div>}
-              {visibleWaiting.map((lead) => <label className={"candidate " + (selectedCandidates.includes(lead.id) ? "selected" : "")} key={lead.id}>
+              {visibleWaiting.map((lead) => { const match = candidateCompatibility(lead, groupSchedule, groupLocationId || null); return <label className={"candidate " + (selectedCandidates.includes(lead.id) ? "selected" : "")} key={lead.id}>
                 <input type="checkbox" checked={selectedCandidates.includes(lead.id)} onChange={() => toggleCandidate(lead.id)} />
                 <span className="candidateAvatar">{lead.child[0]}</span>
                 <span className="candidateMain"><b>{lead.child}</b><small>{lead.age} років · {lead.recommendedLevel ?? "Рівень не вказано"}</small><small>{availabilityLabel(lead.availability ?? [])}{lead.preferredLocationName ? " · " + lead.preferredLocationName : ""}</small></span>
-                <span className="candidateSource">{lead.source}</span>
-              </label>)}
+                <span className={"candidateSource candidateCompatibility " + match.state}>{match.icon} {match.label}</span>
+              </label>})}
             </div>
             <div className="selectionBar">
               <span>Вибрано: <b>{selectedCandidates.length}</b></span>
@@ -1560,15 +1564,15 @@ function App() {
               {locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
             </select></label>
           </div>
-          <label>Розклад<input value={groupSchedule} onChange={(e) => setGroupSchedule(e.target.value)} /></label>
+          <ScheduleSlotEditor value={groupSchedule} onChange={setGroupSchedule} />
           <div className="selectedNames">{leads.filter((x) => selectedCandidates.includes(x.id)).map((x) => {
-            const compatibility = candidateCompatibility(x, parseScheduleText(groupSchedule), groupLocationId || null);
+            const compatibility = candidateCompatibility(x, groupSchedule, groupLocationId || null);
             return <span className={"candidateCompatibility " + compatibility.state} key={x.id}>
-              <b>{x.child} · {x.age}</b><small>{compatibility.label}</small>
+              <b>{x.child} · {x.age}</b><small>{compatibility.icon} {compatibility.label}</small><small>{compatibility.detail}</small>
             </span>;
           })}</div>
-          <button className="primary full" disabled={selectedCandidates.length > groupCapacity} onClick={createGroupFromCandidates}>
-            {selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : "Створити групу і зарахувати"}
+          <button className="primary full" disabled={selectedCandidates.length > groupCapacity || hasDuplicateSlots(groupSchedule)} onClick={createGroupFromCandidates}>
+            {selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : "Створити групу і зарахувати"}
           </button>
         </div>
       </div>}
@@ -1594,19 +1598,14 @@ function App() {
           </div>
 
           {preferenceMode && <div className="workflowBox">
-            <div className="workflowHead"><h3>Бажаний графік</h3><button onClick={() => setPreferenceMode(false)}>×</button></div>
-            <label>Локація<select value={preferenceLocationId} onChange={(e) => setPreferenceLocationId(e.target.value)}>
+            <div className="workflowHead"><h3>Побажання щодо графіка</h3><button onClick={() => setPreferenceMode(false)}>×</button></div>
+            <p className="softPreferenceHint">Це орієнтовні побажання сім’ї. Фінальний графік узгоджується під час формування групи.</p>
+            <label>Бажана локація<select value={preferenceLocationId} onChange={(e) => setPreferenceLocationId(e.target.value)}>
               <option value="">Не має значення</option>
               {locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
             </select></label>
-            <div className="availabilityDays">
-              {["Пн","Вт","Ср","Чт","Пт","Сб","Нд"].map((day, index) => <button type="button" key={day} className={availabilityDays.includes(index) ? "active" : ""} onClick={() => toggleAvailabilityDay(index)}>{day}</button>)}
-            </div>
-            <div className="formTwo">
-              <label>Від<input type="time" value={availabilityStart} onChange={(e) => setAvailabilityStart(e.target.value)} /></label>
-              <label>До<input type="time" value={availabilityEnd} onChange={(e) => setAvailabilityEnd(e.target.value)} /></label>
-            </div>
-            <button className="primary full" disabled={preferenceSaving || availabilityEnd <= availabilityStart} onClick={saveStudentPreferences}>{preferenceSaving ? "Зберігаємо…" : "Зберегти бажаний графік"}</button>
+            <AvailabilityWindowEditor value={availabilityWindows} onChange={setAvailabilityWindows} />
+            <button className="primary full" disabled={preferenceSaving || availabilityWindows.some((x) => x.end_time <= x.start_time)} onClick={saveStudentPreferences}>{preferenceSaving ? "Зберігаємо…" : "Зберегти побажання"}</button>
           </div>}
 
 
@@ -1618,7 +1617,7 @@ function App() {
 
           {trialMode === "schedule" && <div className="workflowBox">
             <div className="workflowHead"><h3>Запис на пробне</h3><button onClick={() => setTrialMode(null)}>×</button></div>
-            <label>Дата і час<input type="datetime-local" value={trialAt} onChange={(e) => setTrialAt(e.target.value)} /></label>
+            <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
             <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
               <option value="">Без локації</option>
               {locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
@@ -1796,6 +1795,8 @@ function applyWorkspace(
       weekday: slot.weekday,
       start_time: slot.start_time.slice(0, 5),
       end_time: slot.end_time.slice(0, 5),
+      preference: slot.preference ?? "preferred",
+      note: slot.note,
     })),
     status: crmStatusLabel(item.crm_status),
     trialId: item.latest_trial_id ?? undefined,
@@ -2107,26 +2108,36 @@ function candidateCompatibility(
   schedule: Array<{ weekday: number; start_time: string; duration_minutes: number }>,
   locationId: string | null,
 ) {
-  if (lead.preferredLocationId && locationId && lead.preferredLocationId !== locationId) {
-    return { state: "mismatch", label: "Інша бажана локація" };
-  }
   if (!schedule.length || !(lead.availability?.length)) {
-    return { state: "unknown", label: "Графік не вказано або ще не задано" };
+    return { state: "unknown", icon: "?", label: "Побажаний час не вказаний", detail: "Уточнити графік у батьків" };
   }
-
-  const fits = schedule.every((lesson) => {
+  let full = 0, partial = 0, conflicts = 0, preferred = 0;
+  const details: string[] = [];
+  schedule.forEach((lesson) => {
     const lessonStart = timeToMinutes(lesson.start_time);
     const lessonEnd = lessonStart + lesson.duration_minutes;
-    return lead.availability!.some((slot) =>
-      slot.weekday === lesson.weekday
-      && timeToMinutes(slot.start_time) <= lessonStart
-      && timeToMinutes(slot.end_time) >= lessonEnd
-    );
+    const sameDay = lead.availability!.filter((x) => x.weekday === lesson.weekday);
+    const acceptable = sameDay.filter((x) => (x.preference ?? "preferred") !== "avoid");
+    const fits = acceptable.filter((x) => timeToMinutes(x.start_time) <= lessonStart && timeToMinutes(x.end_time) >= lessonEnd);
+    if (fits.length) {
+      full++;
+      if (fits.some((x) => (x.preference ?? "preferred") === "preferred")) preferred++;
+      details.push(`${DAY_NAMES[lesson.weekday]} ${lesson.start_time} — підходить`);
+      return;
+    }
+    const close = acceptable.find((x) => {
+      const start = timeToMinutes(x.start_time), end = timeToMinutes(x.end_time);
+      return (lessonStart < end && lessonEnd > start) || Math.max(start - lessonEnd, lessonStart - end, 0) <= 60;
+    });
+    if (close) {
+      partial++;
+      details.push(`${DAY_NAMES[lesson.weekday]}: сім’я бажає ${close.start_time.slice(0, 5)}–${close.end_time.slice(0, 5)}`);
+    } else conflicts++;
   });
-
-  return fits
-    ? { state: "match", label: "Графік підходить" }
-    : { state: "mismatch", label: "Графік не збігається" };
+  const locationMismatch = Boolean(lead.preferredLocationId && locationId && lead.preferredLocationId !== locationId);
+  if (!full && !partial) return { state: "conflict", icon: "!", label: "Потрібне узгодження", detail: "Збігів немає" };
+  if (partial || conflicts || locationMismatch || preferred === 0) return { state: "partial", icon: "⚠", label: "Частковий збіг", detail: details.join("; ") || "Бажана локація відрізняється" };
+  return { state: "match", icon: "✓", label: "Графік підходить", detail: details.join("; ") };
 }
 
 function timeToMinutes(value: string) {
@@ -2147,19 +2158,50 @@ function availabilityLabel(slots: AvailabilitySlot[]) {
   return [...groups.entries()].map(([time, days]) => `${days.join("/")} · ${time}`).join("; ");
 }
 
-function parseScheduleText(value: string) {
-  const weekdayMap: Record<string, number> = {
-    "Пн": 0, "Вт": 1, "Ср": 2, "Чт": 3, "Пт": 4, "Сб": 5, "Нд": 6,
-  };
-  return value.split(";").flatMap((part) => {
-    const [daysPart, timePart] = part.split("·").map((item) => item.trim());
-    if (!daysPart || !/^([01]\d|2[0-3]):[0-5]\d$/.test(timePart ?? "")) return [];
-    return daysPart.split("/").map((day) => day.trim()).flatMap((day) => {
-      const weekday = weekdayMap[day];
-      return weekday === undefined ? [] : [{ weekday, start_time: timePart, duration_minutes: 60 }];
-    });
-  });
+const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+const TIME_OPTIONS = Array.from({ length: 56 }, (_, index) => `${String(8 + Math.floor(index / 4)).padStart(2, "0")}:${String((index % 4) * 15).padStart(2, "0")}`);
+
+function TimeSelect({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label>{label}<select value={value.slice(0, 5)} onChange={(event) => onChange(event.target.value)}>{TIME_OPTIONS.map((time) => <option key={time}>{time}</option>)}</select></label>;
 }
+
+function WeekdayPicker({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return <label>День<select value={value} onChange={(event) => onChange(Number(event.target.value))}>{DAY_NAMES.map((day, index) => <option value={index} key={day}>{day}</option>)}</select></label>;
+}
+
+function DurationSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return <label>Тривалість<select value={value} onChange={(event) => onChange(Number(event.target.value))}>{[45, 60, 75, 90].map((minutes) => <option value={minutes} key={minutes}>{minutes} хв</option>)}</select></label>;
+}
+
+function ScheduleSlotEditor({ value, onChange }: { value: DraftScheduleSlot[]; onChange: (value: DraftScheduleSlot[]) => void }) {
+  const update = (index: number, patch: Partial<DraftScheduleSlot>) => onChange(value.map((slot, i) => i === index ? { ...slot, ...patch } : slot));
+  return <fieldset className="slotEditor"><legend>Розклад групи</legend>{value.map((slot, index) => <div className="slotRow" key={index}>
+    <WeekdayPicker value={slot.weekday} onChange={(weekday) => update(index, { weekday })} />
+    <TimeSelect label="Початок" value={slot.start_time} onChange={(start_time) => update(index, { start_time })} />
+    <DurationSelect value={slot.duration_minutes} onChange={(duration_minutes) => update(index, { duration_minutes })} />
+    <button type="button" className="link danger" onClick={() => onChange(value.filter((_, i) => i !== index))} disabled={value.length === 1}>Видалити</button>
+  </div>)}<button type="button" className="search" onClick={() => onChange([...value, { weekday: (value.at(-1)?.weekday ?? -1) + 1 > 6 ? 0 : (value.at(-1)?.weekday ?? -1) + 1, start_time: "17:00", duration_minutes: 60 }])}>+ Додати день</button></fieldset>;
+}
+
+function AvailabilityWindowEditor({ value, onChange }: { value: AvailabilitySlot[]; onChange: (value: AvailabilitySlot[]) => void }) {
+  const update = (index: number, patch: Partial<AvailabilitySlot>) => onChange(value.map((slot, i) => i === index ? { ...slot, ...patch } : slot));
+  return <div className="availabilityEditor">{value.map((slot, index) => <div className="availabilityRow" key={index}>
+    <WeekdayPicker value={slot.weekday} onChange={(weekday) => update(index, { weekday })} />
+    <TimeSelect label="Від" value={slot.start_time} onChange={(start_time) => update(index, { start_time })} />
+    <TimeSelect label="До" value={slot.end_time} onChange={(end_time) => update(index, { end_time })} />
+    <label>Пріоритет<select value={slot.preference ?? "preferred"} onChange={(e) => update(index, { preference: e.target.value as AvailabilitySlot["preference"] })}><option value="preferred">Бажано</option><option value="possible">Можливо</option><option value="avoid">Небажано</option></select></label>
+    <label className="windowNote">Коментар<input value={slot.note ?? ""} onChange={(e) => update(index, { note: e.target.value || null })} placeholder="Необов’язково" /></label>
+    <button type="button" className="link danger" onClick={() => onChange(value.filter((_, i) => i !== index))}>Видалити</button>
+  </div>)}<button type="button" className="search" onClick={() => onChange([...value, { weekday: 0, start_time: "16:30", end_time: "19:00", preference: "preferred", note: null }])}>+ Додати ще варіант</button></div>;
+}
+
+function DateTimeEditor({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const [date, clock = "17:00"] = value.split("T");
+  return <div className="dateTimeEditor"><label>Дата<input type="date" aria-label={label + ": дата"} value={date} onChange={(e) => onChange(`${e.target.value}T${clock}`)} /></label><TimeSelect label="Час" value={clock} onChange={(time) => onChange(`${date}T${time}`)} /></div>;
+}
+
+function scheduleDraftLabel(slots: DraftScheduleSlot[]) { return slots.map((slot) => `${DAY_NAMES[slot.weekday]} · ${slot.start_time}`).join("; "); }
+function hasDuplicateSlots(slots: DraftScheduleSlot[]) { return new Set(slots.map((slot) => `${slot.weekday}:${slot.start_time}`)).size !== slots.length; }
 
 function scheduleSlots(group: GroupItem) {
   if (!group.schedule || group.schedule === "Розклад не задано") return [];

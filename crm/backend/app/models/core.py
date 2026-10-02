@@ -88,6 +88,12 @@ class StaffRole(str, enum.Enum):
     ACCOUNTANT = "accountant"
 
 
+class AvailabilityPreference(str, enum.Enum):
+    PREFERRED = "preferred"
+    POSSIBLE = "possible"
+    AVOID = "avoid"
+
+
 class Organization(Base):
     __tablename__ = "organizations"
 
@@ -152,6 +158,10 @@ class StudentAvailability(Base):
     weekday: Mapped[int] = mapped_column(Integer, nullable=False)
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    preference: Mapped[AvailabilityPreference] = mapped_column(
+        Enum(AvailabilityPreference), default=AvailabilityPreference.PREFERRED, nullable=False
+    )
+    note: Mapped[str | None] = mapped_column(String(300))
 
 
 class StudentContact(Base):
@@ -204,6 +214,8 @@ class Enrollment(Base):
     status: Mapped[EnrollmentStatus] = mapped_column(Enum(EnrollmentStatus), default=EnrollmentStatus.ACTIVE, nullable=False)
     started_at: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
     ended_at: Mapped[date | None] = mapped_column(Date)
+    schedule_match: Mapped[str | None] = mapped_column(String(20))
+    schedule_note: Mapped[str | None] = mapped_column(Text)
 
 
 
