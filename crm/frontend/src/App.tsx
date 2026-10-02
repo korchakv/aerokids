@@ -1944,6 +1944,32 @@ function App() {
         </div>
       </div>}
 
+      {paymentActionId && paymentActionType && <div className="modalBackdrop">
+        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => { setPaymentActionId(null); setPaymentActionType(null); }}>×</button>
+          <p className="eyebrow">Фінансова операція</p>
+          <h2>{paymentActionType === "partial" ? "Часткова оплата" : paymentActionType === "refund" ? "Повернення коштів" : "Коригування нарахування"}</h2>
+          <label>Сума<input type="text" inputMode="decimal" value={paymentActionAmount} onChange={(e) => setPaymentActionAmount(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."))} placeholder="0" /></label>
+          {paymentActionType === "partial" && <label>Спосіб<select value={paymentActionMethod} onChange={(e) => setPaymentActionMethod(e.target.value as typeof paymentActionMethod)}><option value="card">Картка</option><option value="cash">Готівка</option><option value="bank">Переказ</option></select></label>}
+          {paymentActionType === "adjustment" && <label>Тип коригування<select value={paymentAdjustmentDirection} onChange={(e) => setPaymentAdjustmentDirection(e.target.value as typeof paymentAdjustmentDirection)}><option value="decrease">Зменшити нарахування</option><option value="increase">Збільшити нарахування</option></select></label>}
+          <label>{paymentActionType === "refund" ? "Причина повернення" : paymentActionType === "adjustment" ? "Причина коригування" : "Коментар"}<textarea value={paymentActionReason} onChange={(e) => setPaymentActionReason(e.target.value)} placeholder={paymentActionType === "refund" ? "Наприклад: перерахунок за невикористані заняття" : "Необов’язково"} /></label>
+          {paymentActionType === "refund" && <div className="formNotice">Повернення одночасно зменшує суму нарахування на цю ж величину, тому після коректного повернення новий борг автоматично не виникає.</div>}
+          <button className="primary full" disabled={paymentActionSaving || !paymentActionAmount} onClick={submitPaymentAction}>{paymentActionSaving ? "Зберігаємо…" : "Підтвердити"}</button>
+        </div>
+      </div>}
+
+      {pauseSubscriptionId && <div className="modalBackdrop">
+        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => setPauseSubscriptionId(null)}>×</button>
+          <p className="eyebrow">Абонемент</p><h2>Поставити на паузу</h2>
+          <label>Пауза з<input type="date" value={pauseStart} onChange={(e) => setPauseStart(e.target.value)} /></label>
+          <label>Відновити з<input type="date" value={pauseResumeOn} min={pauseStart} onChange={(e) => setPauseResumeOn(e.target.value)} /><small className="fieldHint">Можна залишити порожнім і відновити вручну пізніше.</small></label>
+          <label>Причина<textarea value={pauseNote} onChange={(e) => setPauseNote(e.target.value)} placeholder="Канікули, хвороба, поїздка…" /></label>
+          <div className="formNotice">Після відновлення кінець абонемента автоматично посунеться на фактичну кількість днів паузи.</div>
+          <button className="primary full" onClick={submitPauseSubscription}>Поставити на паузу</button>
+        </div>
+      </div>}
+
       {selectedStudent && <div className="drawerBackdrop" onClick={() => setSelectedStudentId(null)}>
         <aside className="drawer studentDrawer" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setSelectedStudentId(null)}>×</button>
