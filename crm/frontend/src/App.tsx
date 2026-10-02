@@ -15,6 +15,18 @@ type AvailabilitySlot = {
 
 type DraftScheduleSlot = { weekday: number; start_time: string; duration_minutes: number };
 
+type LeadKanbanColumnId = "new" | "contacted" | "trial" | "no_show" | "after_trial" | "waiting" | "closed";
+
+const leadKanbanColumns: Array<{ id: LeadKanbanColumnId; title: string; hint: string }> = [
+  { id: "new", title: "Нові", hint: "Перший контакт" },
+  { id: "contacted", title: "Зв’язались", hint: "В роботі" },
+  { id: "trial", title: "Пробне", hint: "Заплановано" },
+  { id: "no_show", title: "Не прийшов", hint: "Потрібна дія" },
+  { id: "after_trial", title: "Після пробного", hint: "Очікуємо рішення" },
+  { id: "waiting", title: "Очікує групу", hint: "Готовий до набору" },
+  { id: "closed", title: "Закриті", hint: "Відмова / неактуально" },
+];
+
 type Lead = {
   id: EntityId;
   createdAt?: string;
@@ -181,6 +193,7 @@ function App() {
   const [leadFilter, setLeadFilter] = useState<"all" | "action" | "new" | "trial" | "no_show" | "after_trial" | "waiting" | "closed">("action");
   const [leadSort, setLeadSort] = useState<"priority" | "newest" | "oldest" | "trial" | "age">("priority");
   const [leadSourceFilter, setLeadSourceFilter] = useState("all");
+  const [leadMoveSavingId, setLeadMoveSavingId] = useState<EntityId | null>(null);
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateAgeFilter, setCandidateAgeFilter] = useState<"all" | "8-10" | "11-13">("all");
   const [candidateLevelFilter, setCandidateLevelFilter] = useState("all");
@@ -445,6 +458,14 @@ function App() {
     return items;
   }, [leads, leadFilter, leadSort, leadSourceFilter]);
 
+  const leadActionCount = useMemo(() => leads.filter((lead) => {
+    if (["Відмовились", "Не відповідає", "Неактуально", "Зарахований"].includes(lead.status)) return false;
+    if (lead.nextContactAt && dateValue(lead.nextContactAt) <= Date.now()) return true;
+    if (lead.trialResult === "no_show" || lead.trialResult === "cancelled") return true;
+    if (lead.status === "Нова" || lead.status === "Після пробного") return true;
+    return false;
+  }).length, [leads]);
+
   const visibleStudents = useMemo(() => activeStudents.filter((item) => {
     const state = studentStates[item.id] ?? "Активний";
     if (studentFilter === "active") return state === "Активний";
@@ -555,6 +576,74 @@ function App() {
     }, ...items]);
     setShowLeadForm(false);
     setActive("Заявки");
+  };
+
+  const moveLeadOnBoard = async (lead: Lead, target: LeadKanbanColumnId) => {
+    if (leadMoveSavingId || lead.status === "Зарахований") return;
+    const currentColumn = leadKanbanColumn(lead);
+    if (currentColumn === target) return;
+    setWorkspaceError("");
+
+    if (target === "trial") {
+      openLead(lead.id);
+      window.setTimeout(() => setTrialMode("schedule"), 0);
+      return;
+    }
+    if (target === "closed") {
+      openLead(lead.id);
+      window.setTimeout(() => setPostTrialMode("close"), 0);
+      return;
+    }
+    if (target === "after_trial") {
+      openLead(lead.id);
+      window.setTimeout(() => setTrialMode("complete"), 0);
+      return;
+    }
+
+    setLeadMoveSavingId(lead.id);
+    try {
+      if (apiEnabled && session) {
+        if (target === "no_show") {
+          if (!lead.trialId) {
+            setWorkspaceError("Спочатку заплануйте пробне заняття.");
+            return;
+          }
+          await apiPatch(`/trial-lessons/${lead.trialId}/complete`, {
+            status: "no_show",
+            recommended_level: null,
+            teacher_notes: null,
+          }, session);
+        } else if (target === "waiting") {
+          if (lead.trialResult !== "completed") {
+            setWorkspaceError("Перед переведенням в «Очікує групу» потрібно завершити пробне заняття.");
+            openLead(lead.id);
+            window.setTimeout(() => setTrialMode("complete"), 0);
+            return;
+          }
+          await apiPatch(`/students/${lead.id}/lead-outcome`, {
+            crm_status: "waiting_for_group",
+            next_contact_at: null,
+            close_reason: null,
+            close_note: null,
+          }, session);
+        } else {
+          const status = target === "new" ? "new" : "contacted";
+          await apiPatch(`/students/${lead.id}/crm-status`, { crm_status: status }, session);
+        }
+        await syncWorkspace(session);
+        return;
+      }
+
+      setLeads((items) => items.map((item) => item.id !== lead.id ? item : {
+        ...item,
+        status: target === "new" ? "Нова" : target === "waiting" ? "Очікує групу" : "Зв'язались",
+        trialResult: target === "no_show" ? "no_show" : item.trialResult,
+      }));
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося перемістити заявку.");
+    } finally {
+      setLeadMoveSavingId(null);
+    }
   };
 
   const updateStatus = async (id: EntityId, status: LeadStatus) => {
@@ -1474,7 +1563,13 @@ function App() {
             <button className={"chip " + (leadFilter === "waiting" ? "active" : "")} onClick={() => setLeadFilter("waiting")}>Очікують групу</button>
             <button className={"chip " + (leadFilter === "closed" ? "active" : "")} onClick={() => setLeadFilter("closed")}>Закриті</button>
           </div>
-          <LeadTable leads={visibleLeads} onOpen={openLead} />
+          <div className="kanbanSummary">
+            <button className={"kanbanActionCounter " + (leadFilter === "action" ? "active" : "")} onClick={() => setLeadFilter("action")}>
+              <span>Потрібна дія</span><strong>{leadActionCount}</strong>
+            </button>
+            <span className="kanbanHint">Перетягуйте картки між етапами. Для пробного, результату та закриття CRM попросить потрібні дані.</span>
+          </div>
+          <LeadKanban leads={visibleLeads.filter((lead) => lead.status !== "Зарахований")} onOpen={openLead} onMove={moveLeadOnBoard} movingId={leadMoveSavingId} />
         </section>}
 
         {active === "Учні" && <section className="studentsLayout">
@@ -2244,6 +2339,104 @@ function App() {
       </div>}
     </div>
   );
+}
+
+function leadKanbanColumn(lead: Lead): LeadKanbanColumnId {
+  if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return "closed";
+  if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "no_show";
+  if (lead.status === "Після пробного") return "after_trial";
+  if (lead.status === "Пробне заплановано") return "trial";
+  if (lead.status === "Очікує групу") return "waiting";
+  if (lead.status === "Нова") return "new";
+  return "contacted";
+}
+
+function leadUrgency(lead: Lead): "overdue" | "today" | "planned" | "none" {
+  const now = new Date();
+  if (lead.nextContactAt) {
+    const action = new Date(lead.nextContactAt);
+    if (action.getTime() < now.getTime()) return "overdue";
+    if (action.toDateString() === now.toDateString()) return "today";
+    return "planned";
+  }
+  if (lead.trialResult === "no_show" || lead.status === "Після пробного" || lead.status === "Нова") return "today";
+  if (lead.status === "Пробне заплановано") return "planned";
+  return "none";
+}
+
+function LeadKanban({
+  leads,
+  onOpen,
+  onMove,
+  movingId,
+}: {
+  leads: Lead[];
+  onOpen: (id: EntityId) => void;
+  onMove: (lead: Lead, target: LeadKanbanColumnId) => void;
+  movingId: EntityId | null;
+}) {
+  const [draggedId, setDraggedId] = useState<EntityId | null>(null);
+  const [overColumn, setOverColumn] = useState<LeadKanbanColumnId | null>(null);
+
+  return <div className="leadKanban">
+    {leadKanbanColumns.map((column) => {
+      const items = leads.filter((lead) => leadKanbanColumn(lead) === column.id);
+      return <section
+        className={"kanbanColumn column-" + column.id + (overColumn === column.id ? " dragOver" : "")}
+        key={column.id}
+        onDragOver={(event) => { event.preventDefault(); setOverColumn(column.id); }}
+        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const id = event.dataTransfer.getData("text/lead-id") || draggedId;
+          const lead = leads.find((item) => item.id === id);
+          setDraggedId(null);
+          setOverColumn(null);
+          if (lead) void onMove(lead, column.id);
+        }}
+      >
+        <header className="kanbanColumnHead">
+          <div><i></i><b>{column.title}</b><span>{column.hint}</span></div>
+          <strong>{items.length}</strong>
+        </header>
+        <div className="kanbanCards">
+          {items.length === 0 && <div className="kanbanEmpty">Перетягніть сюди заявку</div>}
+          {items.map((lead) => {
+            const urgency = leadUrgency(lead);
+            return <article
+              key={lead.id}
+              draggable={movingId !== lead.id}
+              className={"leadKanbanCard urgency-" + urgency + (movingId === lead.id ? " saving" : "")}
+              onDragStart={(event) => {
+                setDraggedId(lead.id);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/lead-id", lead.id);
+              }}
+              onDragEnd={() => { setDraggedId(null); setOverColumn(null); }}
+              onClick={() => onOpen(lead.id)}
+            >
+              <div className="kanbanCardTop">
+                <span className="leadMiniAvatar">{lead.child.slice(0, 1)}</span>
+                <div><b>{lead.child}</b><small>{lead.age ? lead.age + " років" : "Вік не вказано"} · {lead.parent}</small></div>
+                <button className="kanbanMore" aria-label="Відкрити заявку" onClick={(event) => { event.stopPropagation(); onOpen(lead.id); }}>•••</button>
+              </div>
+              <div className="kanbanMeta">
+                <span className="sourceBadge">{leadSourceLabel(lead.source)}</span>
+                {lead.preferredLocationName && <span className="locationBadge">{lead.preferredLocationName}</span>}
+                {lead.recommendedLevel && <span className="levelBadge">{lead.recommendedLevel}</span>}
+              </div>
+              <div className={"kanbanNextAction " + urgency}>
+                <i></i><span>{leadNextAction(lead)}</span>
+              </div>
+              {lead.phone && <div className="kanbanPhone">{formatUaPhone(lead.phone)}</div>}
+              {lead.comment && <p className="kanbanComment">{lead.comment}</p>}
+              {movingId === lead.id && <div className="kanbanSaving">Оновлюємо…</div>}
+            </article>;
+          })}
+        </div>
+      </section>;
+    })}
+  </div>;
 }
 
 function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) => void }) {
