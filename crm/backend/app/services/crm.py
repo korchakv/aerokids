@@ -2447,6 +2447,19 @@ def list_group_overview(db: Session, org_id: UUID, user_id: UUID | None = None, 
             Enrollment.status == EnrollmentStatus.ACTIVE,
         )) or 0
         location = scoped_get(db, Location, org_id, group.location_id) if group.location_id else None
+        primary_assignment = db.execute(
+            select(GroupStaff, Staff)
+            .join(Staff, Staff.id == GroupStaff.staff_id)
+            .where(
+                GroupStaff.organization_id == org_id,
+                GroupStaff.group_id == group.id,
+                Staff.organization_id == org_id,
+                Staff.is_active.is_(True),
+            )
+            .order_by(GroupStaff.is_primary.desc(), Staff.full_name)
+            .limit(1)
+        ).first()
+        primary_staff = primary_assignment[1] if primary_assignment else None
         result.append({
             "group_id": group.id,
             "name": group.name,
@@ -2456,6 +2469,8 @@ def list_group_overview(db: Session, org_id: UUID, user_id: UUID | None = None, 
             "enrolled_count": int(enrolled_count),
             "min_age": group.min_age,
             "max_age": group.max_age,
+            "primary_teacher_id": primary_staff.id if primary_staff else None,
+            "primary_teacher_name": primary_staff.full_name if primary_staff else None,
         })
     return result
 
