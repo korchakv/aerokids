@@ -130,6 +130,7 @@ export type StudentAvailabilitySlot = {
 
 export type WorkspaceLead = {
   student_id: string;
+  created_at: string;
   first_name: string;
   last_name: string | null;
   age: number | null;
