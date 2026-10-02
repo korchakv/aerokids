@@ -1326,7 +1326,7 @@ function App() {
               {["Пн","Вт","Ср","Чт","Пт","Сб"].map((day) => <div className="dayColumn" key={day}>
                 <b>{day}</b>
                 {groups.flatMap((group) => scheduleSlots(group).filter((slot) => slot.day === day).map((slot) =>
-                  <button className="scheduleCard" key={group.id + day} onClick={() => setActive("Групи")}>
+                  <button className="scheduleCard" key={group.id + day} onClick={() => { setActive("Групи"); openGroup(group.id); }}>
                     <time>{slot.time}</time><strong>{group.name}</strong><span>{group.location}</span><small>{group.members.length}/{group.capacity} учнів</small>
                   </button>
                 ))}
