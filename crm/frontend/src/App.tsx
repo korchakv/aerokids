@@ -171,7 +171,8 @@ function App() {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentStudentId, setPaymentStudentId] = useState<EntityId>("8");
   const [paymentPlanId, setPaymentPlanId] = useState<EntityId>("1");
-  const [paymentDueDate, setPaymentDueDate] = useState("2026-10-31");
+  const [paymentDueDate, setPaymentDueDate] = useState(() => defaultPaymentDueDate());
+  const [paymentSaving, setPaymentSaving] = useState(false);
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [planName, setPlanName] = useState("8 занять / 30 днів");
   const [planPrice, setPlanPrice] = useState("");
@@ -869,6 +870,7 @@ function App() {
 
     setPaymentStudentId(nextStudentId);
     setPaymentPlanId(nextPlanId);
+    setPaymentDueDate((current) => current && current >= localDateInput(new Date()) ? current : defaultPaymentDueDate());
     setWorkspaceError("");
     setShowPaymentForm(true);
   };
@@ -884,12 +886,14 @@ function App() {
       return;
     }
     if (apiEnabled && session) {
+      if (paymentSaving) return;
+      setPaymentSaving(true);
       try {
         setWorkspaceError("");
         const subscription = await apiPost<{ id: string }>("/student-subscriptions", {
           student_id: paymentStudentId,
           plan_id: paymentPlanId,
-          starts_on: new Date().toISOString().slice(0, 10),
+          starts_on: localDateInput(new Date()),
           discount_minor: 0,
         }, session);
         await apiPost("/payments", {
@@ -905,6 +909,8 @@ function App() {
       } catch (error) {
         setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити нарахування.");
         return;
+      } finally {
+        setPaymentSaving(false);
       }
     }
     const nextId = crypto.randomUUID();
@@ -1719,9 +1725,11 @@ function App() {
           <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
           <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
           <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(e.target.value)}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · {student.parent}</option>)}</select></label>
-          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {plan.price ? money(plan.price) : "індивідуально"}</option>)}</select></label>
-          <label>Оплатити до<input type="date" value={paymentDueDate} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
-          <button className="primary full" disabled={!paymentStudentId || !paymentPlanId || !plans.some((plan) => plan.id === paymentPlanId && plan.price > 0)} onClick={createPayment}>Створити нарахування</button>
+          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.filter((plan) => plan.price > 0).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {money(plan.price)}</option>)}</select></label>
+          <label>Оплатити до<input type="date" value={paymentDueDate} min={localDateInput(new Date())} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
+          {activeStudents.length === 0 && <div className="formNotice">Спочатку зарахуйте хоча б одного учня до групи.</div>}
+          {!plans.some((plan) => plan.price > 0) && <div className="formNotice">Створіть тариф із ціною, щоб зробити нарахування.</div>}
+          <button className="primary full" disabled={paymentSaving || !paymentStudentId || !paymentPlanId || !plans.some((plan) => plan.id === paymentPlanId && plan.price > 0)} onClick={createPayment}>{paymentSaving ? "Створюємо…" : "Створити нарахування"}</button>
         </div>
       </div>}
 
@@ -2480,6 +2488,16 @@ function roleLabel(role?: string) {
     accountant: "Бухгалтер",
   };
   return role ? labels[role] ?? role : "Demo";
+}
+
+function localDateInput(value: Date) {
+  const offset = value.getTimezoneOffset() * 60_000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function defaultPaymentDueDate() {
+  const now = new Date();
+  return localDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 }
 
 function toLocalDateTimeInput(value: string) {
