@@ -583,6 +583,10 @@ class PaymentCancel(BaseModel):
     reason: str = Field(min_length=2, max_length=300)
 
 
+class SubscriptionAutoRenewUpdate(BaseModel):
+    auto_renew: bool
+
+
 class SubscriptionPauseCreate(BaseModel):
     starts_on: date
     resume_on: date | None = None
