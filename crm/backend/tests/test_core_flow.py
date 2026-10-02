@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 def create_org(client, name, slug):
     response = client.post("/organizations", json={"name": name, "slug": slug})
     assert response.status_code == 201, response.text
@@ -1947,3 +1949,189 @@ def test_paid_payment_cannot_be_marked_paid_twice(client):
     )
     assert first.status_code == 200, first.text
     assert second.status_code == 409, second.text
+
+
+def test_partial_payment_tracks_balance_and_full_settlement(client):
+    org = create_org(client, "Partial Pay", "partial-pay")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Тарас"}).json()
+    payment = client.post(
+        "/payments",
+        headers=headers,
+        json={"student_id": student["id"], "amount_minor": 180000, "due_date": "2000-01-01"},
+    ).json()
+
+    partial = client.post(
+        f"/payments/{payment['id']}/receipts",
+        headers=headers,
+        json={"amount_minor": 80000, "method": "cash", "note": "Перша частина"},
+    )
+    assert partial.status_code == 201, partial.text
+    assert partial.json()["status"] == "pending"
+    assert partial.json()["paid_minor"] == 80000
+    assert partial.json()["balance_minor"] == 100000
+
+    full = client.patch(
+        f"/payments/{payment['id']}/paid",
+        headers=headers,
+        json={"method": "card"},
+    )
+    assert full.status_code == 200, full.text
+    assert full.json()["status"] == "paid"
+    assert full.json()["paid_minor"] == 180000
+    assert full.json()["balance_minor"] == 0
+
+    tx = client.get(f"/payments/{payment['id']}/transactions", headers=headers)
+    assert tx.status_code == 200
+    assert [item["amount_minor"] for item in tx.json()] == [80000, 100000]
+
+
+def test_refund_with_charge_reduction_preserves_zero_balance(client):
+    org = create_org(client, "Refund Pay", "refund-pay")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Леся"}).json()
+    payment = client.post(
+        "/payments",
+        headers=headers,
+        json={"student_id": student["id"], "amount_minor": 100000},
+    ).json()
+    client.patch(f"/payments/{payment['id']}/paid", headers=headers, json={"method": "bank"})
+
+    refund = client.post(
+        f"/payments/{payment['id']}/refunds",
+        headers=headers,
+        json={"amount_minor": 30000, "note": "Перерахунок за пропущені заняття", "reduce_charge": True},
+    )
+    assert refund.status_code == 201, refund.text
+    body = refund.json()
+    assert body["paid_minor"] == 100000
+    assert body["refunded_minor"] == 30000
+    assert body["adjusted_amount_minor"] == 70000
+    assert body["balance_minor"] == 0
+    assert body["status"] == "paid"
+
+
+def test_payment_adjustment_changes_only_effective_charge(client):
+    org = create_org(client, "Adjust Pay", "adjust-pay")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Ігор"}).json()
+    payment = client.post(
+        "/payments",
+        headers=headers,
+        json={"student_id": student["id"], "amount_minor": 120000},
+    ).json()
+
+    adjusted = client.post(
+        f"/payments/{payment['id']}/adjustments",
+        headers=headers,
+        json={"direction": "decrease", "amount_minor": 20000, "reason": "Разова знижка"},
+    )
+    assert adjusted.status_code == 201, adjusted.text
+    assert adjusted.json()["amount_minor"] == 120000
+    assert adjusted.json()["adjusted_amount_minor"] == 100000
+    assert adjusted.json()["balance_minor"] == 100000
+
+
+def test_subscription_pause_resume_extends_period(client):
+    org = create_org(client, "Pause Sub", "pause-sub")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Оля"}).json()
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "30 days", "price_minor": 100000, "period_days": 30},
+    ).json()
+    start = date.today() - timedelta(days=10)
+    subscription = client.post(
+        "/student-subscriptions",
+        headers=headers,
+        json={"student_id": student["id"], "plan_id": plan["id"], "starts_on": start.isoformat()},
+    ).json()
+    old_end = date.fromisoformat(subscription["ends_on"])
+
+    pause_start = date.today() - timedelta(days=5)
+    resume_on = date.today() - timedelta(days=2)
+    paused = client.post(
+        f"/student-subscriptions/{subscription['id']}/pause",
+        headers=headers,
+        json={"starts_on": pause_start.isoformat(), "resume_on": resume_on.isoformat(), "note": "Канікули"},
+    )
+    assert paused.status_code == 201, paused.text
+
+    run = client.post("/billing/renewals/run", headers=headers, json={"through_date": (date.today() + timedelta(days=1)).isoformat()})
+    assert run.status_code == 200, run.text
+    assert run.json()["resumed_subscriptions"] == 1
+
+    refreshed = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()[0]
+    paused_days = (resume_on - pause_start).days
+    assert date.fromisoformat(refreshed["ends_on"]) == old_end + timedelta(days=paused_days)
+    assert refreshed["status"] == "active"
+
+
+def test_auto_renewal_is_idempotent_and_requires_active_enrollment(client):
+    org = create_org(client, "Renew Sub", "renew-sub")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Марта"}).json()
+    client.patch(f"/students/{student['id']}/crm-status", headers=headers, json={"crm_status": "waiting_for_group"})
+    client.post("/groups/form", headers=headers, json={"name": "Renew Group", "capacity": 8, "student_ids": [student["id"]]})
+
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Monthly renew", "price_minor": 180000, "period_days": 30},
+    ).json()
+    start = date.today() - timedelta(days=29)
+    charge = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "plan_id": plan["id"],
+            "starts_on": start.isoformat(),
+            "auto_renew": True,
+        },
+    )
+    assert charge.status_code == 201, charge.text
+
+    horizon = (date.today() + timedelta(days=7)).isoformat()
+    first = client.post("/billing/renewals/run", headers=headers, json={"through_date": horizon})
+    second = client.post("/billing/renewals/run", headers=headers, json={"through_date": horizon})
+    assert first.status_code == 200, first.text
+    assert first.json()["created_subscriptions"] == 1
+    assert second.status_code == 200, second.text
+    assert second.json()["created_subscriptions"] == 0
+
+    subscriptions = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    payments = client.get(f"/payments?student_id={student['id']}", headers=headers).json()
+    assert len(subscriptions) == 2
+    assert len(payments) == 2
+    assert subscriptions[0]["renewal_of_id"] == subscriptions[1]["id"]
+    assert subscriptions[0]["discount_minor"] == 0
+
+
+def test_auto_renewal_skips_stale_subscription_instead_of_backfilling(client):
+    org = create_org(client, "Stale Renew", "stale-renew")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Назар"}).json()
+    client.patch(f"/students/{student['id']}/crm-status", headers=headers, json={"crm_status": "waiting_for_group"})
+    client.post("/groups/form", headers=headers, json={"name": "Stale Group", "capacity": 8, "student_ids": [student["id"]]})
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Stale Monthly", "price_minor": 150000, "period_days": 30},
+    ).json()
+    old_start = date.today() - timedelta(days=100)
+    client.post(
+        "/billing/charges",
+        headers=headers,
+        json={"student_id": student["id"], "plan_id": plan["id"], "starts_on": old_start.isoformat(), "auto_renew": True},
+    )
+
+    result = client.post(
+        "/billing/renewals/run",
+        headers=headers,
+        json={"through_date": (date.today() + timedelta(days=7)).isoformat()},
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["created_subscriptions"] == 0
+    assert result.json()["skipped_stale_subscriptions"] == 1
