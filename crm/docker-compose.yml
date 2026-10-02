@@ -23,6 +23,7 @@ services:
       ENVIRONMENT: production
       AUTH_REQUIRED: "true"
       JWT_SECRET: local-dev-secret-change-before-public-deploy
+      BOOTSTRAP_SECRET: local-bootstrap-secret-change-before-public-deploy
       CORS_ORIGINS: http://localhost:8080,http://localhost:5173
     depends_on:
       db:
