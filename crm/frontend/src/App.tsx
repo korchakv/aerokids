@@ -1752,7 +1752,7 @@ function App() {
           <p className="eyebrow">Картка заявки</p>
           <h2>{selected.child}, {selected.age} років</h2>
           <div className="contactCard"><span>Контакт</span><b>{selected.parent}</b><a href={"tel:" + selected.phone.replace(/\s/g, "")}>{selected.phone}</a></div>
-          {["Пробне заплановано","Після пробного","Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status)
+          {["Пробне заплановано","Після пробного","Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) || ["no_show","cancelled"].includes(selected.trialResult ?? "")
             ? <div className="statusField statusReadonly">Статус<strong>{leadDisplayStatus(selected)}</strong></div>
             : <label className="statusField">Статус
                 <select value={selected.status} onChange={(e) => updateStatus(selected.id, e.target.value as LeadStatus)}>
