@@ -137,6 +137,38 @@ def test_no_show_stays_active_and_can_be_rescheduled(client):
     assert detail_after["crm_status"] == "trial_scheduled"
 
 
+def test_cancelled_trial_stays_active_until_rescheduled_or_closed(client):
+    org = create_org(client, "AeroKiDS", "aerokids-cancelled-trial")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Назар", "age_at_inquiry": 12}).json()
+    trial = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={"student_id": student["id"], "starts_at": "2026-10-09T18:00:00+03:00"},
+    ).json()
+
+    cancelled = client.patch(
+        f"/trial-lessons/{trial['id']}/complete",
+        headers=headers,
+        json={"status": "cancelled", "teacher_notes": "Батьки попросили інший день"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    detail = client.get(f"/students/{student['id']}", headers=headers).json()
+    assert detail["crm_status"] == "contacted"
+
+    leads = client.get("/workspace/leads", headers=headers).json()
+    assert leads[0]["latest_trial_status"] == "cancelled"
+    assert leads[0]["teacher_notes"] == "Батьки попросили інший день"
+
+    rescheduled = client.patch(
+        f"/trial-lessons/{trial['id']}",
+        headers=headers,
+        json={"starts_at": "2026-10-12T18:15:00+03:00"},
+    )
+    assert rescheduled.status_code == 200, rescheduled.text
+    assert rescheduled.json()["status"] == "scheduled"
+
+
 def test_lead_outcome_tracks_follow_up_and_close_reason(client):
     org = create_org(client, "AeroKiDS", "aerokids-outcome")
     headers = {"X-Organization-Id": org["id"]}
