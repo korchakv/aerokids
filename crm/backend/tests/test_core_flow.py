@@ -2342,3 +2342,101 @@ def test_intake_rejects_invalid_identity_before_creating_records(client):
     assert invalid.status_code == 422
     assert client.get("/students", headers=headers).json() == []
     assert client.get("/contacts", headers=headers).json() == []
+
+
+def test_completed_trial_candidate_can_join_existing_group(client):
+    org = create_org(client, "Existing Group Enroll", "existing-group-enroll")
+    headers = {"X-Organization-Id": org["id"]}
+
+    student = client.post(
+        "/students",
+        headers=headers,
+        json={"first_name": "Марко", "age_at_inquiry": 10},
+    ).json()
+    trial = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "starts_at": "2026-10-02T15:00:00+03:00",
+        },
+    ).json()
+    completed = client.patch(
+        f"/trial-lessons/{trial['id']}/complete",
+        headers=headers,
+        json={"status": "completed", "recommended_level": "Початковий"},
+    )
+    assert completed.status_code == 200, completed.text
+
+    group = client.post(
+        "/groups",
+        headers=headers,
+        json={"name": "FPV Existing", "capacity": 6, "min_age": 9, "max_age": 12},
+    ).json()
+    schedule = client.post(
+        "/group-schedules",
+        headers=headers,
+        json={"group_id": group["id"], "weekday": 2, "start_time": "17:00", "duration_minutes": 60},
+    )
+    assert schedule.status_code == 201, schedule.text
+
+    enrolled = client.post(
+        "/enrollments",
+        headers=headers,
+        json={"student_id": student["id"], "group_id": group["id"]},
+    )
+    assert enrolled.status_code == 201, enrolled.text
+    body = enrolled.json()
+    assert body["group_id"] == group["id"]
+    assert body["student_id"] == student["id"]
+    assert body["schedule_match"] in {"match", "partial", "conflict", "unknown"}
+    assert body["schedule_note"]
+
+    profile = client.get(f"/students/{student['id']}/profile", headers=headers)
+    assert profile.status_code == 200
+    assert profile.json()["crm_status"] == "enrolled"
+    assert profile.json()["student_status"] == "active"
+
+    detail = client.get(f"/groups/{group['id']}/detail", headers=headers)
+    assert detail.status_code == 200
+    assert [member["student_id"] for member in detail.json()["members"]] == [student["id"]]
+
+
+def test_candidate_without_completed_trial_cannot_join_existing_group(client):
+    org = create_org(client, "Existing Group Guard", "existing-group-guard")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Олег"}).json()
+    group = client.post("/groups", headers=headers, json={"name": "FPV Guard", "capacity": 6}).json()
+
+    response = client.post(
+        "/enrollments",
+        headers=headers,
+        json={"student_id": student["id"], "group_id": group["id"]},
+    )
+    assert response.status_code == 409
+
+
+def test_existing_group_enrollment_respects_capacity(client):
+    org = create_org(client, "Existing Group Capacity", "existing-group-capacity")
+    headers = {"X-Organization-Id": org["id"]}
+    group = client.post("/groups", headers=headers, json={"name": "FPV One Seat", "capacity": 1}).json()
+
+    student_ids = []
+    for name in ["Анна", "Богдан"]:
+        student = client.post("/students", headers=headers, json={"first_name": name}).json()
+        trial = client.post(
+            "/trial-lessons",
+            headers=headers,
+            json={"student_id": student["id"], "starts_at": "2026-10-02T16:00:00+03:00"},
+        ).json()
+        client.patch(
+            f"/trial-lessons/{trial['id']}/complete",
+            headers=headers,
+            json={"status": "completed", "recommended_level": "Початковий"},
+        )
+        student_ids.append(student["id"])
+
+    first = client.post("/enrollments", headers=headers, json={"student_id": student_ids[0], "group_id": group["id"]})
+    second = client.post("/enrollments", headers=headers, json={"student_id": student_ids[1], "group_id": group["id"]})
+    assert first.status_code == 201, first.text
+    assert second.status_code == 409
