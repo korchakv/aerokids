@@ -134,8 +134,8 @@
 }
 
 /* AeroKids brand system — keep logo geometry unchanged, use one canonical asset */
-.brandLogo{width:46px;height:46px;flex:0 0 46px;border-radius:50%;object-fit:cover;display:block;box-shadow:0 0 0 1px #31514f,0 0 22px #69c7c826}
-.brandLogoLarge{width:58px;height:58px;flex-basis:58px}
+.brandLogo{width:46px;height:46px;flex:0 0 46px;border-radius:50%;object-fit:contain;display:block}
+.brandLogoLarge{width:56px;height:56px;flex-basis:56px}
 .brand b,.loginBrand b{color:#f2f1fb;font-weight:800;letter-spacing:.01em}
 .loginScreen{background:radial-gradient(circle at 50% 18%,#17302e 0,#07100f 42%,#050b0a 100%)}
 .primary{box-shadow:0 8px 22px #69c7c820}
