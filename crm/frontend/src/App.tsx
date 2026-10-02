@@ -140,7 +140,7 @@ function App() {
     { id: "1", groupId: "1", startsAt: "2026-09-30T17:00", duration: 60, topic: "FPV: траса в симуляторі" },
     { id: "2", groupId: "1", startsAt: "2026-10-05T17:00", duration: 60, topic: "Whoop: базове керування" },
   ]);
-  const [selectedLessonId, setSelectedLessonId] = useState<EntityId>("1");
+  const [selectedLessonId, setSelectedLessonId] = useState<EntityId>(apiEnabled ? "" : "1");
   const [attendance, setAttendance] = useState<Record<EntityId, Record<EntityId, AttendanceValue>>>({
     "1": { "8": "present", "9": "late" },
   });
@@ -578,7 +578,9 @@ function App() {
     setStudentStates((states) => ({ ...states, [id]: state }));
   };
 
-  const selectedLesson = lessons.find((lesson) => lesson.id === selectedLessonId) ?? lessons[0];
+  const selectedLesson = apiEnabled && !workspaceLoaded
+    ? undefined
+    : lessons.find((lesson) => lesson.id === selectedLessonId) ?? lessons[0];
   const lessonGroup = selectedLesson ? groups.find((group) => group.id === selectedLesson.groupId) : undefined;
   const lessonStudents = lessonGroup ? leads.filter((lead) => lessonGroup.members.includes(lead.id)) : [];
 
