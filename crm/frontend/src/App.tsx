@@ -1631,7 +1631,7 @@ function App() {
               {statuses.map((status) => <option key={status}>{status}</option>)}
             </select>
           </label>
-          <div className="detailGrid"><span>Джерело<b>{selected.source}</b></span><span>Вік<b>{selected.age}</b></span></div>
+          <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selected.comment && <div className="noteBox"><span>Коментар</span><p>{selected.comment}</p></div>}
           {selected.trialAt && <div className="trialSummary"><span>Пробне заняття</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
           <div className="preferenceSummary">
@@ -1679,7 +1679,7 @@ function App() {
 
           {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} /> : <div className="history">
             <h3>Історія</h3>
-            <div><i></i><p><b>Заявка створена</b><span>Джерело: {selected.source}</span></p></div>
+            <div><i></i><p><b>Заявка створена</b><span>Джерело: {leadSourceLabel(selected.source)}</span></p></div>
             {selected.trialAt && <div><i></i><p><b>Пробне заплановано</b><span>{new Date(selected.trialAt).toLocaleString("uk-UA")}</span></p></div>}
             {selected.trialResult === "completed" && <div><i></i><p><b>Пробне пройдено</b><span>Рівень: {selected.recommendedLevel ?? "не вказано"}</span></p></div>}
             {selected.status !== "Нова" && <div><i></i><p><b>Поточний статус</b><span>{selected.status}</span></p></div>}
@@ -1693,7 +1693,7 @@ function App() {
 function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) => void }) {
   return <div className="table">
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span></div>
-    {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{lead.source}</span><span className="pill">{lead.status}</span></button>)}
+    {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}><b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{leadSourceLabel(lead.source)}</span><span className="pill">{lead.status}</span></button>)}
   </div>;
 }
 
@@ -1807,6 +1807,25 @@ function staffRoleValue(role: StaffRoleDemo) {
   };
   return values[role];
 }
+
+function leadSourceLabel(source: string | null | undefined) {
+  const labels: Record<string, string> = {
+    phone: "Телефон",
+    website: "Сайт",
+    instagram: "Instagram",
+    recommendation: "Рекомендація",
+    "walk-in": "Зайшли особисто",
+    walk_in: "Зайшли особисто",
+    facebook: "Facebook",
+    tiktok: "TikTok",
+    google: "Google",
+    maps: "Google Maps",
+    other: "Інше",
+  };
+  if (!source) return "Не вказано";
+  return labels[source.toLowerCase()] ?? source;
+}
+
 
 function paymentMethodLabel(method: string | null | undefined): PaymentDemo["method"] {
   const labels: Record<string, PaymentDemo["method"]> = {
