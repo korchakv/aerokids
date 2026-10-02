@@ -353,6 +353,10 @@ function App() {
       if (leadSort === "age") return a.age - b.age;
       const priority = leadActionPriority(a) - leadActionPriority(b);
       if (priority !== 0) return priority;
+      if (a.nextContactAt || b.nextContactAt) {
+        const followUpOrder = dateValue(a.nextContactAt, Number.MAX_SAFE_INTEGER) - dateValue(b.nextContactAt, Number.MAX_SAFE_INTEGER);
+        if (followUpOrder !== 0) return followUpOrder;
+      }
       return dateValue(b.createdAt) - dateValue(a.createdAt);
     });
     return items;
@@ -1982,11 +1986,12 @@ function leadActionPriority(lead: Lead) {
   const now = Date.now();
   if (lead.nextContactAt && dateValue(lead.nextContactAt) <= now) return 0;
   if (lead.trialResult === "no_show") return 1;
-  if (lead.status === "Після пробного") return 2;
+  if (lead.status === "Після пробного" && !lead.nextContactAt) return 2;
   if (lead.status === "Нова") return 3;
   if (lead.status === "Пробне заплановано") return 4;
-  if (lead.status === "Зв'язались") return 5;
-  if (lead.status === "Очікує групу") return 6;
+  if (lead.nextContactAt) return 5;
+  if (lead.status === "Зв'язались") return 6;
+  if (lead.status === "Очікує групу") return 7;
   return 9;
 }
 
