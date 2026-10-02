@@ -2542,9 +2542,18 @@ function candidateCompatibility(
     } else conflicts++;
   });
   const locationMismatch = Boolean(lead.preferredLocationId && locationId && lead.preferredLocationId !== locationId);
-  if (!full && !partial) return { state: "conflict", icon: "!", label: "Потрібне узгодження", detail: "Збігів немає" };
-  if (partial || conflicts || locationMismatch || preferred === 0) return { state: "partial", icon: "⚠", label: "Частковий збіг", detail: details.join("; ") || "Бажана локація відрізняється" };
-  return { state: "match", icon: "✓", label: "Графік підходить", detail: details.join("; ") };
+  const locationDetail = locationMismatch ? "Бажана локація відрізняється" : "";
+  const explanation = [...details, locationDetail].filter(Boolean).join("; ");
+  if (!full && !partial) return { state: "conflict", icon: "!", label: "Потрібне узгодження", detail: explanation || "Збігів немає" };
+  if (partial || conflicts || locationMismatch || preferred === 0) {
+    const possibleOnly = matchingOnlyPossible(full, preferred) ? "Час позначений лише як можливий" : "";
+    return { state: "partial", icon: "⚠", label: "Частковий збіг", detail: [explanation, possibleOnly].filter(Boolean).join("; ") || "Потрібне уточнення" };
+  }
+  return { state: "match", icon: "✓", label: "Графік підходить", detail: explanation };
+}
+
+function matchingOnlyPossible(full: number, preferred: number) {
+  return full > 0 && preferred === 0;
 }
 
 function MatchBadge({ match }: { match: CandidateMatch }) {
