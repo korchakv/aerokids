@@ -478,6 +478,8 @@ class SubscriptionPlanCreate(BaseModel):
     period_days: int = Field(default=30, ge=1, le=366)
     lessons_included: int | None = Field(default=None, ge=1, le=365)
 
+    _name = field_validator("name")(normalize_required_text)
+
 
 class SubscriptionPlanRead(ORMModel):
     id: UUID
