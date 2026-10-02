@@ -168,7 +168,16 @@ A subscription can have `auto_renew=true`. `POST /billing/renewals/run`:
 
 The web app runs this renewal check when an owner, admin or accountant synchronizes the workspace. This makes normal CRM use automatic and idempotent.
 
-For production SaaS where billing must run even if nobody opens the CRM, the same renewal service should additionally be invoked once per day by a server-side scheduler/cron. The business logic is already centralized in the backend; only unattended infrastructure scheduling remains.
+For production SaaS where billing must run even if nobody opens the CRM, the same renewal service should additionally be invoked once per day by a server-side scheduler/cron.
+
+The repository includes an unattended entrypoint:
+
+```bash
+cd crm/backend
+python -m app.jobs.billing_renewals
+```
+
+It processes every organization through the same idempotent service and prints a compact run summary. The current Render blueprint remains on the free web/static plans and does not silently add a paid cron service; this command can be attached to a scheduler when that infrastructure decision is made.
 
 ### Stale renewal guard
 
