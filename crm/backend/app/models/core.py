@@ -136,6 +136,7 @@ class Student(Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
     first_name: Mapped[str] = mapped_column(String(120), nullable=False)
     last_name: Mapped[str | None] = mapped_column(String(120))
+    phone: Mapped[str | None] = mapped_column(String(40), index=True)
     birth_date: Mapped[date | None] = mapped_column(Date)
     age_at_inquiry: Mapped[int | None] = mapped_column(Integer)
     source: Mapped[str | None] = mapped_column(String(80))
