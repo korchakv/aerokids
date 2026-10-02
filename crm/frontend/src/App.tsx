@@ -490,7 +490,7 @@ function App() {
     setTrialMode(null);
   };
 
-  const completeTrial = async (result: "completed" | "no_show") => {
+  const completeTrial = async (result: "completed" | "no_show" | "cancelled") => {
     if (!selected) return;
     if (apiEnabled && session && selected.trialId) {
       try {
@@ -581,7 +581,7 @@ function App() {
       setWorkspaceError("Вкажіть дату наступного контакту.");
       return;
     }
-    const status = selected?.trialResult === "no_show" ? "contacted" : "trial_completed";
+    const status = selected?.trialResult === "no_show" || selected?.trialResult === "cancelled" ? "contacted" : "trial_completed";
     void saveLeadOutcome(status, { nextContactAt: followUpAt });
   };
 
@@ -594,6 +594,12 @@ function App() {
       closeReason: closeKind === "declined" ? closeReason : undefined,
       closeNote: closeNote.trim() || undefined,
     });
+  };
+
+  const reopenLead = () => {
+    if (!selected) return;
+    const status = selected.trialResult === "completed" ? "trial_completed" : "contacted";
+    void saveLeadOutcome(status);
   };
 
   const toggleCandidate = (id: EntityId) => {
@@ -1755,7 +1761,7 @@ function App() {
               </label>}
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selected.nextContactAt && <div className="noteBox followUpBox"><span>Наступний контакт</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>}
-          {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}<button className="search reopenLead" onClick={() => saveLeadOutcome("contacted")}>Повернути в роботу</button></div>}
+          {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
           {selected.comment && <div className="noteBox"><span>Коментар</span><p>{selected.comment}</p></div>}
           {selected.trialAt && <div className="trialSummary"><span>Пробне заняття</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
           <div className="preferenceSummary">
@@ -1777,10 +1783,11 @@ function App() {
 
 
 
-          <div className="drawerActions">
+          {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <div className="drawerActions">
             <button className="primary" onClick={() => setTrialMode("schedule")}>{selected.trialAt ? "Змінити пробне" : "Записати на пробне"}</button>
-            {selected.trialAt && selected.trialResult !== "completed" && selected.trialResult !== "no_show" && <button className="search" onClick={() => setTrialMode("complete")}>Результат пробного</button>}
-          </div>
+            {selected.trialAt && !["completed","no_show","cancelled"].includes(selected.trialResult ?? "") && <button className="search" onClick={() => setTrialMode("complete")}>Результат пробного</button>}
+            {!["completed","no_show","cancelled"].includes(selected.trialResult ?? "") && <button className="search dangerSoft" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Закрити заявку</button>}
+          </div>}
 
           {trialMode === "schedule" && <div className="workflowBox">
             <div className="workflowHead"><h3>Запис на пробне</h3><button onClick={() => setTrialMode(null)}>×</button></div>
@@ -1796,7 +1803,7 @@ function App() {
             <div className="workflowHead"><h3>Результат пробного</h3><button onClick={() => setTrialMode(null)}>×</button></div>
             <label>Рекомендований рівень<select value={recommendedLevel} onChange={(e) => setRecommendedLevel(e.target.value)}><option>Початковий</option><option>Середній</option><option>Просунутий</option></select></label>
             <label>Коментар викладача<textarea value={teacherNotes} onChange={(e) => setTeacherNotes(e.target.value)} placeholder="Що сподобалось, як дитина справилась, що рекомендуємо" /></label>
-            <div className="resultActions"><button className="primary" onClick={() => completeTrial("completed")}>Пробне пройдено</button><button className="search" onClick={() => completeTrial("no_show")}>Не прийшов</button></div>
+            <div className="resultActions"><button className="primary" onClick={() => completeTrial("completed")}>Пробне пройдено</button><button className="search" onClick={() => completeTrial("no_show")}>Не прийшов</button><button className="search" onClick={() => completeTrial("cancelled")}>Скасували</button></div>
           </div>}
 
           {selected.trialResult === "completed" && <div className="resultCard postTrialCard">
@@ -1826,8 +1833,20 @@ function App() {
             </div>
           </div>}
 
+          {selected.trialResult === "cancelled" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="resultCard cancelledTrialCard">
+            <span>Пробне скасовано</span>
+            <b>Потрібно узгодити нову дату</b>
+            {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
+            <small>Заявка залишається в роботі. Можна перезаписати пробне, поставити наступний контакт або закрити заявку.</small>
+            <div className="postTrialActions">
+              <button className="primary" onClick={() => setTrialMode("schedule")}>Перезаписати пробне</button>
+              <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
+              <button className="search" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Закрити заявку</button>
+            </div>
+          </div>}
+
           {postTrialMode === "thinking" && <div className="workflowBox">
-            <div className="workflowHead"><h3>{selected.trialResult === "no_show" ? "Передзвонити пізніше" : "Ще думають"}</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
+            <div className="workflowHead"><h3>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Передзвонити пізніше" : "Ще думають"}</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
             <p className="softPreferenceHint">Залишаємо заявку в роботі й ставимо дату, коли треба зв’язатися з батьками знову.</p>
             <DateTimeEditor label="Наступний контакт" value={followUpAt} onChange={setFollowUpAt} />
             <button className="primary full" disabled={!followUpAt} onClick={saveThinkingFollowUp}>Зберегти нагадування</button>
@@ -1997,17 +2016,19 @@ function leadActionPriority(lead: Lead) {
   const now = Date.now();
   if (lead.nextContactAt && dateValue(lead.nextContactAt) <= now) return 0;
   if (lead.trialResult === "no_show") return 1;
-  if (lead.status === "Після пробного" && !lead.nextContactAt) return 2;
-  if (lead.status === "Нова") return 3;
-  if (lead.status === "Пробне заплановано") return 4;
-  if (lead.nextContactAt) return 5;
-  if (lead.status === "Зв'язались") return 6;
-  if (lead.status === "Очікує групу") return 7;
+  if (lead.trialResult === "cancelled") return 2;
+  if (lead.status === "Після пробного" && !lead.nextContactAt) return 3;
+  if (lead.status === "Нова") return 4;
+  if (lead.status === "Пробне заплановано") return 5;
+  if (lead.nextContactAt) return 6;
+  if (lead.status === "Зв'язались") return 7;
+  if (lead.status === "Очікує групу") return 8;
   return 9;
 }
 
 function leadDisplayStatus(lead: Lead) {
   if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "Не прийшов";
+  if (lead.trialResult === "cancelled" && lead.status === "Зв'язались") return "Скасували пробне";
   return lead.status;
 }
 
@@ -2022,6 +2043,7 @@ function leadNextAction(lead: Lead) {
     return `${overdue ? "Прострочено: " : "Зв'язатися: "}${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · ${when.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}`;
   }
   if (lead.trialResult === "no_show") return "Зателефонувати / перезаписати";
+  if (lead.trialResult === "cancelled") return "Узгодити нову дату";
   if (lead.status === "Після пробного") return "Уточнити рішення";
   if (lead.status === "Нова") return "Перший контакт";
   if (lead.status === "Пробне заплановано" && lead.trialAt) {
