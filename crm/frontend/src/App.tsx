@@ -2029,8 +2029,6 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
         <form onSubmit={acceptInvitation}>
           <label>Ваше ім’я<input autoComplete="name" value={inviteName} onChange={(e) => setInviteName(e.target.value)} required /></label>
           <label>Пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-          <label>Ключ першого запуску<input type="password" autoComplete="off" value={bootstrapSecret} onChange={(e) => setBootstrapSecret(e.target.value)} placeholder="Задається під час розгортання CRM" /></label>
-          <small className="setupHint">Для локальної розробки поле можна залишити порожнім. На тестовому/production сервері використовуйте BOOTSTRAP_SECRET.</small>
           {error && <div className="loginError">{error}</div>}
           <button className="primary full" disabled={loading}>{loading ? "Створюємо доступ…" : "Прийняти запрошення"}</button>
         </form>
@@ -2044,6 +2042,8 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
           <label>Ваше ім’я<input autoComplete="name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} required /></label>
           <label>Email<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           <label>Пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          <label>Ключ першого запуску<input type="password" autoComplete="off" value={bootstrapSecret} onChange={(e) => setBootstrapSecret(e.target.value)} placeholder="Задається в Render → aerokids-crm-api → Environment" required /></label>
+          <small className="setupHint">Введіть значення BOOTSTRAP_SECRET із налаштувань backend у Render.</small>
           {error && <div className="loginError">{error}</div>}
           <button className="primary full" disabled={loading}>{loading ? "Створюємо…" : "Створити CRM"}</button>
         </form>
