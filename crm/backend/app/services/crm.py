@@ -971,6 +971,23 @@ def _payment_transactions(db: Session, org_id: UUID, payment_id: UUID) -> list[P
     ))
 
 
+def _materialize_legacy_settlement(db: Session, org_id: UUID, payment: Payment) -> None:
+    transactions = _payment_transactions(db, org_id, payment.id)
+    if transactions or payment.status != PaymentStatus.PAID:
+        return
+    db.add(PaymentTransaction(
+        organization_id=org_id,
+        payment_id=payment.id,
+        student_id=payment.student_id,
+        kind="payment",
+        amount_minor=payment.amount_minor,
+        method=payment.method,
+        note="Legacy full payment migrated to ledger",
+        occurred_at=payment.paid_at or payment.created_at,
+    ))
+    db.flush()
+
+
 def payment_financials(db: Session, org_id: UUID, payment: Payment) -> dict:
     transactions = _payment_transactions(db, org_id, payment.id)
     increases = sum(item.amount_minor for item in transactions if item.kind == "adjustment_increase")
@@ -1556,9 +1573,12 @@ def add_payment_adjustment(
     payment = scoped_get(db, Payment, org_id, payment_id)
     if payment.status == PaymentStatus.CANCELLED:
         raise HTTPException(status_code=409, detail="Cancelled charge cannot be adjusted")
+    _materialize_legacy_settlement(db, org_id, payment)
     finance = payment_financials(db, org_id, payment)
     if direction == "decrease" and amount_minor > finance["adjusted_amount_minor"]:
         raise HTTPException(status_code=422, detail="Adjustment exceeds charge amount")
+    if direction == "decrease" and finance["adjusted_amount_minor"] - amount_minor < finance["net_paid_minor"]:
+        raise HTTPException(status_code=422, detail="Refund the overpaid amount before decreasing the charge")
 
     kind = "adjustment_increase" if direction == "increase" else "adjustment_decrease"
     db.add(PaymentTransaction(
@@ -1611,6 +1631,7 @@ def refund_payment(
     payment = scoped_get(db, Payment, org_id, payment_id)
     if payment.status == PaymentStatus.CANCELLED:
         raise HTTPException(status_code=409, detail="Cancelled charge cannot be refunded")
+    _materialize_legacy_settlement(db, org_id, payment)
     finance = payment_financials(db, org_id, payment)
     if amount_minor > finance["net_paid_minor"]:
         raise HTTPException(status_code=422, detail="Refund exceeds net amount received")
