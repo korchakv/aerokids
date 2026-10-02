@@ -168,6 +168,7 @@ class ContactRead(ORMModel):
 class StudentCreate(BaseModel):
     first_name: str = Field(min_length=2, max_length=120)
     last_name: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=40)
     birth_date: date | None = None
     age_at_inquiry: int | None = Field(default=None, ge=3, le=25)
     source: str | None = Field(default=None, max_length=80)
@@ -180,12 +181,18 @@ class StudentCreate(BaseModel):
     def valid_last_name(cls, value: str | None) -> str | None:
         return normalize_person_name(value) if value else None
 
+    @field_validator("phone")
+    @classmethod
+    def valid_phone(cls, value: str | None) -> str | None:
+        return normalize_ua_phone(value) if value and value.strip() else None
+
 
 class StudentRead(ORMModel):
     id: UUID
     organization_id: UUID
     first_name: str
     last_name: str | None
+    phone: str | None
     birth_date: date | None
     age_at_inquiry: int | None
     source: str | None
@@ -264,6 +271,8 @@ class EnrollmentRead(ORMModel):
 
 class IntakeCreate(BaseModel):
     child_first_name: str = Field(min_length=2, max_length=120)
+    child_last_name: str | None = Field(default=None, max_length=120)
+    child_phone: str | None = Field(default=None, max_length=40)
     child_age: int = Field(ge=3, le=25)
     contact_name: str = Field(min_length=2, max_length=160)
     phone: str = Field(min_length=8, max_length=40)
@@ -272,6 +281,17 @@ class IntakeCreate(BaseModel):
     website: str | None = Field(default=None, max_length=200)
 
     _child_name = field_validator("child_first_name")(normalize_person_name)
+
+    @field_validator("child_last_name")
+    @classmethod
+    def valid_child_last_name(cls, value: str | None) -> str | None:
+        return normalize_person_name(value) if value else None
+
+    @field_validator("child_phone")
+    @classmethod
+    def valid_child_phone(cls, value: str | None) -> str | None:
+        return normalize_ua_phone(value) if value and value.strip() else None
+
     _contact_name = field_validator("contact_name")(normalize_person_name)
     _phone = field_validator("phone")(normalize_ua_phone)
 
@@ -628,6 +648,7 @@ class GroupMemberDetail(BaseModel):
     student_id: UUID
     first_name: str
     last_name: str | None
+    student_phone: str | None
     age: int | None
     contact_name: str | None
     contact_phone: str | None
@@ -905,6 +926,7 @@ class LeadListItem(BaseModel):
     created_at: datetime
     first_name: str
     last_name: str | None
+    student_phone: str | None
     age: int | None
     source: str | None
     comment: str | None
@@ -930,6 +952,7 @@ class StudentOverviewItem(BaseModel):
     student_id: UUID
     first_name: str
     last_name: str | None
+    student_phone: str | None
     age: int | None
     source: str | None
     student_status: StudentStatus
