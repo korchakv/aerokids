@@ -2223,6 +2223,7 @@ function auditEventLabel(type: string) {
     "trial.rescheduled": "Пробне перенесено",
     "trial.completed": "Пробне пройдено",
     "trial.no_show": "Не прийшов на пробне",
+    "trial.cancelled": "Пробне скасовано",
     "lead.outcome_updated": "Рішення по заявці",
     "student.enrolled": "Зараховано до групи",
     "student.transferred": "Переведено в іншу групу",
