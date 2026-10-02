@@ -23,15 +23,15 @@ Allowed:
 - place the unchanged logo on approved brand backgrounds.
 
 ## Brand palette
-- Background: `#07100F`
-- Secondary background: `#0D1918`
-- Card/panel: `#10201F`
-- Border: `#294442`
-- Primary text: `#F2F1FB`
-- Muted text: `#A7B7B5`
-- Accent cyan/teal: `#69C7C8`
-- Accent light: `#86DDDC`
-- Dark text on cyan: `#071312`
+- Background: `#030B0B`
+- Secondary background: `#071615`
+- Card/panel: `#0B1D1C`
+- Border: `#1D4240`
+- Primary text: `#F4F4FA`
+- Muted text: `#9FB1AF`
+- Accent cyan/teal: `#16F5F2`
+- Accent light: `#9FECEA`
+- Dark text on cyan: `#021212`
 
 ## Visual direction
 Dark graphite/black base, cyan/teal accents, off-white typography.
