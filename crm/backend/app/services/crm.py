@@ -923,11 +923,74 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
     return {"group": group, "schedules": schedules, "members": members}
 
 
+def _comparable_dt(value: datetime) -> datetime:
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _lesson_conflict_reason(
+    db: Session,
+    org_id: UUID,
+    group: Group,
+    location_id: UUID | None,
+    starts_at: datetime,
+    duration_minutes: int,
+) -> str | None:
+    start = _comparable_dt(starts_at)
+    end = start + timedelta(minutes=duration_minutes)
+    sessions = list(db.scalars(
+        select(LessonSession).where(
+            LessonSession.organization_id == org_id,
+            LessonSession.status != LessonStatus.CANCELLED,
+        )
+    ))
+    new_staff_ids = set(db.scalars(select(GroupStaff.staff_id).where(
+        GroupStaff.organization_id == org_id,
+        GroupStaff.group_id == group.id,
+    )))
+
+    for existing in sessions:
+        existing_start = _comparable_dt(existing.starts_at)
+        existing_end = existing_start + timedelta(minutes=existing.duration_minutes)
+        if not (start < existing_end and end > existing_start):
+            continue
+
+        existing_group = scoped_get(db, Group, org_id, existing.group_id)
+        same_group = existing.group_id == group.id
+        same_location = bool(location_id and existing.location_id and location_id == existing.location_id)
+        shared_staff = False
+        if existing.group_id != group.id and new_staff_ids:
+            existing_staff_ids = set(db.scalars(select(GroupStaff.staff_id).where(
+                GroupStaff.organization_id == org_id,
+                GroupStaff.group_id == existing.group_id,
+            )))
+            shared_staff = bool(new_staff_ids & existing_staff_ids)
+
+        if same_group or same_location or shared_staff:
+            reasons = []
+            if same_group:
+                reasons.append("ця група вже має заняття")
+            if same_location:
+                reasons.append("локація зайнята")
+            if shared_staff:
+                reasons.append("викладач зайнятий")
+            return (
+                f"Час зайнятий: {existing_group.name} "
+                f"{existing_start.strftime('%d.%m %H:%M')}–{existing_end.strftime('%H:%M')} "
+                f"({', '.join(reasons)}). Оберіть інший час."
+            )
+    return None
+
+
 def create_lesson_session(db: Session, org_id: UUID, data, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> LessonSession:
     group = ensure_group_access(db, org_id, user_id, role, data.group_id)
     location_id = data.location_id if data.location_id is not None else group.location_id
     if location_id is not None:
         scoped_get(db, Location, org_id, location_id)
+    conflict = _lesson_conflict_reason(db, org_id, group, location_id, data.starts_at, data.duration_minutes)
+    if conflict:
+        raise HTTPException(status_code=409, detail=conflict)
     item = LessonSession(
         organization_id=org_id,
         group_id=group.id,
