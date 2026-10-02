@@ -142,6 +142,9 @@ class Student(Base):
     preferred_location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"), index=True)
     crm_status: Mapped[CrmStatus] = mapped_column(Enum(CrmStatus), default=CrmStatus.NEW, nullable=False)
     student_status: Mapped[StudentStatus] = mapped_column(Enum(StudentStatus), default=StudentStatus.PROSPECT, nullable=False)
+    next_contact_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    lead_close_reason: Mapped[str | None] = mapped_column(String(80))
+    lead_close_note: Mapped[str | None] = mapped_column(String(500))
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
