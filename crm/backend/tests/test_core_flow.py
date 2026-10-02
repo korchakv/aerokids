@@ -2135,3 +2135,56 @@ def test_auto_renewal_skips_stale_subscription_instead_of_backfilling(client):
     assert result.status_code == 200, result.text
     assert result.json()["created_subscriptions"] == 0
     assert result.json()["skipped_stale_subscriptions"] == 1
+
+
+def test_legacy_paid_charge_can_be_refunded_without_losing_settlement(client):
+    org = create_org(client, "Legacy Refund", "legacy-refund")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Legacy"}).json()
+    payment = client.post(
+        "/payments",
+        headers=headers,
+        json={"student_id": student["id"], "amount_minor": 100000},
+    ).json()
+    paid = client.patch(
+        f"/payments/{payment['id']}/paid",
+        headers=headers,
+        json={"method": "card"},
+    )
+    assert paid.status_code == 200, paid.text
+
+    refund = client.post(
+        f"/payments/{payment['id']}/refunds",
+        headers=headers,
+        json={"amount_minor": 20000, "note": "Часткове повернення", "reduce_charge": True},
+    )
+    assert refund.status_code == 201, refund.text
+    body = refund.json()
+    assert body["paid_minor"] == 100000
+    assert body["refunded_minor"] == 20000
+    assert body["adjusted_amount_minor"] == 80000
+    assert body["balance_minor"] == 0
+
+
+def test_adjustment_cannot_create_hidden_overpayment(client):
+    org = create_org(client, "Adjust Guard", "adjust-guard")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Guard"}).json()
+    payment = client.post(
+        "/payments",
+        headers=headers,
+        json={"student_id": student["id"], "amount_minor": 100000},
+    ).json()
+    partial = client.post(
+        f"/payments/{payment['id']}/receipts",
+        headers=headers,
+        json={"amount_minor": 80000, "method": "cash"},
+    )
+    assert partial.status_code == 201
+
+    invalid = client.post(
+        f"/payments/{payment['id']}/adjustments",
+        headers=headers,
+        json={"direction": "decrease", "amount_minor": 30000, "reason": "Too much"},
+    )
+    assert invalid.status_code == 422
