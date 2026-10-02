@@ -2081,11 +2081,6 @@ def assign_staff_to_group(db: Session, org_id: UUID, staff_id: UUID, group_id: U
         GroupStaff.staff_id == staff_id,
         GroupStaff.group_id == group_id,
     ))
-    if existing:
-        existing.is_primary = is_primary
-        db.commit()
-        db.refresh(existing)
-        return existing
 
     if is_primary:
         primary_rows = list(db.scalars(select(GroupStaff).where(
@@ -2094,7 +2089,14 @@ def assign_staff_to_group(db: Session, org_id: UUID, staff_id: UUID, group_id: U
             GroupStaff.is_primary.is_(True),
         )))
         for row in primary_rows:
-            row.is_primary = False
+            if row.staff_id != staff_id:
+                row.is_primary = False
+
+    if existing:
+        existing.is_primary = is_primary
+        db.commit()
+        db.refresh(existing)
+        return existing
 
     item = GroupStaff(
         organization_id=org_id,
