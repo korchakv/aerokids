@@ -99,3 +99,36 @@
 .groupCardsPrimary{display:grid!important;grid-template-columns:1fr!important;gap:10px!important}.groupCardWide{display:grid!important;grid-template-columns:minmax(260px,1.5fr) minmax(170px,.9fr) minmax(150px,.8fr) 90px auto;align-items:center;gap:18px;width:100%;padding:14px 16px!important;text-align:left}.groupCardTitleBlock{display:flex;align-items:center;gap:12px;min-width:0}.groupCardTitleBlock>div{display:grid;gap:3px;min-width:0}.groupCardTitleBlock b{font-size:17px;line-height:1.2;color:#f2fbfd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupCardTitleBlock small{font-size:12px;color:#8ea7b3}.groupCardFact{display:grid;gap:3px;min-width:0}.groupCardFact small{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#718a97}.groupCardFact b{font-size:13px;line-height:1.35;color:#d8e8ed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupCardStudents b{font-size:15px}.groupCardOpen{justify-self:end;color:#73d6e5;font-size:12px;white-space:nowrap}.groupTeacherAssign{display:flex;align-items:end;gap:10px;margin:0 0 12px;padding:10px 12px;border:1px solid #234655;border-radius:11px;background:#091b27}.groupTeacherAssign label{display:grid;gap:5px;min-width:280px;color:#8199a5;font-size:10px;text-transform:uppercase;letter-spacing:.04em}.groupTeacherAssign select{padding:8px 10px;border:1px solid #31586a;border-radius:9px;background:#071721;color:#eef8fa}
 @media(max-width:1000px){.groupCardWide{grid-template-columns:minmax(220px,1fr) minmax(150px,.8fr) 80px auto}.groupCardWide .groupCardFact:nth-of-type(3){display:none}}
 @media(max-width:720px){.groupCardWide{grid-template-columns:1fr auto;gap:10px}.groupCardTitleBlock{grid-column:1}.groupCardFact{grid-column:1}.groupCardOpen{grid-column:2;grid-row:1 / span 3;align-self:center}.groupTeacherAssign{align-items:stretch;flex-direction:column}.groupTeacherAssign label{min-width:0}}
+
+/* Group page UX */
+.groupPageBackdrop{background:#06111b!important;backdrop-filter:none!important;display:block!important;padding:0!important}
+.groupDetailDrawer{position:relative!important;inset:auto!important;overflow:auto!important}
+.groupPageTopbar{position:sticky;top:-22px;z-index:8;display:flex;justify-content:space-between;align-items:center;margin:-22px -28px 14px;padding:14px 28px;border-bottom:1px solid #173646;background:rgba(7,20,30,.96);backdrop-filter:blur(10px)}
+.groupBackButton,.groupPageClose{border:1px solid #2c5365;background:#0b2230;color:#d9eef3;cursor:pointer}
+.groupBackButton{padding:9px 13px;border-radius:10px;font-weight:700}
+.groupBackButton:hover,.groupPageClose:hover{border-color:#4bbfd0;color:#fff}
+.groupPageClose{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;font-size:22px;line-height:1}
+.groupDetailIdentity{min-width:0}
+.groupDetailMeta{display:flex;flex-wrap:wrap;align-items:center;gap:7px 12px;margin-top:5px;color:#849eaa;font-size:12px}
+.groupDetailMeta>span:not(:last-child)::after{content:"";display:inline-block;width:3px;height:3px;margin-left:12px;border-radius:50%;background:#385563;vertical-align:middle}
+.groupTeacherLink{padding:0;border:0;background:transparent;color:#63d3e3;font:inherit;font-weight:700;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(99,211,227,.35);text-underline-offset:3px}
+.groupTeacherLink:hover{color:#a3f1fb;text-decoration-color:currentColor}
+.groupTeacherAssign{align-items:end}
+.groupTeacherAssignActions{display:flex;gap:8px}
+.waitingSecondaryHead{align-items:flex-start!important}
+.groupCardWide{grid-template-columns:minmax(360px,1.45fr) minmax(190px,.75fr) minmax(180px,.7fr) 90px auto!important}
+.groupCardWide>div:first-child{justify-content:flex-start!important}
+.groupCardTitleBlock{justify-content:flex-start!important}
+.groupCardTitleBlock .groupCardIcon{flex:0 0 34px}
+.groupCardTitleBlock>div{flex:0 1 auto!important;width:auto!important}
+@media(max-width:1000px){
+  .groupPageTopbar{top:-18px;margin:-18px -18px 14px;padding:12px 18px}
+  .groupCardWide{grid-template-columns:minmax(280px,1fr) minmax(170px,.7fr) 80px auto!important}
+}
+@media(max-width:720px){
+  .groupPageTopbar{top:-16px;margin:-16px -16px 12px;padding:10px 16px}
+  .groupBackButton{padding:8px 10px}
+  .groupCardWide{grid-template-columns:1fr auto!important}
+  .groupTeacherAssignActions{width:100%}
+  .groupTeacherAssignActions button{flex:1}
+}
