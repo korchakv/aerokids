@@ -2107,6 +2107,7 @@ def test_auto_renewal_is_idempotent_and_requires_active_enrollment(client):
     assert len(payments) == 2
     assert subscriptions[0]["renewal_of_id"] == subscriptions[1]["id"]
     assert subscriptions[0]["discount_minor"] == 0
+    assert subscriptions[1]["status"] == "active"
 
 
 def test_auto_renewal_skips_stale_subscription_instead_of_backfilling(client):
@@ -2188,3 +2189,41 @@ def test_adjustment_cannot_create_hidden_overpayment(client):
         json={"direction": "decrease", "amount_minor": 30000, "reason": "Too much"},
     )
     assert invalid.status_code == 422
+
+
+def test_auto_renewal_handles_recently_expired_period(client):
+    org = create_org(client, "Recent Expired Renew", "recent-expired-renew")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Святослав"}).json()
+    client.patch(f"/students/{student['id']}/crm-status", headers=headers, json={"crm_status": "waiting_for_group"})
+    client.post("/groups/form", headers=headers, json={"name": "Recent Renew Group", "capacity": 8, "student_ids": [student["id"]]})
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Recent Monthly", "price_minor": 140000, "period_days": 30},
+    ).json()
+    start = date.today() - timedelta(days=31)
+    charge = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "plan_id": plan["id"],
+            "starts_on": start.isoformat(),
+            "auto_renew": True,
+        },
+    )
+    assert charge.status_code == 201, charge.text
+
+    result = client.post(
+        "/billing/renewals/run",
+        headers=headers,
+        json={"through_date": (date.today() + timedelta(days=7)).isoformat()},
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["created_subscriptions"] == 1
+
+    subscriptions = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    assert len(subscriptions) == 2
+    assert subscriptions[1]["status"] == "expired"
+    assert subscriptions[0]["renewal_of_id"] == subscriptions[1]["id"]
