@@ -407,6 +407,78 @@ export type ApiAttendance = {
   note: string | null;
 };
 
+export type ApiGroupMemberDetail = {
+  student_id: string;
+  first_name: string;
+  last_name: string | null;
+  age: number | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  enrollment_started_at: string;
+  enrollment_status: "active" | "paused" | "finished";
+  attendance: {
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    total: number;
+    attendance_rate: number;
+  };
+  billing: {
+    status: "current" | "upcoming" | "due" | "overdue" | "no_plan";
+    plan_name: string | null;
+    amount_due_minor: number;
+    next_due_date: string | null;
+    last_paid_at: string | null;
+    last_paid_minor: number | null;
+    subscription_ends_on: string | null;
+  } | null;
+  payments: ApiPayment[];
+};
+
+export type ApiGroupDetail = {
+  group: {
+    id: string;
+    organization_id: string;
+    location_id: string | null;
+    name: string;
+    capacity: number | null;
+    min_age: number | null;
+    max_age: number | null;
+    is_active: boolean;
+  };
+  schedules: ApiGroupSchedule[];
+  members: ApiGroupMemberDetail[];
+};
+
+export type ApiPaymentReminder = {
+  payment_id: string;
+  student_id: string;
+  student_name: string;
+  contact_name: string | null;
+  contact_phone: string | null;
+  amount_minor: number;
+  currency: string;
+  due_date: string;
+  days_from_due: number;
+  stage: "upcoming_3" | "due_today" | "overdue_1" | "overdue_3" | "overdue_7" | "overdue_14" | "overdue_30";
+  label: string;
+  last_reminder_at: string | null;
+};
+
+export function loadGroupDetail(groupId: string, session: Session) {
+  return apiGet<ApiGroupDetail>(`/groups/${groupId}/detail`, session);
+}
+
+export function loadPaymentReminders(session: Session) {
+  return apiGet<ApiPaymentReminder[]>("/payment-reminders", session);
+}
+
+export function recordPaymentReminder(paymentId: string, stage: ApiPaymentReminder["stage"], channel: "manual" | "sms" | "email" | "messenger" | "phone", session: Session) {
+  return apiPost(`/payments/${paymentId}/reminders`, { stage, channel }, session);
+}
+
+
 export type TeachingBundle = {
   schedules: ApiGroupSchedule[];
   lessons: ApiLessonSession[];
