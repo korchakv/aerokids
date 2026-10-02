@@ -270,7 +270,7 @@ function App() {
   ]);
   const [staff, setStaff] = useState<StaffDemo[]>([
     { id: "1", fullName: "Іван Викладач", role: "Викладач", email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: ["1"], groupIds: ["1"], isActive: true },
-    { id: "2", fullName: "Адміністратор AeroKiDS", role: "Адміністратор", email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: ["1"], groupIds: [], isActive: true },
+    { id: "2", fullName: "Адміністратор AeroKids", role: "Адміністратор", email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: ["1"], groupIds: [], isActive: true },
   ]);
   const [selectedStaffId, setSelectedStaffId] = useState<EntityId | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<EntityId | null>(null);
@@ -1582,8 +1582,8 @@ function App() {
     currentMembership?.organization_currency ?? "UAH",
   );
   const headerContext = locations[0]
-    ? `${currentMembership?.organization_name ?? "School CRM"} · ${locations[0].name}`
-    : currentMembership?.organization_name ?? "School CRM";
+    ? `${currentMembership?.organization_name ?? "AeroKids CRM"} · ${locations[0].name}`
+    : currentMembership?.organization_name ?? "AeroKids CRM";
   const navigation = visibleNavigation(currentMembership?.role);
   const canManageRecurringSchedule = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const canManageLeads = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
@@ -1604,7 +1604,7 @@ function App() {
   return (
     <div className="shell">
       <aside>
-        <div className="brand"><span className="mark">✦</span><div><b>School CRM</b><small>{currentMembership?.organization_name ?? "AeroKiDS · demo tenant"}</small></div></div>
+        <div className="brand"><img className="brandLogo" src="https://aerokids.space/assets/logo/aerokids-logo-original.png" alt="AeroKids" /><div><b>AeroKids CRM</b><small>{currentMembership?.organization_name ?? "Керування школою"}</small></div></div>
         <nav>{navigation.map((item) => <button onClick={() => {
           if (item === "Налаштування" && currentMembership) {
             setOrganizationName(currentMembership.organization_name);
@@ -2151,7 +2151,7 @@ function App() {
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowLocationForm(false)}>×</button>
           <p className="eyebrow">Мережа</p><h2>Нова локація</h2>
-          <label>Назва<input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="AeroKiDS Центр" /></label>
+          <label>Назва<input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="AeroKids Центр" /></label>
           <label>Адреса<input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="Івано-Франківськ" /></label>
           <button className="primary full" disabled={!locationName.trim()} onClick={createLocationDemo}>Створити локацію</button>
         </div>
@@ -3014,7 +3014,7 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
   const [loading, setLoading] = useState(false);
   const [bootstrapAvailable, setBootstrapAvailable] = useState(false);
   const [checkingBootstrap, setCheckingBootstrap] = useState(true);
-  const [organizationName, setOrganizationName] = useState("AeroKiDS");
+  const [organizationName, setOrganizationName] = useState("AeroKids");
   const [organizationSlug, setOrganizationSlug] = useState("aerokids");
   const [ownerName, setOwnerName] = useState("");
   const [bootstrapSecret, setBootstrapSecret] = useState("");
@@ -3103,7 +3103,7 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
 
   return <div className="loginScreen">
     <div className="loginCard">
-      <div className="loginBrand"><span className="mark">✦</span><div><b>School CRM</b><small>Керування школою в одному місці</small></div></div>
+      <div className="loginBrand"><img className="brandLogo brandLogoLarge" src="https://aerokids.space/assets/logo/aerokids-logo-original.png" alt="AeroKids" /><div><b>AeroKids CRM</b><small>Керування школою в одному місці</small></div></div>
 
       {resetToken ? <>
         <p className="eyebrow">Новий пароль</p>
