@@ -59,6 +59,20 @@ def normalize_email(value: str | None) -> str | None:
     return value
 
 
+def normalize_required_text(value: str) -> str:
+    value = re.sub(r"\s+", " ", value.strip())
+    if not value:
+        raise ValueError("Поле не може бути порожнім")
+    return value
+
+
+def normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = re.sub(r"\s+", " ", value.strip())
+    return value or None
+
+
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -69,6 +83,8 @@ class OrganizationCreate(BaseModel):
     timezone: str = Field(default="Europe/Kyiv", min_length=2, max_length=64)
     currency: str = Field(default="UAH", pattern=r"^[A-Z]{3}$")
     locale: str = Field(default="uk-UA", min_length=2, max_length=20)
+
+    _name = field_validator("name")(normalize_required_text)
 
     @field_validator("timezone")
     @classmethod
@@ -85,6 +101,11 @@ class OrganizationUpdate(BaseModel):
     timezone: str | None = Field(default=None, min_length=2, max_length=64)
     currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
     locale: str | None = Field(default=None, min_length=2, max_length=20)
+
+    @field_validator("name")
+    @classmethod
+    def valid_name(cls, value: str | None) -> str | None:
+        return normalize_required_text(value) if value is not None else None
 
     @field_validator("timezone")
     @classmethod
@@ -111,6 +132,9 @@ class OrganizationRead(ORMModel):
 class LocationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     address: str | None = Field(default=None, max_length=300)
+
+    _name = field_validator("name")(normalize_required_text)
+    _address = field_validator("address")(normalize_optional_text)
 
 
 class LocationRead(ORMModel):
@@ -205,6 +229,8 @@ class GroupCreate(BaseModel):
     capacity: int | None = Field(default=None, ge=1, le=100)
     min_age: int | None = Field(default=None, ge=3, le=30)
     max_age: int | None = Field(default=None, ge=3, le=30)
+
+    _name = field_validator("name")(normalize_required_text)
 
 
 class GroupRead(ORMModel):
@@ -336,6 +362,8 @@ class GroupFormationCreate(BaseModel):
     max_age: int | None = Field(default=None, ge=3, le=30)
     student_ids: list[UUID] = Field(min_length=1)
     schedule_slots: list[GroupFormationScheduleSlot] = Field(default_factory=list)
+
+    _name = field_validator("name")(normalize_required_text)
 
     @model_validator(mode="after")
     def unique_schedule_slots(self):
@@ -775,6 +803,13 @@ class LocationUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=160)
     address: str | None = Field(default=None, max_length=300)
     is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def valid_name(cls, value: str | None) -> str | None:
+        return normalize_required_text(value) if value is not None else None
+
+    _address = field_validator("address")(normalize_optional_text)
 
 
 class FunnelCount(BaseModel):
