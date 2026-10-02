@@ -2440,3 +2440,101 @@ def test_existing_group_enrollment_respects_capacity(client):
     second = client.post("/enrollments", headers=headers, json={"student_id": student_ids[1], "group_id": group["id"]})
     assert first.status_code == 201, first.text
     assert second.status_code == 409
+
+
+def test_lesson_session_blocks_overlapping_time_for_same_group(client):
+    org = create_org(client, "Lesson Collision", "lesson-collision")
+    headers = {"X-Organization-Id": org["id"]}
+    group = client.post("/groups", headers=headers, json={"name": "Collision Group", "capacity": 8}).json()
+
+    first = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={
+            "group_id": group["id"],
+            "starts_at": "2026-10-06T12:00:00+03:00",
+            "duration_minutes": 60,
+            "topic": "Перше заняття",
+        },
+    )
+    assert first.status_code == 201, first.text
+
+    overlap = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={
+            "group_id": group["id"],
+            "starts_at": "2026-10-06T12:45:00+03:00",
+            "duration_minutes": 60,
+            "topic": "Перетин",
+        },
+    )
+    assert overlap.status_code == 409, overlap.text
+    assert "Час зайнятий" in overlap.json()["detail"]
+
+    adjacent = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={
+            "group_id": group["id"],
+            "starts_at": "2026-10-06T13:00:00+03:00",
+            "duration_minutes": 60,
+            "topic": "Наступне заняття",
+        },
+    )
+    assert adjacent.status_code == 201, adjacent.text
+
+
+def test_child_phone_is_stored_separately_from_responsible_contact(client):
+    org = create_org(client, "Child Contact", "child-contact")
+    headers = {"X-Organization-Id": org["id"]}
+
+    intake = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Максим",
+            "child_last_name": "Коваль",
+            "child_phone": "067 111 22 33",
+            "child_age": 10,
+            "contact_name": "Оксана Коваль",
+            "phone": "050 222 33 44",
+            "source": "phone",
+        },
+    )
+    assert intake.status_code == 201, intake.text
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    row = leads.json()[0]
+    assert row["first_name"] == "Максим"
+    assert row["last_name"] == "Коваль"
+    assert row["student_phone"] == "+380671112233"
+    assert row["contact_name"] == "Оксана Коваль"
+    assert row["contact_phone"] == "+380502223344"
+
+
+def test_group_overview_exposes_assigned_teacher(client):
+    org = create_org(client, "Group Teacher", "group-teacher")
+    headers = {"X-Organization-Id": org["id"]}
+    group = client.post("/groups", headers=headers, json={"name": "Teacher Group", "capacity": 8}).json()
+    staff = client.post(
+        "/staff",
+        headers=headers,
+        json={"full_name": "Іван Петренко", "role": "teacher"},
+    )
+    assert staff.status_code == 201, staff.text
+    teacher = staff.json()
+
+    assigned = client.post(
+        f"/staff/{teacher['id']}/groups",
+        headers=headers,
+        json={"group_id": group["id"], "is_primary": True},
+    )
+    assert assigned.status_code == 201, assigned.text
+
+    groups = client.get("/workspace/groups", headers=headers)
+    assert groups.status_code == 200, groups.text
+    row = next(item for item in groups.json() if item["group_id"] == group["id"])
+    assert row["primary_teacher_id"] == teacher["id"]
+    assert row["primary_teacher_name"] == "Іван Петренко"
