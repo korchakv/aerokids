@@ -70,7 +70,7 @@ def test_student_detail_and_status_update_are_tenant_scoped(client):
     assert detail.json()["contacts"][0]["full_name"] == "Оксана"
 
 
-def test_completed_trial_moves_student_to_waiting_for_group(client):
+def test_completed_trial_waits_for_explicit_post_trial_decision(client):
     org = create_org(client, "AeroKiDS", "aerokids-trial")
     headers = {"X-Organization-Id": org["id"]}
     student = client.post("/students", headers=headers, json={"first_name": "Софія", "age_at_inquiry": 10}).json()
@@ -88,7 +88,89 @@ def test_completed_trial_moves_student_to_waiting_for_group(client):
     )
     assert completed.status_code == 200, completed.text
     detail = client.get(f"/students/{student['id']}", headers=headers).json()
-    assert detail["crm_status"] == "waiting_for_group"
+    assert detail["crm_status"] == "trial_completed"
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    assert leads.json()[0]["latest_trial_status"] == "completed"
+    assert leads.json()[0]["teacher_notes"] == "Готова до групи"
+
+    ready = client.patch(
+        f"/students/{student['id']}/lead-outcome",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    assert ready.status_code == 200, ready.text
+    assert ready.json()["crm_status"] == "waiting_for_group"
+
+
+def test_no_show_stays_active_and_can_be_rescheduled(client):
+    org = create_org(client, "AeroKiDS", "aerokids-no-show")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Олег", "age_at_inquiry": 11}).json()
+    trial = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={"student_id": student["id"], "starts_at": "2026-10-06T17:00:00+03:00"},
+    ).json()
+
+    missed = client.patch(
+        f"/trial-lessons/{trial['id']}/complete",
+        headers=headers,
+        json={"status": "no_show", "teacher_notes": "Не прийшли, телефонуємо"},
+    )
+    assert missed.status_code == 200, missed.text
+    detail = client.get(f"/students/{student['id']}", headers=headers).json()
+    assert detail["crm_status"] == "contacted"
+
+    leads = client.get("/workspace/leads", headers=headers).json()
+    assert leads[0]["latest_trial_status"] == "no_show"
+
+    rescheduled = client.patch(
+        f"/trial-lessons/{trial['id']}",
+        headers=headers,
+        json={"starts_at": "2026-10-08T18:00:00+03:00"},
+    )
+    assert rescheduled.status_code == 200, rescheduled.text
+    detail_after = client.get(f"/students/{student['id']}", headers=headers).json()
+    assert detail_after["crm_status"] == "trial_scheduled"
+
+
+def test_lead_outcome_tracks_follow_up_and_close_reason(client):
+    org = create_org(client, "AeroKiDS", "aerokids-outcome")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Ірина", "age_at_inquiry": 10}).json()
+
+    thinking = client.patch(
+        f"/students/{student['id']}/lead-outcome",
+        headers=headers,
+        json={
+            "crm_status": "trial_completed",
+            "next_contact_at": "2026-10-12T09:00:00+03:00",
+        },
+    )
+    assert thinking.status_code == 200, thinking.text
+    assert thinking.json()["next_contact_at"].startswith("2026-10-12T09:00:00")
+
+    declined = client.patch(
+        f"/students/{student['id']}/lead-outcome",
+        headers=headers,
+        json={
+            "crm_status": "declined",
+            "close_reason": "schedule",
+            "close_note": "Не підходять запропоновані дні",
+        },
+    )
+    assert declined.status_code == 200, declined.text
+    assert declined.json()["lead_close_reason"] == "schedule"
+    assert declined.json()["next_contact_at"] is None
+
+    missing_reason = client.patch(
+        f"/students/{student['id']}/lead-outcome",
+        headers=headers,
+        json={"crm_status": "declined"},
+    )
+    assert missing_reason.status_code == 422
 
 
 def test_scheduling_trial_updates_crm_status(client):
