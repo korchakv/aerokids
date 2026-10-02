@@ -909,6 +909,7 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
             "student_id": student.id,
             "first_name": student.first_name,
             "last_name": student.last_name,
+            "student_phone": student.phone,
             "age": student.age_at_inquiry,
             "contact_name": contact.full_name if contact else None,
             "contact_phone": contact.phone if contact else None,
