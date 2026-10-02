@@ -499,7 +499,7 @@ function App() {
     }
     setLeads((items) => items.map((item) => item.id === selected.id ? {
       ...item,
-      status: result === "completed" ? "Очікує групу" : "Зв'язались",
+      status: result === "completed" ? "Після пробного" : "Зв'язались",
       trialResult: result,
       recommendedLevel: result === "completed" ? recommendedLevel : item.recommendedLevel,
       teacherNotes: teacherNotes || item.teacherNotes,
@@ -510,6 +510,7 @@ function App() {
   const openLead = (id: EntityId) => {
     setSelectedId(id);
     setTrialMode(null);
+    setPostTrialMode(null);
     setPreferenceMode(false);
     const lead = leads.find((item) => item.id === id);
     if (lead?.trialAt) setTrialAt(toLocalDateTimeInput(lead.trialAt));
@@ -517,8 +518,72 @@ function App() {
     if (lead?.trialLocationId) setTrialLocationId(lead.trialLocationId);
     if (lead?.recommendedLevel) setRecommendedLevel(lead.recommendedLevel);
     setTeacherNotes(lead?.teacherNotes ?? "");
+    setFollowUpAt(lead?.nextContactAt ? toLocalDateTimeInput(lead.nextContactAt) : "");
+    setCloseKind(lead?.status === "Не відповідає" ? "no_response" : lead?.status === "Неактуально" ? "not_relevant" : "declined");
+    setCloseReason(lead?.closeReason ?? "schedule");
+    setCloseNote(lead?.closeNote ?? "");
     setPreferenceLocationId(lead?.preferredLocationId ?? "");
     setAvailabilityWindows(lead?.availability ?? []);
+  };
+
+  const saveLeadOutcome = async (
+    crmStatus: "contacted" | "trial_completed" | "waiting_for_group" | "declined" | "no_response" | "not_relevant",
+    options: { nextContactAt?: string; closeReason?: string; closeNote?: string } = {},
+  ) => {
+    if (!selected) return;
+    if (apiEnabled && session) {
+      try {
+        setWorkspaceError("");
+        await apiPatch(`/students/${selected.id}/lead-outcome`, {
+          crm_status: crmStatus,
+          next_contact_at: options.nextContactAt ? new Date(options.nextContactAt).toISOString() : null,
+          close_reason: options.closeReason || null,
+          close_note: options.closeNote || null,
+        }, session);
+        await syncWorkspace(session);
+        setPostTrialMode(null);
+        return;
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося оновити результат заявки");
+        return;
+      }
+    }
+
+    const statusMap: Record<string, LeadStatus> = {
+      contacted: "Зв'язались",
+      trial_completed: "Після пробного",
+      waiting_for_group: "Очікує групу",
+      declined: "Відмовились",
+      no_response: "Не відповідає",
+      not_relevant: "Неактуально",
+    };
+    setLeads((items) => items.map((item) => item.id === selected.id ? {
+      ...item,
+      status: statusMap[crmStatus] ?? item.status,
+      nextContactAt: options.nextContactAt || undefined,
+      closeReason: options.closeReason || undefined,
+      closeNote: options.closeNote || undefined,
+    } : item));
+    setPostTrialMode(null);
+  };
+
+  const saveThinkingFollowUp = () => {
+    if (!followUpAt) {
+      setWorkspaceError("Вкажіть дату наступного контакту.");
+      return;
+    }
+    void saveLeadOutcome("trial_completed", { nextContactAt: followUpAt });
+  };
+
+  const closeLead = () => {
+    if (closeKind === "declined" && !closeReason) {
+      setWorkspaceError("Оберіть причину відмови.");
+      return;
+    }
+    void saveLeadOutcome(closeKind, {
+      closeReason: closeKind === "declined" ? closeReason : undefined,
+      closeNote: closeNote.trim() || undefined,
+    });
   };
 
   const toggleCandidate = (id: EntityId) => {
