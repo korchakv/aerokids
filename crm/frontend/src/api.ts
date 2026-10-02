@@ -133,6 +133,7 @@ export type WorkspaceLead = {
   created_at: string;
   first_name: string;
   last_name: string | null;
+  student_phone: string | null;
   age: number | null;
   source: string | null;
   comment: string | null;
@@ -158,6 +159,7 @@ export type WorkspaceStudent = {
   student_id: string;
   first_name: string;
   last_name: string | null;
+  student_phone: string | null;
   age: number | null;
   source: string | null;
   student_status: "active" | "paused" | "archived";
@@ -440,6 +442,7 @@ export type ApiGroupMemberDetail = {
   student_id: string;
   first_name: string;
   last_name: string | null;
+  student_phone: string | null;
   age: number | null;
   contact_name: string | null;
   contact_phone: string | null;
