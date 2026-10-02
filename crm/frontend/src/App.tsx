@@ -132,8 +132,11 @@ function App() {
   const [leadSort, setLeadSort] = useState<"priority" | "newest" | "oldest" | "trial" | "age">("priority");
   const [leadSourceFilter, setLeadSourceFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
-  const [candidateFilter, setCandidateFilter] = useState<"all" | "8-10" | "11-13" | "beginner">("all");
+  const [candidateAgeFilter, setCandidateAgeFilter] = useState<"all" | "8-10" | "11-13">("all");
+  const [candidateLevelFilter, setCandidateLevelFilter] = useState("all");
+  const [candidateLocationFilter, setCandidateLocationFilter] = useState("all");
   const [candidateMatchFilter, setCandidateMatchFilter] = useState<"all" | "match" | "partial" | "conflict" | "unknown">("all");
+  const [candidateSort, setCandidateSort] = useState<"match" | "age" | "name">("match");
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showLeadForm, setShowLeadForm] = useState(false);
@@ -375,13 +378,41 @@ function App() {
     return true;
   }), [activeStudents, studentStates, studentFilter]);
 
-  const visibleWaiting = useMemo(() => waiting.filter((item) => {
-    if (candidateFilter === "8-10") return item.age >= 8 && item.age <= 10;
-    if (candidateFilter === "11-13") return item.age >= 11 && item.age <= 13;
-    if (candidateFilter === "beginner") return item.recommendedLevel === "Початковий";
-    return true;
-  }).filter((item) => candidateMatchFilter === "all" || candidateCompatibility(item, groupSchedule, groupLocationId || null).state === candidateMatchFilter)
-    .sort((a, b) => ["match", "partial", "unknown", "conflict"].indexOf(candidateCompatibility(a, groupSchedule, groupLocationId || null).state) - ["match", "partial", "unknown", "conflict"].indexOf(candidateCompatibility(b, groupSchedule, groupLocationId || null).state)), [waiting, candidateFilter, candidateMatchFilter, groupSchedule, groupLocationId]);
+  const candidateLevels = useMemo(() => Array.from(new Set(waiting.map((item) => item.recommendedLevel).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "uk-UA")), [waiting]);
+
+  const visibleWaiting = useMemo(() => {
+    const matchOrder = ["match", "partial", "unknown", "conflict"] as const;
+    const rows = waiting.map((item) => ({
+      item,
+      match: candidateCompatibility(item, groupSchedule, groupLocationId || null),
+    })).filter(({ item, match }) => {
+      if (candidateAgeFilter === "8-10" && !(item.age >= 8 && item.age <= 10)) return false;
+      if (candidateAgeFilter === "11-13" && !(item.age >= 11 && item.age <= 13)) return false;
+      if (candidateLevelFilter !== "all" && item.recommendedLevel !== candidateLevelFilter) return false;
+      if (candidateLocationFilter === "none" && item.preferredLocationId) return false;
+      if (!["all", "none"].includes(candidateLocationFilter) && item.preferredLocationId !== candidateLocationFilter) return false;
+      if (candidateMatchFilter !== "all" && match.state !== candidateMatchFilter) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      if (candidateSort === "age") return a.item.age - b.item.age || a.item.child.localeCompare(b.item.child, "uk-UA");
+      if (candidateSort === "name") return a.item.child.localeCompare(b.item.child, "uk-UA");
+
+      const matchDiff = matchOrder.indexOf(a.match.state) - matchOrder.indexOf(b.match.state);
+      if (matchDiff !== 0) return matchDiff;
+
+      if (groupLocationId) {
+        const aSameLocation = a.item.preferredLocationId === groupLocationId ? 0 : 1;
+        const bSameLocation = b.item.preferredLocationId === groupLocationId ? 0 : 1;
+        if (aSameLocation !== bSameLocation) return aSameLocation - bSameLocation;
+      }
+
+      return a.item.age - b.item.age || a.item.child.localeCompare(b.item.child, "uk-UA");
+    });
+
+    return rows.map(({ item }) => item);
+  }, [waiting, candidateAgeFilter, candidateLevelFilter, candidateLocationFilter, candidateMatchFilter, candidateSort, groupSchedule, groupLocationId]);
 
   const saveOrganizationSettings = async () => {
     if (!session || !organizationName.trim()) return;
@@ -1486,11 +1517,26 @@ function App() {
                 {active === "Групи" && <section className="groupsLayout">
           <article className="panel">
             <div className="panelHead"><div><p className="eyebrow">Waiting list</p><h2>Очікують групу</h2></div><span className="counter">{waiting.length}</span></div>
-            <div className="candidateFilters">
-              <button className={"chip " + (candidateFilter === "all" ? "active" : "")} onClick={() => setCandidateFilter("all")}>Усі</button>
-              <button className={"chip " + (candidateFilter === "8-10" ? "active" : "")} onClick={() => setCandidateFilter("8-10")}>8–10 років</button>
-              <button className={"chip " + (candidateFilter === "11-13" ? "active" : "")} onClick={() => setCandidateFilter("11-13")}>11–13 років</button>
-              <button className={"chip " + (candidateFilter === "beginner" ? "active" : "")} onClick={() => setCandidateFilter("beginner")}>Початковий</button>
+            <div className="candidateControls">
+              <label className="candidateSelect">Вік<select value={candidateAgeFilter} onChange={(e) => setCandidateAgeFilter(e.target.value as typeof candidateAgeFilter)}>
+                <option value="all">Усі віки</option>
+                <option value="8-10">8–10 років</option>
+                <option value="11-13">11–13 років</option>
+              </select></label>
+              <label className="candidateSelect">Рівень<select value={candidateLevelFilter} onChange={(e) => setCandidateLevelFilter(e.target.value)}>
+                <option value="all">Усі рівні</option>
+                {candidateLevels.map((level) => <option value={level} key={level}>{level}</option>)}
+              </select></label>
+              <label className="candidateSelect">Бажана локація<select value={candidateLocationFilter} onChange={(e) => setCandidateLocationFilter(e.target.value)}>
+                <option value="all">Усі локації</option>
+                <option value="none">Не вказано</option>
+                {locations.filter((location) => location.isActive).map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+              </select></label>
+              <label className="candidateSelect">Сортування<select value={candidateSort} onChange={(e) => setCandidateSort(e.target.value as typeof candidateSort)}>
+                <option value="match">Найкращий збіг</option>
+                <option value="age">За віком</option>
+                <option value="name">За ім’ям</option>
+              </select></label>
             </div>
             <div className="candidateFilters" aria-label="Фільтр за збігом графіка">
               {([['all','Усі збіги'],['match','Підходить'],['partial','Частково'],['conflict','Узгодити'],['unknown','Невідомо']] as const).map(([value,label]) => <button className={"chip " + (candidateMatchFilter === value ? "active" : "")} onClick={() => setCandidateMatchFilter(value)} key={value}>{label}</button>)}
@@ -1500,8 +1546,8 @@ function App() {
               {visibleWaiting.map((lead) => { const match = candidateCompatibility(lead, groupSchedule, groupLocationId || null); return <label className={"candidate " + (selectedCandidates.includes(lead.id) ? "selected" : "")} key={lead.id}>
                 <input type="checkbox" checked={selectedCandidates.includes(lead.id)} onChange={() => toggleCandidate(lead.id)} />
                 <span className="candidateAvatar">{lead.child[0]}</span>
-                <span className="candidateMain"><b>{lead.child}</b><small>{lead.age} років · {lead.recommendedLevel ?? "Рівень не вказано"}</small><small>{availabilityLabel(lead.availability ?? [])}{lead.preferredLocationName ? " · " + lead.preferredLocationName : ""}</small></span>
-                <span className={"candidateSource candidateCompatibility " + match.state}>{match.icon} {match.label}</span>
+                <span className="candidateMain"><b>{lead.child}</b><small>{lead.age} років · {lead.recommendedLevel ?? "Рівень не вказано"}</small><small>{availabilityLabel(lead.availability ?? [])}{lead.preferredLocationName ? " · " + lead.preferredLocationName : ""}</small><MatchExplanation match={match} /></span>
+                <MatchBadge match={match} />
               </label>})}
             </div>
             <div className="selectionBar">
@@ -2446,11 +2492,18 @@ function formatMoney(value: number, locale = "uk-UA", currency = "UAH") {
   return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
 }
 
+type CandidateMatch = {
+  state: "match" | "partial" | "conflict" | "unknown";
+  icon: string;
+  label: string;
+  detail: string;
+};
+
 function candidateCompatibility(
   lead: Lead,
   schedule: Array<{ weekday: number; start_time: string; duration_minutes: number }>,
   locationId: string | null,
-) {
+): CandidateMatch {
   if (!schedule.length || !(lead.availability?.length)) {
     return { state: "unknown", icon: "?", label: "Побажаний час не вказаний", detail: "Уточнити графік у батьків" };
   }
@@ -2481,6 +2534,14 @@ function candidateCompatibility(
   if (!full && !partial) return { state: "conflict", icon: "!", label: "Потрібне узгодження", detail: "Збігів немає" };
   if (partial || conflicts || locationMismatch || preferred === 0) return { state: "partial", icon: "⚠", label: "Частковий збіг", detail: details.join("; ") || "Бажана локація відрізняється" };
   return { state: "match", icon: "✓", label: "Графік підходить", detail: details.join("; ") };
+}
+
+function MatchBadge({ match }: { match: CandidateMatch }) {
+  return <span className={"candidateSource candidateCompatibility " + match.state}>{match.icon} {match.label}</span>;
+}
+
+function MatchExplanation({ match }: { match: CandidateMatch }) {
+  return <small className={"matchExplanation " + match.state}>{match.detail}</small>;
 }
 
 function timeToMinutes(value: string) {
