@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, type ApiAuditEvent, type ApiGroupDetail, type ApiPaymentReminder, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiPaymentReminder, type ApiStudentSubscription, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
@@ -72,9 +72,14 @@ type PaymentDemo = {
   id: EntityId;
   studentId: EntityId;
   planId: EntityId;
+  subscriptionId?: EntityId;
   amount: number;
+  adjustedAmount: number;
+  paidAmount: number;
+  refundedAmount: number;
+  balanceAmount: number;
   dueDate: string;
-  status: "pending" | "paid" | "overdue";
+  status: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
   method?: "Картка" | "Готівка" | "Переказ";
 };
 
@@ -165,14 +170,27 @@ function App() {
     { id: "2", name: "Індивідуальний", price: 0, lessons: null },
   ]);
   const [payments, setPayments] = useState<PaymentDemo[]>([
-    { id: "1", studentId: "8", planId: "1", amount: 1800, dueDate: "2026-10-05", status: "pending" },
-    { id: "2", studentId: "9", planId: "1", amount: 1800, dueDate: "2026-09-28", status: "paid", method: "Картка" },
+    { id: "1", studentId: "8", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 0, refundedAmount: 0, balanceAmount: 1800, dueDate: "2026-10-05", status: "pending" },
+    { id: "2", studentId: "9", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 1800, refundedAmount: 0, balanceAmount: 0, dueDate: "2026-09-28", status: "paid", method: "Картка" },
   ]);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentStudentId, setPaymentStudentId] = useState<EntityId>("8");
   const [paymentPlanId, setPaymentPlanId] = useState<EntityId>("1");
   const [paymentDueDate, setPaymentDueDate] = useState(() => defaultPaymentDueDate());
   const [paymentSaving, setPaymentSaving] = useState(false);
+  const [subscriptions, setSubscriptions] = useState<ApiStudentSubscription[]>([]);
+  const [paymentAutoRenew, setPaymentAutoRenew] = useState(true);
+  const [paymentActionId, setPaymentActionId] = useState<EntityId | null>(null);
+  const [paymentActionType, setPaymentActionType] = useState<"partial" | "refund" | "adjustment" | null>(null);
+  const [paymentActionAmount, setPaymentActionAmount] = useState("");
+  const [paymentActionReason, setPaymentActionReason] = useState("");
+  const [paymentActionMethod, setPaymentActionMethod] = useState<"cash" | "card" | "bank">("card");
+  const [paymentAdjustmentDirection, setPaymentAdjustmentDirection] = useState<"decrease" | "increase">("decrease");
+  const [paymentActionSaving, setPaymentActionSaving] = useState(false);
+  const [pauseSubscriptionId, setPauseSubscriptionId] = useState<EntityId | null>(null);
+  const [pauseStart, setPauseStart] = useState(() => localDateInput(new Date()));
+  const [pauseResumeOn, setPauseResumeOn] = useState("");
+  const [pauseNote, setPauseNote] = useState("");
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [planName, setPlanName] = useState("8 занять / 30 днів");
   const [planPrice, setPlanPrice] = useState("");
@@ -258,6 +276,10 @@ function App() {
     setWorkspaceLoading(true);
     setWorkspaceError("");
     try {
+      const membership = currentSession.user.memberships.find((item) => item.organization_id === currentSession.organizationId);
+      if (["owner", "admin", "accountant"].includes(membership?.role ?? "")) {
+        await runBillingRenewals(currentSession).catch(() => undefined);
+      }
       const [bundle, operations, teaching, report, reminders] = await Promise.all([
         loadWorkspace(currentSession),
         loadOperations(currentSession),
@@ -266,7 +288,7 @@ function App() {
         loadPaymentReminders(currentSession).catch(() => []),
       ]);
       applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
-      applyOperations(operations, setLocations, setStaff, setPlans, setPayments);
+      applyOperations(operations, setLocations, setStaff, setPlans, setPayments, setSubscriptions);
       setPaymentStudentId((current) =>
         bundle.students.some((student) => student.student_id === current)
           ? current
@@ -931,6 +953,7 @@ function App() {
           due_date: paymentDueDate || null,
           discount_minor: 0,
           note: plan.name,
+          auto_renew: paymentAutoRenew,
         }, session);
         await syncWorkspace(session);
         setShowPaymentForm(false);
@@ -948,10 +971,109 @@ function App() {
       studentId: paymentStudentId,
       planId: paymentPlanId,
       amount: plan.price,
+      adjustedAmount: plan.price,
+      paidAmount: 0,
+      refundedAmount: 0,
+      balanceAmount: plan.price,
       dueDate: paymentDueDate,
       status: "pending",
     }]);
     setShowPaymentForm(false);
+  };
+
+  const openPaymentAction = (payment: PaymentDemo, type: "partial" | "refund" | "adjustment") => {
+    setPaymentActionId(payment.id);
+    setPaymentActionType(type);
+    setPaymentActionReason("");
+    setPaymentAdjustmentDirection("decrease");
+    const maxAmount = type === "refund"
+      ? Math.max(0, payment.paidAmount - payment.refundedAmount)
+      : type === "partial"
+        ? payment.balanceAmount
+        : Math.min(payment.adjustedAmount, payment.balanceAmount || payment.adjustedAmount);
+    setPaymentActionAmount(maxAmount > 0 ? String(maxAmount) : "");
+  };
+
+  const submitPaymentAction = async () => {
+    if (!session || !paymentActionId || !paymentActionType || paymentActionSaving) return;
+    const amount = Number(paymentActionAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setWorkspaceError("Вкажіть коректну суму.");
+      return;
+    }
+    setPaymentActionSaving(true);
+    try {
+      setWorkspaceError("");
+      const amount_minor = Math.round(amount * 100);
+      if (paymentActionType === "partial") {
+        await apiPost(`/payments/${paymentActionId}/receipts`, {
+          amount_minor,
+          method: paymentActionMethod,
+          note: paymentActionReason.trim() || "Часткова оплата",
+        }, session);
+      } else if (paymentActionType === "refund") {
+        await apiPost(`/payments/${paymentActionId}/refunds`, {
+          amount_minor,
+          note: paymentActionReason.trim() || "Повернення коштів",
+          reduce_charge: true,
+        }, session);
+      } else {
+        await apiPost(`/payments/${paymentActionId}/adjustments`, {
+          direction: paymentAdjustmentDirection,
+          amount_minor,
+          reason: paymentActionReason.trim() || "Коригування нарахування",
+        }, session);
+      }
+      await syncWorkspace(session);
+      setPaymentActionId(null);
+      setPaymentActionType(null);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося виконати фінансову операцію.");
+    } finally {
+      setPaymentActionSaving(false);
+    }
+  };
+
+  const toggleAutoRenew = async (subscriptionId: EntityId, next: boolean) => {
+    if (!session) return;
+    try {
+      await apiPatch(`/student-subscriptions/${subscriptionId}/auto-renew`, { auto_renew: next }, session);
+      await syncWorkspace(session);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося змінити автопродовження.");
+    }
+  };
+
+  const openPauseSubscription = (subscriptionId: EntityId) => {
+    setPauseSubscriptionId(subscriptionId);
+    setPauseStart(localDateInput(new Date()));
+    setPauseResumeOn("");
+    setPauseNote("");
+  };
+
+  const submitPauseSubscription = async () => {
+    if (!session || !pauseSubscriptionId) return;
+    try {
+      await apiPost(`/student-subscriptions/${pauseSubscriptionId}/pause`, {
+        starts_on: pauseStart,
+        resume_on: pauseResumeOn || null,
+        note: pauseNote.trim() || null,
+      }, session);
+      await syncWorkspace(session);
+      setPauseSubscriptionId(null);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося поставити абонемент на паузу.");
+    }
+  };
+
+  const resumeSubscriptionNow = async (subscriptionId: EntityId) => {
+    if (!session) return;
+    try {
+      await apiPost(`/student-subscriptions/${subscriptionId}/resume`, { resumes_on: localDateInput(new Date()) }, session);
+      await syncWorkspace(session);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося відновити абонемент.");
+    }
   };
 
   const createPlan = async () => {
@@ -994,9 +1116,9 @@ function App() {
   };
 
   const paymentTotals = {
-    paid: payments.filter((x) => x.status === "paid").reduce((sum, x) => sum + x.amount, 0),
-    pending: payments.filter((x) => x.status === "pending").reduce((sum, x) => sum + x.amount, 0),
-    overdue: payments.filter((x) => x.status === "overdue").reduce((sum, x) => sum + x.amount, 0),
+    paid: payments.reduce((sum, x) => sum + Math.max(0, x.paidAmount - x.refundedAmount), 0),
+    pending: payments.filter((x) => x.status === "pending" || x.status === "overdue").reduce((sum, x) => sum + x.balanceAmount, 0),
+    overdue: payments.filter((x) => x.status === "overdue").reduce((sum, x) => sum + x.balanceAmount, 0),
   };
 
   const attendanceValues = Object.values(attendance).flatMap((lesson) => Object.values(lesson));
