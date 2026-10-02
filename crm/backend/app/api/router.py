@@ -204,8 +204,12 @@ def groups(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.A
 
 
 @router.post("/enrollments", response_model=EnrollmentRead, status_code=201)
-def create_enrollment(data: EnrollmentCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.create_enrollment(db, org_id, data)
+def create_enrollment(
+    data: EnrollmentCreate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
+    db: Session = Depends(get_db),
+):
+    return crm.create_enrollment(db, access.organization_id, data, access.user_id)
 
 
 @router.post("/public/intake/{organization_slug}", response_model=IntakeResult, status_code=201)
