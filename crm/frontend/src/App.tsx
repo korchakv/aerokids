@@ -853,15 +853,14 @@ function App() {
 
   const createGroupFromCandidates = async () => {
     if (!selectedCandidates.length || !groupName.trim()) return;
-    const selectedLeadRows = leads.filter((x) => selectedCandidates.includes(x.id));
     if (apiEnabled && session) {
       try {
         await apiPost("/groups/form", {
           name: groupName.trim(),
           capacity: groupCapacity,
           location_id: groupLocationId || null,
-          min_age: selectedLeadRows.length ? Math.min(...selectedLeadRows.map((x) => x.age)) : null,
-          max_age: selectedLeadRows.length ? Math.max(...selectedLeadRows.map((x) => x.age)) : null,
+          min_age: null,
+          max_age: null,
           student_ids: selectedCandidates,
           schedule_slots: groupSchedule,
         }, session);
@@ -870,27 +869,15 @@ function App() {
         setShowGroupForm(false);
         return;
       } catch (error) {
-        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити заняття.");
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити групу.");
         return;
       }
-    }
-    const newStart = new Date(newLessonAt).getTime();
-    const newEnd = newStart + newLessonDuration * 60_000;
-    const overlap = lessons.find((lesson) => {
-      if (lesson.status === "cancelled") return false;
-      const start = new Date(lesson.startsAt).getTime();
-      const end = start + lesson.duration * 60_000;
-      return lesson.groupId === newLessonGroupId && newStart < end && newEnd > start;
-    });
-    if (overlap) {
-      setWorkspaceError("Час зайнятий: у цієї групи вже є заняття, яке перетинається з вибраним часом.");
-      return;
     }
     const nextId = crypto.randomUUID();
     setGroups((items) => [...items, {
       id: nextId,
       name: groupName.trim(),
-      ages: selectedCandidates.length ? ageRange(selectedLeadRows) : "—",
+      ages: "—",
       schedule: scheduleDraftLabel(groupSchedule),
       location: locations.find((location) => location.id === groupLocationId)?.name ?? "Локацію не вказано",
       capacity: groupCapacity,
@@ -1028,10 +1015,25 @@ function App() {
         setSelectedLessonId(created.id);
         setActive("Відвідування");
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити заняття.");
         return;
       }
     }
+
+    const newStart = new Date(newLessonAt).getTime();
+    const newEnd = newStart + newLessonDuration * 60_000;
+    const overlap = lessons.find((lesson) => {
+      if (lesson.status === "cancelled") return false;
+      const existingStart = new Date(lesson.startsAt).getTime();
+      const existingEnd = existingStart + lesson.duration * 60_000;
+      return lesson.groupId === newLessonGroupId && newStart < existingEnd && newEnd > existingStart;
+    });
+    if (overlap) {
+      setWorkspaceError("Час зайнятий: у цієї групи вже є заняття, яке перетинається з вибраним часом.");
+      return;
+    }
+
     const nextId = crypto.randomUUID();
     setLessons((items) => [...items, {
       id: nextId,
