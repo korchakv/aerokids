@@ -1906,3 +1906,44 @@ def test_group_detail_contains_attendance_and_billing(client):
     assert member["billing"]["status"] == "overdue"
     assert member["billing"]["amount_due_minor"] == 180000
     assert len(member["payments"]) == 1
+
+
+def test_subscription_charge_defaults_due_date_to_start_date(client):
+    org = create_org(client, "Due Date Billing", "due-date-billing")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Ніна"}).json()
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Monthly due", "price_minor": 100000, "period_days": 30},
+    ).json()
+    response = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={"student_id": student["id"], "plan_id": plan["id"], "starts_on": "2026-10-15"},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["payment"]["due_date"] == "2026-10-15"
+
+
+def test_paid_payment_cannot_be_marked_paid_twice(client):
+    org = create_org(client, "Paid Once", "paid-once")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Роман"}).json()
+    payment = client.post(
+        "/payments",
+        headers=headers,
+        json={"student_id": student["id"], "amount_minor": 50000, "due_date": "2026-10-01"},
+    ).json()
+    first = client.patch(
+        f"/payments/{payment['id']}/paid",
+        headers=headers,
+        json={"method": "cash"},
+    )
+    second = client.patch(
+        f"/payments/{payment['id']}/paid",
+        headers=headers,
+        json={"method": "card"},
+    )
+    assert first.status_code == 200, first.text
+    assert second.status_code == 409, second.text
