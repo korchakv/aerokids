@@ -278,6 +278,8 @@ function App() {
   const [showGroupCandidatePicker, setShowGroupCandidatePicker] = useState(false);
   const [groupCandidateId, setGroupCandidateId] = useState<EntityId | "">("");
   const [groupCandidateSaving, setGroupCandidateSaving] = useState(false);
+  const [selectedGroupTeacherId, setSelectedGroupTeacherId] = useState<EntityId | "">("");
+  const [groupTeacherSaving, setGroupTeacherSaving] = useState(false);
   const [paymentReminders, setPaymentReminders] = useState<ApiPaymentReminder[]>([]);
   const [reminderSavingId, setReminderSavingId] = useState<EntityId | null>(null);
   const [showStaffForm, setShowStaffForm] = useState(false);
@@ -1074,6 +1076,7 @@ function App() {
     setGroupDetail(null);
     setShowGroupCandidatePicker(false);
     setGroupCandidateId("");
+    setSelectedGroupTeacherId(groupTeacher(groupId)?.id ?? "");
     if (!apiEnabled || !session) return;
     setGroupDetailLoading(true);
     try {
@@ -1110,6 +1113,31 @@ function App() {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося додати учня до групи.");
     } finally {
       setGroupCandidateSaving(false);
+    }
+  };
+
+  const assignTeacherToSelectedGroup = async () => {
+    if (!selectedGroupId || groupTeacherSaving || !session) return;
+    setGroupTeacherSaving(true);
+    setWorkspaceError("");
+    try {
+      const currentlyAssigned = activeTeachers.filter((teacher) => teacher.groupIds.includes(selectedGroupId));
+      for (const teacher of currentlyAssigned) {
+        if (teacher.id !== selectedGroupTeacherId) {
+          await apiDelete(`/staff/${teacher.id}/groups/${selectedGroupId}`, session);
+        }
+      }
+      if (selectedGroupTeacherId) {
+        await apiPost(`/staff/${selectedGroupTeacherId}/groups`, {
+          group_id: selectedGroupId,
+          is_primary: true,
+        }, session);
+      }
+      await syncWorkspace(session);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося призначити викладача.");
+    } finally {
+      setGroupTeacherSaving(false);
     }
   };
 
@@ -1361,6 +1389,9 @@ function App() {
 
   const selectedStaff = staff.find((item) => item.id === selectedStaffId) ?? null;
   const selectedGroup = groups.find((item) => item.id === selectedGroupId) ?? null;
+  const activeTeachers = staff.filter((member) => member.role === "Викладач" && member.isActive);
+  const groupTeacher = (groupId: EntityId) => activeTeachers.find((member) => member.groupIds.includes(groupId));
+  const selectedTeacher = selectedGroupId ? groupTeacher(selectedGroupId) : undefined;
   const existingGroupCandidates = useMemo(() => {
     if (!selectedGroupId) return [];
     const memberIds = new Set(groupDetail?.members.map((member) => member.student_id) ?? selectedGroup?.members ?? []);
@@ -1958,12 +1989,19 @@ function App() {
               <strong>Ще немає створених груп</strong>
               <span>Виберіть дітей зі списку очікування нижче та сформуйте першу групу.</span>
             </div> : <div className="groupCards groupCardsPrimary">
-              {groups.map((group) => <button className="groupCard groupCardButton groupCardPrimary" key={group.id} onClick={() => openGroup(group.id)}>
-                <div className="groupCardMain"><span className="groupCardIcon">{group.name.slice(0,1)}</span><span><b>{group.name}</b><small>{group.ages} років</small></span></div>
-                <div className="groupCardInfo"><span><small>Розклад</small><b>{group.schedule}</b></span><span><small>Локація</small><b>{group.location}</b></span></div>
-                <div className="groupCardCapacity"><div><span>Заповненість</span><strong>{group.members.length}/{group.capacity}</strong></div><div className="capacityTrack"><i style={{ width: Math.min(100, group.members.length / group.capacity * 100) + "%" }} /></div></div>
-                <div className="groupCardFooter"><span>{group.members.length} учнів</span><strong>Відкрити групу →</strong></div>
-              </button>)}
+              {groups.map((group) => {
+                const teacher = groupTeacher(group.id);
+                return <button className="groupCard groupCardButton groupCardPrimary groupCardWide" key={group.id} onClick={() => openGroup(group.id)}>
+                  <div className="groupCardTitleBlock">
+                    <span className="groupCardIcon">{group.name.slice(0,1)}</span>
+                    <div><b>{group.name}</b><small>{teacher ? "Викладач: " + teacher.fullName : "Викладач не призначений"}</small></div>
+                  </div>
+                  <div className="groupCardFact"><small>Розклад</small><b>{group.schedule}</b></div>
+                  <div className="groupCardFact"><small>Локація</small><b>{group.location}</b></div>
+                  <div className="groupCardFact groupCardStudents"><small>Учні</small><b>{group.members.length}/{group.capacity}</b></div>
+                  <strong className="groupCardOpen">Відкрити групу →</strong>
+                </button>;
+              })}
             </div>}
           </article>
 
@@ -2117,9 +2155,16 @@ function App() {
           <button className="drawerClose" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>×</button>
           <p className="eyebrow">Група</p>
           <div className="groupDetailHero">
-            <div><h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2><p>{selectedGroup?.location ?? "Локація не вказана"} · {selectedGroup?.schedule ?? "Розклад не вказаний"}</p></div>
+            <div><h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2><p>{selectedGroup?.location ?? "Локація не вказана"} · {selectedGroup?.schedule ?? "Розклад не вказаний"}{selectedTeacher ? " · Викладач: " + selectedTeacher.fullName : ""}</p></div>
             <div className="groupDetailHeroActions"><strong>{groupDetail?.members.length ?? selectedGroup?.members.length ?? 0}/{groupDetail?.group.capacity ?? selectedGroup?.capacity ?? "—"}</strong>{canManageLeads && <button className="primary compact" onClick={() => { setShowGroupCandidatePicker((value) => !value); setGroupCandidateId(existingGroupCandidates[0]?.id ?? ""); }}>+ Додати учня</button>}</div>
           </div>
+          {canManageStaff && <div className="groupTeacherAssign">
+            <label>Викладач<select value={selectedGroupTeacherId} onChange={(e) => setSelectedGroupTeacherId(e.target.value)}>
+              <option value="">Не призначено</option>
+              {activeTeachers.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.fullName}</option>)}
+            </select></label>
+            <button className="search" disabled={groupTeacherSaving} onClick={assignTeacherToSelectedGroup}>{groupTeacherSaving ? "Зберігаємо…" : "Зберегти викладача"}</button>
+          </div>}
           {showGroupCandidatePicker && <div className="groupCandidatePicker">
             <div className="groupCandidatePickerHead"><div><b>Додати в існуючу групу</b><small>Доступні діти, які пройшли пробне або вже очікують групу.</small></div><span>{existingGroupCandidates.length} кандидатів</span></div>
             {existingGroupCandidates.length === 0 ? <div className="emptyState compactEmpty">Немає кандидатів після пробного, яких можна додати до цієї групи.</div> : <>
