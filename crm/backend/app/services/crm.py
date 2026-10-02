@@ -2,6 +2,7 @@ import hashlib
 import re
 from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
@@ -420,6 +421,10 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
         None,
     )
     if existing_student is not None:
+        if data.child_last_name and not existing_student.last_name:
+            existing_student.last_name = data.child_last_name
+        if data.child_phone and not existing_student.phone:
+            existing_student.phone = data.child_phone
         if data.comment and not existing_student.notes:
             existing_student.notes = data.comment
         if data.source and not existing_student.source:
@@ -441,6 +446,8 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
     student = Student(
         organization_id=organization.id,
         first_name=data.child_first_name.strip(),
+        last_name=data.child_last_name,
+        phone=data.child_phone,
         age_at_inquiry=data.child_age,
         source=data.source,
         notes=data.comment,
@@ -923,10 +930,10 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
     return {"group": group, "schedules": schedules, "members": members}
 
 
-def _comparable_dt(value: datetime) -> datetime:
-    if value.tzinfo is not None:
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
-    return value
+def _comparable_dt(value: datetime, timezone_name: str) -> datetime:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=ZoneInfo(timezone_name))
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _lesson_conflict_reason(
@@ -937,7 +944,8 @@ def _lesson_conflict_reason(
     starts_at: datetime,
     duration_minutes: int,
 ) -> str | None:
-    start = _comparable_dt(starts_at)
+    organization = require_organization(db, org_id)
+    start = _comparable_dt(starts_at, organization.timezone)
     end = start + timedelta(minutes=duration_minutes)
     sessions = list(db.scalars(
         select(LessonSession).where(
@@ -951,7 +959,7 @@ def _lesson_conflict_reason(
     )))
 
     for existing in sessions:
-        existing_start = _comparable_dt(existing.starts_at)
+        existing_start = _comparable_dt(existing.starts_at, organization.timezone)
         existing_end = existing_start + timedelta(minutes=existing.duration_minutes)
         if not (start < existing_end and end > existing_start):
             continue
