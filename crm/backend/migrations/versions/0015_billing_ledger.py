@@ -32,7 +32,7 @@ def upgrade() -> None:
         sa.Column("student_id", sa.Uuid(), sa.ForeignKey("students.id"), nullable=False),
         sa.Column("kind", sa.String(length=32), nullable=False),
         sa.Column("amount_minor", sa.Integer(), nullable=False),
-        sa.Column("method", sa.Enum("CASH", "CARD", "BANK", "OTHER", name="paymentmethod"), nullable=True),
+        sa.Column("method", sa.Enum("CASH", "CARD", "BANK", "OTHER", name="paymentmethod", create_type=False), nullable=True),
         sa.Column("note", sa.String(length=300), nullable=True),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("actor_user_id", sa.Uuid(), sa.ForeignKey("users.id"), nullable=True),
