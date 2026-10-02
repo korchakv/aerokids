@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: korchakv-aerokids-crm-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: crm-v1
+    dockerfilePath: ./crm/backend/Dockerfile
+    dockerContext: ./crm/backend
+    healthCheckPath: /ready
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: korchakv-aerokids-crm-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+      - key: AUTH_REQUIRED
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: BOOTSTRAP_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://korchakv-aerokids-crm.onrender.com
+
+  - type: web
+    name: korchakv-aerokids-crm
+    runtime: static
+    branch: crm-v1
+    rootDir: crm/frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://korchakv-aerokids-crm-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: korchakv-aerokids-crm-db
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "16"
+    databaseName: schoolcrm
+    ipAllowList: []
