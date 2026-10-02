@@ -49,3 +49,10 @@ docker compose up --build
 Публічний сайт AeroKiDS поки не переводимо з Formspree на CRM до окремого етапу стабілізації та deployment.
 
 Детальний поточний стан: `docs/status.md`.
+
+
+## Тестове розгортання
+
+Для окремого тестового середовища підготовлено Render Blueprint у корені репозиторію: `render.yaml`.
+
+Покрокова інструкція: `docs/deploy-render.md`.
