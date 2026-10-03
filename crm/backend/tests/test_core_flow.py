@@ -223,6 +223,24 @@ def test_scheduling_trial_updates_crm_status(client):
     assert detail["crm_status"] == "trial_scheduled"
 
 
+def test_new_lead_can_be_enrolled_directly(client):
+    org = create_org(client, "Direct Enrollment", "direct-enrollment")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Нова", "age_at_inquiry": 9}).json()
+    group = client.post("/groups", headers=headers, json={"name": "Direct Group", "capacity": 8}).json()
+
+    enrolled = client.post("/enrollments", headers=headers, json={
+        "student_id": student["id"],
+        "group_id": group["id"],
+        "started_at": "2026-10-03",
+    })
+    assert enrolled.status_code == 201, enrolled.text
+
+    detail = client.get(f"/students/{student['id']}", headers=headers).json()
+    assert detail["crm_status"] == "enrolled"
+    assert detail["student_status"] == "active"
+
+
 def test_waiting_list_and_group_formation(client):
     org = create_org(client, "AeroKiDS", "aerokids-groups")
     headers = {"X-Organization-Id": org["id"]}

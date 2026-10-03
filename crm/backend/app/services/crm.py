@@ -335,8 +335,7 @@ def create_enrollment(
 ) -> Enrollment:
     student = scoped_get(db, Student, org_id, data.student_id)
     group = scoped_get(db, Group, org_id, data.group_id)
-    if student.crm_status not in {CrmStatus.TRIAL_COMPLETED, CrmStatus.WAITING_FOR_GROUP}:
-        raise HTTPException(status_code=409, detail="Student must complete the trial before enrollment")
+    previous_crm_status = student.crm_status
 
     ensure_group_capacity(db, org_id, group, data.student_id)
     existing = db.scalar(select(Enrollment).where(
@@ -382,6 +381,8 @@ def create_enrollment(
             "group_name": group.name,
             "schedule_match": match.status,
             "schedule_note": note,
+            "previous_crm_status": previous_crm_status.value,
+            "skipped_funnel_stages": previous_crm_status not in {CrmStatus.TRIAL_COMPLETED, CrmStatus.WAITING_FOR_GROUP},
         },
         actor_user_id=actor_user_id,
     )

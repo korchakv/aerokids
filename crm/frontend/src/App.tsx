@@ -252,6 +252,9 @@ function App() {
   const [leadSort, setLeadSort] = useState<"priority" | "newest" | "oldest" | "trial" | "age">("priority");
   const [leadSourceFilter, setLeadSourceFilter] = useState("all");
   const [leadMoveSavingId, setLeadMoveSavingId] = useState<EntityId | null>(null);
+  const [leadProcedureTarget, setLeadProcedureTarget] = useState<LeadKanbanColumnId | null>(null);
+  const [leadEnrollmentGroupId, setLeadEnrollmentGroupId] = useState<EntityId | "">("");
+  const [leadEnrollmentSaving, setLeadEnrollmentSaving] = useState(false);
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateAgeFilter, setCandidateAgeFilter] = useState<"all" | "8-10" | "11-13">("all");
   const [candidateLevelFilter, setCandidateLevelFilter] = useState("all");
@@ -688,61 +691,53 @@ function App() {
     if (currentColumn === target) return;
     setWorkspaceError("");
 
+    // Stages that require data open the exact procedure instead of silently changing status.
     if (target === "trial") {
       openLead(lead.id);
+      setLeadProcedureTarget("trial");
+      if (!lead.trialAt) setTrialAt(toLocalDateTimeInput(new Date().toISOString()));
       window.setTimeout(() => setTrialMode("schedule"), 0);
-      return;
-    }
-    if (target === "closed") {
-      openLead(lead.id);
-      window.setTimeout(() => setPostTrialMode("close"), 0);
       return;
     }
     if (target === "after_trial") {
       openLead(lead.id);
+      setLeadProcedureTarget("after_trial");
+      if (!lead.trialAt) setTrialAt(toLocalDateTimeInput(new Date().toISOString()));
       window.setTimeout(() => setTrialMode("complete"), 0);
       return;
     }
+    if (target === "no_show") {
+      openLead(lead.id);
+      setLeadProcedureTarget("no_show");
+      if (!lead.trialAt) setTrialAt(toLocalDateTimeInput(new Date().toISOString()));
+      window.setTimeout(() => setTrialMode("complete"), 0);
+      return;
+    }
+    if (target === "waiting") {
+      openLead(lead.id);
+      setLeadProcedureTarget("waiting");
+      return;
+    }
+    if (target === "closed") {
+      openLead(lead.id);
+      setLeadProcedureTarget("closed");
+      window.setTimeout(() => setPostTrialMode("close"), 0);
+      return;
+    }
 
+    // "Нова" and "Зв'язались" have no mandatory procedure.
     setLeadMoveSavingId(lead.id);
     try {
       if (apiEnabled && session) {
-        if (target === "no_show") {
-          if (!lead.trialId) {
-            setWorkspaceError("Спочатку заплануйте пробне заняття.");
-            return;
-          }
-          await apiPatch(`/trial-lessons/${lead.trialId}/complete`, {
-            status: "no_show",
-            recommended_level: null,
-            teacher_notes: null,
-          }, session);
-        } else if (target === "waiting") {
-          if (lead.trialResult !== "completed") {
-            setWorkspaceError("Перед переведенням в «Очікує групу» потрібно завершити пробне заняття.");
-            openLead(lead.id);
-            window.setTimeout(() => setTrialMode("complete"), 0);
-            return;
-          }
-          await apiPatch(`/students/${lead.id}/lead-outcome`, {
-            crm_status: "waiting_for_group",
-            next_contact_at: null,
-            close_reason: null,
-            close_note: null,
-          }, session);
-        } else {
-          const status = target === "new" ? "new" : "contacted";
-          await apiPatch(`/students/${lead.id}/crm-status`, { crm_status: status }, session);
-        }
+        const status = target === "new" ? "new" : "contacted";
+        await apiPatch(`/students/${lead.id}/crm-status`, { crm_status: status }, session);
         await syncWorkspace(session);
-        return;
+      } else {
+        setLeads((items) => items.map((item) => item.id !== lead.id ? item : {
+          ...item,
+          status: target === "new" ? "Нова" : "Зв'язались",
+        }));
       }
-
-      setLeads((items) => items.map((item) => item.id !== lead.id ? item : {
-        ...item,
-        status: target === "new" ? "Нова" : target === "waiting" ? "Очікує групу" : "Зв'язались",
-        trialResult: target === "no_show" ? "no_show" : item.trialResult,
-      }));
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося перемістити заявку.");
     } finally {
@@ -780,7 +775,12 @@ function App() {
           }, session);
         }
         await syncWorkspace(session);
-        setTrialMode(null);
+        if (leadProcedureTarget === "after_trial" || leadProcedureTarget === "no_show") {
+          setTrialMode("complete");
+        } else {
+          setTrialMode(null);
+          setLeadProcedureTarget(null);
+        }
         return;
       } catch {
         return;
@@ -798,17 +798,28 @@ function App() {
 
   const completeTrial = async (result: "completed" | "no_show" | "cancelled") => {
     if (!selected) return;
-    if (apiEnabled && session && selected.trialId) {
+    if (apiEnabled && session) {
       try {
-        await apiPatch(`/trial-lessons/${selected.trialId}/complete`, {
+        let trialId = selected.trialId;
+        if (!trialId) {
+          const created = await apiPost<{ id: EntityId }>("/trial-lessons", {
+            student_id: selected.id,
+            location_id: trialLocationId || null,
+            starts_at: new Date(trialAt).toISOString(),
+          }, session);
+          trialId = created.id;
+        }
+        await apiPatch(`/trial-lessons/${trialId}/complete`, {
           status: result,
           recommended_level: result === "completed" ? recommendedLevel : null,
           teacher_notes: teacherNotes || null,
         }, session);
         await syncWorkspace(session);
         setTrialMode(null);
+        setLeadProcedureTarget(null);
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти результат пробного.");
         return;
       }
     }
@@ -820,6 +831,7 @@ function App() {
       teacherNotes: teacherNotes || item.teacherNotes,
     } : item));
     setTrialMode(null);
+    setLeadProcedureTarget(null);
   };
 
   const openLead = (id: EntityId) => {
@@ -827,6 +839,8 @@ function App() {
     setTrialMode(null);
     setPostTrialMode(null);
     setPreferenceMode(false);
+    setLeadProcedureTarget(null);
+    setLeadEnrollmentGroupId("");
     const lead = leads.find((item) => item.id === id);
     if (lead?.trialAt) setTrialAt(toLocalDateTimeInput(lead.trialAt));
     if (lead?.trialLocation) setTrialLocation(lead.trialLocation);
@@ -906,6 +920,35 @@ function App() {
     if (!selected) return;
     const status = selected.trialResult === "completed" ? "trial_completed" : "contacted";
     void saveLeadOutcome(status);
+  };
+
+  const enrollLeadDirectly = async () => {
+    if (!selected || !leadEnrollmentGroupId || leadEnrollmentSaving) return;
+    setLeadEnrollmentSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiPost("/enrollments", {
+          student_id: selected.id,
+          group_id: leadEnrollmentGroupId,
+          started_at: localDateInput(new Date()),
+        }, session);
+        await syncWorkspace(session);
+      } else {
+        setGroups((items) => items.map((group) => group.id === leadEnrollmentGroupId
+          ? { ...group, members: Array.from(new Set([...group.members, selected.id])) }
+          : group));
+        setLeads((items) => items.map((lead) => lead.id === selected.id ? { ...lead, status: "Зарахований" } : lead));
+      }
+      setLeadProcedureTarget(null);
+      setSelectedId(null);
+      setSelectedStudentId(selected.id);
+      setActive("Учні");
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зарахувати дитину до групи.");
+    } finally {
+      setLeadEnrollmentSaving(false);
+    }
   };
 
   const toggleCandidate = (id: EntityId) => {
@@ -2043,7 +2086,7 @@ function App() {
             <button className={"kanbanActionCounter " + (leadFilter === "action" ? "active" : "")} onClick={() => setLeadFilter("action")}>
               <span>Потрібна дія</span><strong>{leadActionCount}</strong>
             </button>
-            <span className="kanbanHint">Перетягуйте картки між етапами. Для пробного, результату та закриття CRM попросить потрібні дані.</span>
+            <span className="kanbanHint">Картку можна переносити одразу на будь-який етап. Якщо цільовому етапу потрібні дані, CRM відкриє тільки необхідну процедуру.</span>
           </div>
           <LeadKanban leads={visibleLeads.filter((lead) => lead.status !== "Зарахований")} onOpen={openLead} onMove={moveLeadOnBoard} movingId={leadMoveSavingId} />
         </section>}
@@ -2863,10 +2906,11 @@ function App() {
           </div>}
 
           {trialMode === "complete" && <div className="workflowBox">
-            <div className="workflowHead"><h3>Результат пробного</h3><button onClick={() => setTrialMode(null)}>×</button></div>
+            <div className="workflowHead"><h3>{leadProcedureTarget === "no_show" ? "Зафіксувати пропущене пробне" : "Результат пробного"}</h3><button onClick={() => { setTrialMode(null); setLeadProcedureTarget(null); }}>×</button></div>
+            {!selected.trialId && <><DateTimeEditor label="Коли було пробне" value={trialAt} onChange={setTrialAt} /><label>Локація<select value={trialLocationId} onChange={(e) => setTrialLocationId(e.target.value)}><option value="">Без локації</option>{locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label></>}
             <label>Рекомендований рівень<select value={recommendedLevel} onChange={(e) => setRecommendedLevel(e.target.value)}><option>Початковий</option><option>Середній</option><option>Просунутий</option></select></label>
             <label>Коментар викладача<textarea value={teacherNotes} onChange={(e) => setTeacherNotes(e.target.value)} placeholder="Що сподобалось, як дитина справилась, що рекомендуємо" /></label>
-            <div className="resultActions"><button className="primary" onClick={() => completeTrial("completed")}>Пробне пройдено</button><button className="search" onClick={() => completeTrial("no_show")}>Не прийшов</button><button className="search" onClick={() => completeTrial("cancelled")}>Скасували</button></div>
+            <div className="resultActions">{leadProcedureTarget !== "no_show" && <button className="primary" onClick={() => completeTrial("completed")}>Пробне пройдено</button>}<button className={leadProcedureTarget === "no_show" ? "primary" : "search"} onClick={() => completeTrial("no_show")}>Не прийшов</button>{leadProcedureTarget !== "no_show" && <button className="search" onClick={() => completeTrial("cancelled")}>Скасували</button>}</div>
           </div>}
 
           {selected.trialResult === "completed" && <div className="resultCard postTrialCard">
@@ -2882,6 +2926,17 @@ function App() {
               </div>
             </>}
             {selected.status === "Очікує групу" && <small>Готові навчатися · потрібно підібрати групу.</small>}
+          </div>}
+
+          {leadProcedureTarget === "waiting" && <div className="workflowBox leadDirectEnrollmentStep">
+            <div className="workflowHead"><h3>Зарахувати в групу</h3><button onClick={() => { setLeadProcedureTarget(null); setLeadEnrollmentGroupId(""); }}>×</button></div>
+            <p className="softPreferenceHint">Попередні етапи можна пропустити. Для зарахування обов’язково лише обрати групу з вільним місцем.</p>
+            <label>Група<select value={leadEnrollmentGroupId} onChange={(e) => setLeadEnrollmentGroupId(e.target.value)}>
+              <option value="">Оберіть групу</option>
+              {groups.filter((group) => group.members.length < group.capacity).map((group) => <option value={group.id} key={group.id}>{group.name} · {group.schedule} · {group.location} · вільно {group.capacity - group.members.length}</option>)}
+            </select></label>
+            {groups.length > 0 && groups.every((group) => group.members.length >= group.capacity) && <div className="emptyState compactEmpty">Немає груп із вільними місцями.</div>}
+            <button className="primary full" disabled={!leadEnrollmentGroupId || leadEnrollmentSaving} onClick={enrollLeadDirectly}>{leadEnrollmentSaving ? "Зараховуємо…" : "Зарахувати дитину"}</button>
           </div>}
 
           {selected.trialResult === "no_show" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="resultCard noShowCard">
