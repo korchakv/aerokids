@@ -284,6 +284,34 @@ def test_waiting_list_and_group_formation(client):
         assert detail["student_status"] == "active"
 
 
+def test_empty_group_can_be_created_with_schedule(client):
+    org = create_org(client, "Precreated Groups", "precreated-groups")
+    headers = {"X-Organization-Id": org["id"]}
+
+    response = client.post(
+        "/groups/form",
+        headers=headers,
+        json={
+            "name": "Ранкова група",
+            "capacity": 8,
+            "student_ids": [],
+            "schedule_slots": [
+                {"weekday": 1, "start_time": "10:00", "duration_minutes": 60},
+                {"weekday": 3, "start_time": "10:00", "duration_minutes": 60},
+            ],
+        },
+    )
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["enrolled_student_ids"] == []
+    group_id = payload["group"]["id"]
+
+    schedules = client.get(f"/group-schedules?group_id={group_id}", headers=headers)
+    assert schedules.status_code == 200, schedules.text
+    assert len(schedules.json()) == 2
+    assert {item["weekday"] for item in schedules.json()} == {1, 3}
+
+
 def test_group_formation_rejects_cross_tenant_student(client):
     org_a = create_org(client, "School A", "school-a-form")
     org_b = create_org(client, "School B", "school-b-form")

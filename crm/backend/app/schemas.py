@@ -421,7 +421,7 @@ class GroupFormationCreate(BaseModel):
     capacity: int = Field(default=8, ge=1, le=100)
     min_age: int | None = Field(default=None, ge=3, le=30)
     max_age: int | None = Field(default=None, ge=3, le=30)
-    student_ids: list[UUID] = Field(min_length=1)
+    student_ids: list[UUID] = Field(default_factory=list)
     schedule_slots: list[GroupFormationScheduleSlot] = Field(default_factory=list)
 
     _name = field_validator("name")(normalize_required_text)
