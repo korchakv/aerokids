@@ -457,7 +457,7 @@ function App() {
     });
 
     if (leadSourceFilter !== "all") {
-      items = items.filter((item) => (item.source ?? "").toLowerCase() === leadSourceFilter);
+      items = items.filter((item) => canonicalLeadSource(item.source) === leadSourceFilter);
     }
 
     items = [...items].sort((a, b) => {
@@ -1672,7 +1672,7 @@ function App() {
             <div className="leadControls">
               <label className="leadSort">Джерело<select value={leadSourceFilter} onChange={(e) => setLeadSourceFilter(e.target.value)}>
                 <option value="all">Усі джерела</option>
-                {Array.from(new Set(leads.map((lead) => (lead.source ?? "").toLowerCase()).filter(Boolean))).sort().map((source) => <option value={source} key={source}>{leadSourceLabel(source)}</option>)}
+                {Array.from(new Set(leads.map((lead) => canonicalLeadSource(lead.source)).filter(Boolean))).sort().map((source) => <option value={source} key={source}>{leadSourceLabel(source)}</option>)}
               </select></label>
               <label className="leadSort">Сортування<select value={leadSort} onChange={(e) => setLeadSort(e.target.value as typeof leadSort)}>
                 <option value="priority">Потребують дії</option>
@@ -2810,6 +2810,24 @@ function closeReasonLabel(reason: string | null | undefined) {
   return reason ? (labels[reason] ?? reason) : "Не вказано";
 }
 
+function canonicalLeadSource(source: string | null | undefined) {
+  const value = (source ?? "").trim().toLowerCase();
+  const aliases: Record<string, string> = {
+    iphone: "phone",
+    телефон: "phone",
+    дзвінок: "phone",
+    site: "website",
+    сайт: "website",
+    insta: "instagram",
+    referral: "recommendation",
+    рекомендація: "recommendation",
+    "walk_in": "walk-in",
+    "walk in": "walk-in",
+    "google maps": "maps",
+  };
+  return aliases[value] ?? value;
+}
+
 function leadSourceLabel(source: string | null | undefined) {
   const labels: Record<string, string> = {
     phone: "Телефон",
@@ -2825,7 +2843,8 @@ function leadSourceLabel(source: string | null | undefined) {
     other: "Інше",
   };
   if (!source) return "Не вказано";
-  return labels[source.toLowerCase()] ?? source;
+  const canonical = canonicalLeadSource(source);
+  return labels[canonical] ?? source;
 }
 
 

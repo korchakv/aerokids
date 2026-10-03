@@ -72,6 +72,37 @@ def normalize_optional_text(value: str | None) -> str | None:
     value = re.sub(r"\s+", " ", value.strip())
     return value or None
 
+def normalize_lead_source(value: str | None) -> str | None:
+    if value is None:
+        return None
+    raw = re.sub(r"\s+", " ", value.strip()).lower()
+    if not raw:
+        return None
+    aliases = {
+        "phone": "phone",
+        "iphone": "phone",
+        "телефон": "phone",
+        "дзвінок": "phone",
+        "website": "website",
+        "site": "website",
+        "сайт": "website",
+        "instagram": "instagram",
+        "insta": "instagram",
+        "recommendation": "recommendation",
+        "referral": "recommendation",
+        "рекомендація": "recommendation",
+        "walk-in": "walk-in",
+        "walk_in": "walk-in",
+        "walk in": "walk-in",
+        "facebook": "facebook",
+        "tiktok": "tiktok",
+        "google": "google",
+        "maps": "maps",
+        "google maps": "maps",
+        "other": "other",
+    }
+    return aliases.get(raw, raw)
+
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -186,6 +217,11 @@ class StudentCreate(BaseModel):
     def valid_phone(cls, value: str | None) -> str | None:
         return normalize_ua_phone(value) if value and value.strip() else None
 
+    @field_validator("source")
+    @classmethod
+    def valid_source(cls, value: str | None) -> str | None:
+        return normalize_lead_source(value)
+
 
 class StudentRead(ORMModel):
     id: UUID
@@ -291,6 +327,11 @@ class IntakeCreate(BaseModel):
     @classmethod
     def valid_child_phone(cls, value: str | None) -> str | None:
         return normalize_ua_phone(value) if value and value.strip() else None
+
+    @field_validator("source")
+    @classmethod
+    def valid_intake_source(cls, value: str) -> str:
+        return normalize_lead_source(value) or "website"
 
     _contact_name = field_validator("contact_name")(normalize_person_name)
     _phone = field_validator("phone")(normalize_ua_phone)

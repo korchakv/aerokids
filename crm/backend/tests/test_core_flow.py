@@ -1198,6 +1198,29 @@ def test_audit_events_follow_student_workflow_and_are_tenant_scoped(client):
     assert foreign.json() == []
 
 
+def test_manual_intake_normalizes_phone_source_aliases(client):
+    org = create_org(client, "AeroKiDS", "manual-source-normalization")
+    headers = {"X-Organization-Id": org["id"]}
+
+    for index, raw_source in enumerate(("phone", "Phone", "iPhone", "Телефон"), start=1):
+        response = client.post(
+            "/intake",
+            headers=headers,
+            json={
+                "child_first_name": f"Марко{index}",
+                "child_age": 9 + index,
+                "contact_name": "Оксана Петренко",
+                "phone": f"06722233{40 + index}",
+                "source": raw_source,
+            },
+        )
+        assert response.status_code == 201, response.text
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    assert {item["source"] for item in leads.json()} == {"phone"}
+
+
 def test_authenticated_manual_intake_creates_real_lead(client):
     org = create_org(client, "AeroKiDS", "manual-intake")
     headers = {"X-Organization-Id": org["id"]}
