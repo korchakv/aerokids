@@ -168,6 +168,12 @@ html[data-theme="light"] .themeToggleTrack i{transform:translateX(16px)}
 html[data-theme="light"] body,html[data-theme="light"] #root{background:var(--ak-bg);color:var(--ak-text)}
 html[data-theme="light"] .shell{background:var(--ak-bg);color:var(--ak-text)}
 html[data-theme="light"] .primary{background:var(--ak-accent);color:var(--ak-primary-ink)}
+html[data-theme="light"] nav button:hover,html[data-theme="light"] nav button.active{background:var(--ak-surface-2);color:var(--ak-text)}
+html[data-theme="light"] .stats strong,html[data-theme="light"] .suggestion strong{color:var(--ak-text)}
+html[data-theme="light"] .mark{color:var(--ak-primary-ink)}
+html[data-theme="light"] .attendanceButtons button.active{color:var(--ak-text)}
+html[data-theme="light"] .groupBackButton:hover,html[data-theme="light"] .groupPageClose:hover{color:var(--ak-text)}
+html[data-theme="light"] .groupModal input[type="date"]{color-scheme:light}
 html[data-theme="light"] .search,html[data-theme="light"] .themeToggle{background:var(--ak-surface);color:var(--ak-text-soft);border-color:var(--ak-border)}
 html[data-theme="light"] .panel,html[data-theme="light"] .stats article,html[data-theme="light"] .paymentStats article,html[data-theme="light"] .groupCard,html[data-theme="light"] .contactCard,html[data-theme="light"] .noteBox,html[data-theme="light"] .workflowBox,html[data-theme="light"] .groupModal,html[data-theme="light"] .drawer,html[data-theme="light"] .dayColumn,html[data-theme="light"] .lessonDetailsEditor{box-shadow:0 8px 28px rgba(36,63,60,.05)}
 html[data-theme="light"] input,html[data-theme="light"] select,html[data-theme="light"] textarea{background:var(--ak-surface);color:var(--ak-text);border-color:var(--ak-border);color-scheme:light}
