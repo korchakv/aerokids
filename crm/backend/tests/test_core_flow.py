@@ -1202,12 +1202,13 @@ def test_manual_intake_normalizes_phone_source_aliases(client):
     org = create_org(client, "AeroKiDS", "manual-source-normalization")
     headers = {"X-Organization-Id": org["id"]}
 
-    for index, raw_source in enumerate(("phone", "Phone", "iPhone", "Телефон"), start=1):
+    cases = (("phone", "Марко"), ("Phone", "Іван"), ("iPhone", "Олег"), ("Телефон", "Назар"))
+    for index, (raw_source, child_name) in enumerate(cases, start=1):
         response = client.post(
             "/intake",
             headers=headers,
             json={
-                "child_first_name": f"Марко{index}",
+                "child_first_name": child_name,
                 "child_age": 9 + index,
                 "contact_name": "Оксана Петренко",
                 "phone": f"06722233{40 + index}",
