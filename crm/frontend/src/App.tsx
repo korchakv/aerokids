@@ -2075,24 +2075,19 @@ function App() {
           setActive(item);
         }} className={active === item ? "active" : ""} key={item}><UiIcon name={navigationIcon(item)} size={17} /><span className="navLabel">{item}</span></button>)}</nav>
         <div className="asideFooter">
-          <button
-            className="themeToggle asideThemeToggle"
-            type="button"
-            role="switch"
-            aria-checked={theme === "light"}
-            aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"}
-            onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
-          >
-            <span className="themeToggleTrack" aria-hidden="true"><i>{theme === "dark" ? "☾" : "☀"}</i></span>
-            <span>{theme === "dark" ? "Темна тема" : "Світла тема"}</span>
-          </button>
           <small>MVP 1 · crm-v1</small>
         </div>
       </aside>
 
       <main>
         <header>
-          <div><p className="eyebrow">{headerContext}</p><h1>{active}</h1></div>
+          <div className="headerTitleBar">
+            <div><p className="eyebrow">{headerContext}</p><h1>{active}</h1></div>
+            <div className="mobileTopIcons">
+              <button className="search iconButton mobileThemeButton" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} title={theme === "dark" ? "Світла тема" : "Темна тема"} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}><UiIcon name={theme === "dark" ? "sun" : "moon"} size={19} /></button>
+              {session && <button className="search iconButton mobileLogoutButton" aria-label="Вийти" title="Вийти" onClick={() => { clearSession(); setSession(null); }}><UiIcon name="logout" size={19} /></button>}
+            </div>
+          </div>
           <div className="headerActions">
             {session && <div className={"orgSwitcher " + (session.user.memberships.length === 1 ? "singleOrg" : "multiOrg")}>
               <select value={session.organizationId} onChange={(e) => { setSession(changeOrganization(session, e.target.value)); setActive("Дашборд"); }}>
@@ -2244,6 +2239,21 @@ function App() {
             <div className="kanbanSummaryStat attention"><span>Потрібна дія</span><strong>{leadActionCount}</strong></div>
             <span className="kanbanHint">Етапи вже видно в колонках. Зверху лишили тільки джерело та порядок карток усередині етапів.</span>
           </div>
+          <details className="mobileLeadTools">
+            <summary><UiIcon name="settings" size={16} /><span>Фільтри</span>{(leadSourceFilter !== "all" || leadSort !== "priority") && <i>●</i>}</summary>
+            <div className="mobileLeadToolsBody">
+              <label>Джерело<select value={leadSourceFilter} onChange={(e) => setLeadSourceFilter(e.target.value)}>
+                <option value="all">Усі джерела</option>
+                {Array.from(new Set(leads.map((lead) => canonicalLeadSource(lead.source)).filter(Boolean))).sort().map((source) => <option value={source} key={source}>{leadSourceLabel(source)}</option>)}
+              </select></label>
+              <label>Порядок<select value={leadSort} onChange={(e) => setLeadSort(e.target.value as typeof leadSort)}>
+                <option value="priority">Термінові спочатку</option>
+                <option value="next_action">Найближча дія</option>
+                <option value="newest">Нові заявки</option>
+              </select></label>
+              <div className="mobileLeadStats"><span>В роботі <b>{leadActiveCount}</b></span><span>Потрібна дія <b>{leadActionCount}</b></span></div>
+            </div>
+          </details>
           <LeadKanban leads={visibleLeads.filter((lead) => lead.status !== "Зарахований")} onOpen={openLead} onMove={moveLeadOnBoard} movingId={leadMoveSavingId} />
         </section>}
 
@@ -2311,6 +2321,40 @@ function App() {
               <span className="completed"><i></i>Проведено</span>
               <span className="missed"><i></i>Не проведено</span>
               {scheduleFilterGroupId === "all" && <span className="trial"><i></i>Пробне</span>}
+            </div>
+            <div className="mobileScheduleAgenda">
+              {scheduleWeekDays.map((date) => {
+                const dayKey = localDateInput(date);
+                const dayLessons = lessonsThisWeek.filter((lesson) => localDateInput(new Date(lesson.startsAt)) === dayKey);
+                const dayTrials = trialsThisWeek.filter((lead) => lead.trialAt && localDateInput(new Date(lead.trialAt)) === dayKey);
+                const items = [...dayLessons.map((lesson) => ({ kind: "lesson" as const, at: lesson.startsAt, lesson })), ...dayTrials.map((lead) => ({ kind: "trial" as const, at: lead.trialAt!, lead }))].sort((a,b)=>dateValue(a.at)-dateValue(b.at));
+                if (items.length === 0) return null;
+                const isToday = dayKey === todayKey;
+                return <section className={"mobileScheduleDay " + (isToday ? "today" : "")} key={"mobile-"+dayKey}>
+                  <div className="mobileScheduleDayHead"><b>{date.toLocaleDateString("uk-UA",{weekday:"short",day:"2-digit",month:"2-digit"})}</b>{isToday && <span>Сьогодні</span>}</div>
+                  <div className="mobileScheduleRows">
+                    {items.map((item) => {
+                      if(item.kind === "trial"){
+                        return <button className="mobileScheduleRow trial" key={"mtrial-"+item.lead.id} onClick={() => openLead(item.lead.id)}>
+                          <time>{new Date(item.at).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"})}</time>
+                          <span><b>{item.lead.child}</b><small>Пробне</small></span>
+                          <i>›</i>
+                        </button>;
+                      }
+                      const group = groups.find((g)=>g.id===item.lesson.groupId);
+                      const isPast = dateValue(item.lesson.startsAt) < Date.now();
+                      const state = item.lesson.status === "completed" ? "completed" : isPast ? "missed" : "planned";
+                      const label = state === "completed" ? "Проведено" : state === "missed" ? "Не проведено" : "Заплановано";
+                      return <button className={"mobileScheduleRow "+state} key={"mlesson-"+item.lesson.id} onClick={()=>goToLesson(item.lesson.id)}>
+                        <time>{new Date(item.at).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"})}</time>
+                        <span><b>{group?.name ?? "Група"}</b><small>{label}</small></span>
+                        <i>›</i>
+                      </button>;
+                    })}
+                  </div>
+                </section>;
+              })}
+              {lessonsThisWeek.length === 0 && trialsThisWeek.length === 0 && <div className="mobileScheduleEmpty">На цей тиждень подій немає.</div>}
             </div>
             <div className="weekGrid weekGridConcrete scheduleWeekClear">
               {scheduleWeekDays.map((date) => {

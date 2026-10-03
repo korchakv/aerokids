@@ -899,3 +899,134 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 
 .drawerClose,.groupPageClose{display:grid;place-items:center}
 .drawerClose svg,.groupPageClose svg{pointer-events:none}
+
+/* Mobile UX v7: compact controls, groups and agenda */
+.headerTitleBar{min-width:0}
+.mobileTopIcons,.mobileLeadTools,.mobileScheduleAgenda{display:none}
+
+@media(max-width:720px){
+  /* Header: page title left, theme/logout top-right. */
+  header{gap:7px!important}
+  .headerTitleBar{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important}
+  .headerTitleBar>div:first-child{min-width:0}
+  .mobileTopIcons{display:flex!important;align-items:center;gap:6px;flex:0 0 auto}
+  .mobileTopIcons .iconButton{width:38px!important;min-width:38px!important;height:38px!important;border-radius:10px!important}
+  .mobileThemeButton{color:var(--ak-accent-text)!important}
+  .mobileLogoutButton{color:#d96c75!important}
+  .headerActions .headerThemeButton,.headerActions .logoutButton{display:none!important}
+  .headerActions{gap:6px!important}
+  .globalSearchShell{flex:0 0 40px!important;width:40px!important;min-width:40px!important}
+  .globalSearchTrigger{width:40px!important;height:40px!important;min-width:40px!important}
+  .headerPrimaryAction{min-height:40px!important}
+
+  /* Leads: hide funnel/filter chrome until requested. */
+  .leadsPage{padding:10px!important;min-height:0!important}
+  .leadsPage .leadsHead{margin-bottom:6px!important}
+  .leadsPage .leadsHead .eyebrow{display:none!important}
+  .leadsPage .leadsHead h2{font-size:18px!important}
+  .leadsPage .leadsHead .leadControls{display:none!important}
+  .leadsPage>.kanbanSummarySimple{display:none!important}
+  .mobileLeadTools{display:block!important;margin:0 0 8px}
+  .mobileLeadTools>summary{
+    list-style:none;display:flex;align-items:center;gap:7px;width:max-content;
+    min-height:34px;padding:7px 10px;border:1px solid var(--ak-border);border-radius:9px;
+    background:var(--ak-surface);color:var(--ak-text-soft);font-size:11px;font-weight:700;cursor:pointer
+  }
+  .mobileLeadTools>summary::-webkit-details-marker{display:none}
+  .mobileLeadTools>summary i{font-style:normal;color:#d96c75;font-size:8px}
+  .mobileLeadTools[open]>summary{border-color:var(--ak-accent-strong);color:var(--ak-accent-text)}
+  .mobileLeadToolsBody{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px;padding:9px;border:1px solid var(--ak-border);border-radius:10px;background:var(--ak-surface-2)}
+  .mobileLeadToolsBody label{display:grid;gap:4px;color:var(--ak-muted);font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+  .mobileLeadToolsBody select{width:100%;min-width:0;padding:8px;border:1px solid var(--ak-border);border-radius:8px;background:var(--ak-surface);color:var(--ak-text);font-size:11px}
+  .mobileLeadStats{grid-column:1/-1;display:flex;gap:6px}
+  .mobileLeadStats span{display:inline-flex;align-items:center;gap:5px;padding:5px 7px;border-radius:999px;background:var(--ak-surface);color:var(--ak-muted);font-size:9.5px}
+  .mobileLeadStats b{color:var(--ak-text)}
+  .leadKanban{gap:6px!important}
+  .kanbanColumn{border-radius:10px!important}
+  .kanbanColumnHead{padding:8px!important}
+  .kanbanColumnHead b{font-size:12px!important}
+  .kanbanColumnHead small{font-size:9px!important}
+
+  /* Groups: same compact list rhythm as students. */
+  .groupsPage{gap:8px!important}
+  .groupsPrimary{padding:10px!important}
+  .groupsPrimary .panelHead{margin-bottom:8px!important;gap:7px!important}
+  .groupsPrimary .panelHead .eyebrow,.groupsPrimary .sectionLead{display:none!important}
+  .groupsPrimary .panelHead h2{font-size:18px!important}
+  .groupsHeadActions{margin:0!important;gap:5px!important}
+  .groupsHeadActions .counter{min-width:30px;height:30px;padding:0 7px;font-size:10px}
+  .groupsHeadActions .search{font-size:10px!important;padding:6px 8px!important}
+  .groupsHeadActions .primary{font-size:10.5px!important;padding:7px 9px!important}
+  .groupCardsPrimary{gap:6px!important}
+  .groupCardWide{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    grid-template-rows:auto auto!important;
+    gap:4px 8px!important;
+    min-height:0!important;
+    padding:10px!important;
+    border:1px solid var(--ak-border)!important;
+    border-radius:11px!important;
+    background:var(--ak-surface)!important;
+  }
+  .groupCardTitleBlock{grid-column:1;grid-row:1;gap:9px!important;min-width:0}
+  .groupCardTitleBlock .groupCardIcon{width:34px!important;height:34px!important;flex:0 0 34px!important;font-size:12px!important}
+  .groupCardTitleBlock b{font-size:13px!important}
+  .groupCardTitleBlock small{font-size:9.5px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .groupCardFact{display:inline-flex!important;align-items:center;gap:4px!important;grid-column:1;grid-row:2;padding-left:43px;min-width:0}
+  .groupCardFact small{display:none!important}
+  .groupCardFact b{font-size:10px!important;font-weight:500!important;color:var(--ak-muted)!important}
+  .groupCardFact:nth-of-type(3){display:none!important}
+  .groupCardStudents{grid-column:2!important;grid-row:1!important;align-self:center!important;justify-self:end!important;padding:4px 7px!important;border-radius:999px;background:var(--ak-surface-2)!important}
+  .groupCardStudents b{font-size:10px!important;color:var(--ak-accent-text)!important}
+  .groupCardOpen{grid-column:2!important;grid-row:2!important;align-self:center!important;justify-self:end!important;font-size:0!important}
+  .groupCardOpen::after{content:"›";font-size:20px;line-height:1;color:var(--ak-muted)}
+  .waitingSecondary{margin-top:4px!important}
+  .waitingSecondaryHead h2{font-size:16px!important}
+  .waitingSecondaryHead p{display:none!important}
+
+  /* Schedule: mobile is a compact agenda, not seven large columns. */
+  .scheduleCalendar{padding:10px!important}
+  .scheduleToolbarClear{gap:6px!important;margin-bottom:4px!important}
+  .scheduleToolbarClear .eyebrow{display:none!important}
+  .scheduleToolbarClear h2{font-size:16px!important;line-height:1.2}
+  .scheduleWeekSummary{display:none!important}
+  .scheduleToolbarActions{display:flex!important;align-items:center!important;gap:6px!important}
+  .scheduleGroupFilter{flex:1;min-width:0}
+  .scheduleGroupFilter{font-size:0!important}
+  .scheduleGroupFilter select{height:36px!important;padding:7px 8px!important;font-size:10.5px!important;border-radius:8px!important}
+  .scheduleNav{display:grid!important;grid-template-columns:34px minmax(0,1fr) 34px!important;gap:5px!important;flex:0 0 auto}
+  .scheduleNav .search{min-width:0!important;height:36px!important;padding:6px 8px!important;font-size:10px!important}
+  .scheduleLegend,.scheduleWeekClear{display:none!important}
+  .mobileScheduleAgenda{display:grid!important;gap:6px;margin-top:8px}
+  .mobileScheduleDay{display:grid;grid-template-columns:70px minmax(0,1fr);gap:7px;align-items:start;padding:7px;border:1px solid var(--ak-border);border-radius:10px;background:var(--ak-surface-2)}
+  .mobileScheduleDay.today{border-color:var(--ak-accent-strong)}
+  .mobileScheduleDayHead{display:grid;gap:2px;padding:3px 2px}
+  .mobileScheduleDayHead b{font-size:10px;color:var(--ak-text);text-transform:capitalize}
+  .mobileScheduleDayHead span{font-size:8px;color:var(--ak-accent-text);text-transform:uppercase}
+  .mobileScheduleRows{display:grid;gap:4px}
+  .mobileScheduleRow{
+    display:grid;grid-template-columns:44px minmax(0,1fr) 12px;gap:7px;align-items:center;
+    width:100%;padding:6px 7px;border:0;border-left:3px solid var(--ak-accent-soft);
+    border-radius:7px;background:var(--ak-surface);color:var(--ak-text);text-align:left;cursor:pointer
+  }
+  .mobileScheduleRow.completed{border-left-color:#55b991}.mobileScheduleRow.missed{border-left-color:#cf7079}.mobileScheduleRow.trial{border-left-color:#9a78dd}
+  .mobileScheduleRow time{font-size:11px;font-weight:850;color:var(--ak-text)}
+  .mobileScheduleRow span{display:grid;gap:1px;min-width:0}
+  .mobileScheduleRow b{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mobileScheduleRow small{font-size:8.5px;color:var(--ak-muted)}
+  .mobileScheduleRow i{font-style:normal;color:var(--ak-muted);font-size:17px}
+  .mobileScheduleEmpty{padding:14px 8px;text-align:center;color:var(--ak-muted);font-size:10px}
+  .scheduleTools{margin-top:0!important}
+  .scheduleTools .panel{padding:10px!important}
+  .scheduleTools h2{font-size:14px!important}
+  .lessonCreate label{font-size:9px!important;margin-top:8px!important}
+  .lessonCreate input,.lessonCreate select{padding:8px!important;font-size:11px!important}
+  .scheduleTools .primary,.scheduleTools .search{min-height:36px!important;font-size:10.5px!important}
+}
+
+@media(max-width:390px){
+  .mobileLeadToolsBody{grid-template-columns:1fr}
+  .mobileLeadStats{grid-column:1}
+  .mobileScheduleDay{grid-template-columns:60px minmax(0,1fr)}
+}
