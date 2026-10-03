@@ -1755,7 +1755,7 @@ function App() {
         {active === "Дашборд" && <section className="todayDashboard">
           <div className="todayIntro">
             <div>
-              <p className="eyebrow">Сьогодні · ${new Date().toLocaleDateString("uk-UA", { weekday: "long", day: "numeric", month: "long" })}</p>
+              <p className="eyebrow">Сьогодні · {new Date().toLocaleDateString("uk-UA", { weekday: "long", day: "numeric", month: "long" })}</p>
               <h2>{dashboardTaskCount > 0 ? "Що потребує уваги" : "Усе важливе на сьогодні під контролем"}</h2>
             </div>
             {dashboardTaskCount > 0 && <span className="todayTaskCount">{dashboardTaskCount} {dashboardTaskCount === 1 ? "дія" : dashboardTaskCount < 5 ? "дії" : "дій"}</span>}
