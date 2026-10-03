@@ -281,6 +281,15 @@ class SubscriptionPlan(Base):
     price_minor: Mapped[int] = mapped_column(Integer, nullable=False)
     period_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     lessons_included: Mapped[int | None] = mapped_column(Integer)
+    usage_mode: Mapped[str] = mapped_column(String(24), default="attendance", nullable=False)
+    absent_rule: Mapped[str] = mapped_column(String(24), default="choice", nullable=False)
+    excused_rule: Mapped[str] = mapped_column(String(24), default="makeup", nullable=False)
+    late_rule: Mapped[str] = mapped_column(String(24), default="consume", nullable=False)
+    end_rule: Mapped[str] = mapped_column(String(24), default="whichever_first", nullable=False)
+    renewal_trigger: Mapped[str] = mapped_column(String(24), default="last_lesson", nullable=False)
+    allow_debt: Mapped[bool] = mapped_column(default=True, nullable=False)
+    max_lates: Mapped[int | None] = mapped_column(Integer)
+    makeup_expiry_days: Mapped[int | None] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -292,6 +301,7 @@ class StudentSubscription(Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
     student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
     plan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("subscription_plans.id"), index=True, nullable=False)
+    group_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("groups.id"), index=True)
     status: Mapped[SubscriptionStatus] = mapped_column(Enum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE, nullable=False)
     starts_on: Mapped[date] = mapped_column(Date, nullable=False)
     ends_on: Mapped[date] = mapped_column(Date, nullable=False)
@@ -300,6 +310,36 @@ class StudentSubscription(Base):
     discount_label: Mapped[str | None] = mapped_column(String(160))
     auto_renew: Mapped[bool] = mapped_column(default=False, nullable=False)
     renewal_of_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("student_subscriptions.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class SubscriptionUsage(Base):
+    __tablename__ = "subscription_usage"
+    __table_args__ = (UniqueConstraint("session_id", "student_id", name="uq_subscription_usage_session_student"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    subscription_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("student_subscriptions.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("lesson_sessions.id"), index=True, nullable=False)
+    attendance_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("attendance.id"), index=True)
+    units: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    source_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class MakeupCredit(Base):
+    __tablename__ = "makeup_credits"
+    __table_args__ = (UniqueConstraint("original_session_id", "student_id", name="uq_makeup_original_student"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    original_session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("lesson_sessions.id"), index=True, nullable=False)
+    target_session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("lesson_sessions.id"), index=True)
+    status: Mapped[str] = mapped_column(String(24), default="pending", nullable=False)
+    expires_on: Mapped[date | None] = mapped_column(Date)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 

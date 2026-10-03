@@ -509,6 +509,43 @@ def test_attendance_rejects_student_from_another_group(client):
     assert response.status_code == 409
 
 
+def test_attendance_consumes_subscription_and_creates_makeup(client):
+    org = create_org(client, "Usage School", "usage-school")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Оля"}).json()
+    client.patch(f"/students/{student['id']}/crm-status", headers=headers, json={"crm_status": "waiting_for_group"})
+    group_id = client.post("/groups/form", headers=headers, json={"name": "Usage Group", "capacity": 8, "student_ids": [student["id"]]}).json()["group"]["id"]
+    plan = client.post("/subscription-plans", headers=headers, json={
+        "name": "4 заняття", "price_minor": 100000, "period_days": 30, "lessons_included": 4,
+        "usage_mode": "attendance", "absent_rule": "choice", "excused_rule": "makeup",
+        "late_rule": "consume", "end_rule": "whichever_first", "renewal_trigger": "last_lesson", "allow_debt": True,
+    }).json()
+    charge = client.post("/billing/charges", headers=headers, json={
+        "student_id": student["id"], "plan_id": plan["id"], "group_id": group_id,
+        "starts_on": "2026-10-01", "due_date": "2026-10-01", "auto_renew": True,
+    })
+    assert charge.status_code == 201, charge.text
+
+    lesson1 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-05T17:00:00+03:00"}).json()
+    assert client.put(f"/lesson-sessions/{lesson1['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "present"}]}).status_code == 200
+    subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    assert subs[0]["used_lessons"] == 1 and subs[0]["remaining_lessons"] == 3
+
+    assert client.put(f"/lesson-sessions/{lesson1['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "excused"}]}).status_code == 200
+    subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    assert subs[0]["used_lessons"] == 0 and subs[0]["remaining_lessons"] == 4
+
+    lesson2 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-07T17:00:00+03:00"}).json()
+    assert client.put(f"/lesson-sessions/{lesson2['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "late"}]}).status_code == 200
+    subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    assert subs[0]["used_lessons"] == 1
+
+    lesson3 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-09T17:00:00+03:00"}).json()
+    assert client.put(f"/lesson-sessions/{lesson3['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "absent", "consume_lesson": True}]}).status_code == 200
+    subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    assert subs[0]["used_lessons"] == 2 and subs[0]["remaining_lessons"] == 2
+
+
 def test_subscription_and_payment_flow(client):
     org = create_org(client, "AeroKiDS", "aerokids-payments")
     headers = {"X-Organization-Id": org["id"]}

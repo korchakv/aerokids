@@ -519,6 +519,7 @@ class AttendanceMark(BaseModel):
     student_id: UUID
     status: AttendanceStatus
     note: str | None = Field(default=None, max_length=300)
+    consume_lesson: bool | None = None
 
 
 class AttendanceBulkUpdate(BaseModel):
@@ -546,6 +547,15 @@ class SubscriptionPlanCreate(BaseModel):
     price_minor: int = Field(ge=0)
     period_days: int = Field(default=30, ge=1, le=366)
     lessons_included: int | None = Field(default=None, ge=1, le=365)
+    usage_mode: Literal["attendance", "scheduled", "period"] = "attendance"
+    absent_rule: Literal["consume", "dont_consume", "choice"] = "choice"
+    excused_rule: Literal["consume", "dont_consume", "makeup"] = "makeup"
+    late_rule: Literal["consume", "dont_consume"] = "consume"
+    end_rule: Literal["lessons", "date", "whichever_first"] = "whichever_first"
+    renewal_trigger: Literal["last_lesson", "date", "manual"] = "last_lesson"
+    allow_debt: bool = True
+    max_lates: int | None = Field(default=None, ge=1, le=100)
+    makeup_expiry_days: int | None = Field(default=None, ge=1, le=366)
 
     _name = field_validator("name")(normalize_required_text)
 
@@ -557,12 +567,22 @@ class SubscriptionPlanRead(ORMModel):
     price_minor: int
     period_days: int
     lessons_included: int | None
+    usage_mode: str
+    absent_rule: str
+    excused_rule: str
+    late_rule: str
+    end_rule: str
+    renewal_trigger: str
+    allow_debt: bool
+    max_lates: int | None
+    makeup_expiry_days: int | None
     is_active: bool
 
 
 class StudentSubscriptionCreate(BaseModel):
     student_id: UUID
     plan_id: UUID
+    group_id: UUID | None = None
     starts_on: date
     price_minor: int | None = Field(default=None, ge=0)
     discount_minor: int = Field(default=0, ge=0)
@@ -575,6 +595,7 @@ class StudentSubscriptionRead(ORMModel):
     organization_id: UUID
     student_id: UUID
     plan_id: UUID
+    group_id: UUID | None
     status: SubscriptionStatus
     starts_on: date
     ends_on: date
@@ -583,6 +604,9 @@ class StudentSubscriptionRead(ORMModel):
     discount_label: str | None
     auto_renew: bool
     renewal_of_id: UUID | None
+    used_lessons: int = 0
+    remaining_lessons: int | None = None
+    needs_renewal: bool = False
 
 
 class PaymentCreate(BaseModel):
@@ -596,6 +620,7 @@ class PaymentCreate(BaseModel):
 class SubscriptionChargeCreate(BaseModel):
     student_id: UUID
     plan_id: UUID
+    group_id: UUID | None = None
     starts_on: date
     due_date: date | None = None
     discount_minor: int = Field(default=0, ge=0)
@@ -686,6 +711,9 @@ class GroupMemberAttendanceSummary(BaseModel):
 class GroupMemberBillingSummary(BaseModel):
     status: Literal["current", "upcoming", "due", "overdue", "no_plan"]
     plan_name: str | None = None
+    lessons_used: int | None = None
+    lessons_included: int | None = None
+    lessons_remaining: int | None = None
     amount_due_minor: int = 0
     next_due_date: date | None = None
     last_paid_at: datetime | None = None

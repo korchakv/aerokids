@@ -9,7 +9,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentReminder, PaymentStatus, PaymentTransaction, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPause, SubscriptionPlan, SubscriptionStatus, TrialLesson, TrialStatus, User
+from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentReminder, PaymentStatus, PaymentTransaction, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPause, SubscriptionPlan, SubscriptionStatus, SubscriptionUsage, MakeupCredit, TrialLesson, TrialStatus, User
 from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 from app.services.schedule_matching import enrollment_schedule_note, evaluate_schedule_match
 
@@ -885,6 +885,12 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
 
             latest_subscription = subscriptions[0] if subscriptions else None
             plan = scoped_get(db, SubscriptionPlan, org_id, latest_subscription.plan_id) if latest_subscription else None
+            lessons_used = None
+            lessons_remaining = None
+            if latest_subscription and plan:
+                usage_summary = subscription_usage_summary(db, org_id, latest_subscription)
+                lessons_used = usage_summary["used_lessons"]
+                lessons_remaining = usage_summary["remaining_lessons"]
             pending = [item for item in payment_rows if item.status != PaymentStatus.CANCELLED and item.balance_minor > 0]
             dated_pending = [item for item in pending if item.due_date is not None]
             overdue = [item for item in dated_pending if item.due_date < today]
@@ -905,6 +911,9 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
             billing = {
                 "status": billing_status,
                 "plan_name": plan.name if plan else None,
+                "lessons_used": lessons_used,
+                "lessons_included": plan.lessons_included if plan else None,
+                "lessons_remaining": lessons_remaining,
                 "amount_due_minor": sum(item.balance_minor for item in pending),
                 "next_due_date": next_due_date,
                 "last_paid_at": last_paid.paid_at if last_paid else None,
@@ -1137,6 +1146,142 @@ def update_lesson_session(db: Session, org_id: UUID, session_id: UUID, data, use
     return item
 
 
+def _eligible_subscription_for_session(db: Session, org_id: UUID, student_id: UUID, session: LessonSession) -> tuple[StudentSubscription, SubscriptionPlan] | None:
+    organization = require_organization(db, org_id)
+    lesson_date = _comparable_dt(session.starts_at, organization.timezone).date()
+    rows = list(db.scalars(select(StudentSubscription).where(
+        StudentSubscription.organization_id == org_id,
+        StudentSubscription.student_id == student_id,
+        StudentSubscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED]),
+    ).order_by(StudentSubscription.starts_on, StudentSubscription.created_at)))
+    for subscription in rows:
+        if subscription.group_id is not None and subscription.group_id != session.group_id:
+            continue
+        plan = scoped_get(db, SubscriptionPlan, org_id, subscription.plan_id)
+        summary = subscription_usage_summary(db, org_id, subscription)
+        if plan.end_rule in {"date", "whichever_first"} and lesson_date > subscription.ends_on:
+            continue
+        if plan.lessons_included is not None and summary["remaining_lessons"] == 0:
+            continue
+        return subscription, plan
+    return None
+
+
+def _attendance_should_consume(plan: SubscriptionPlan, status: AttendanceStatus, explicit: bool | None) -> bool:
+    if status == AttendanceStatus.PRESENT:
+        return True
+    if status == AttendanceStatus.LATE:
+        return plan.late_rule == "consume"
+    if status == AttendanceStatus.EXCUSED:
+        return plan.excused_rule == "consume"
+    if status == AttendanceStatus.ABSENT:
+        if plan.absent_rule == "consume":
+            return True
+        if plan.absent_rule == "dont_consume":
+            return False
+        return bool(explicit)
+    return False
+
+
+def _sync_makeup_credit(db: Session, org_id: UUID, session: LessonSession, student_id: UUID, plan: SubscriptionPlan | None, status: AttendanceStatus) -> None:
+    existing = db.scalar(select(MakeupCredit).where(
+        MakeupCredit.organization_id == org_id,
+        MakeupCredit.original_session_id == session.id,
+        MakeupCredit.student_id == student_id,
+    ))
+    if status == AttendanceStatus.EXCUSED and plan is not None and plan.excused_rule == "makeup":
+        expires_on = None
+        if plan.makeup_expiry_days:
+            organization = require_organization(db, org_id)
+            expires_on = _comparable_dt(session.starts_at, organization.timezone).date() + timedelta(days=plan.makeup_expiry_days)
+        if existing is None:
+            db.add(MakeupCredit(organization_id=org_id, student_id=student_id, original_session_id=session.id, status="pending", expires_on=expires_on))
+        elif existing.status == "cancelled":
+            existing.status = "pending"
+            existing.expires_on = expires_on
+    elif existing is not None and existing.status == "pending":
+        existing.status = "cancelled"
+
+
+def _complete_oldest_makeup(db: Session, org_id: UUID, student_id: UUID, target_session_id: UUID) -> None:
+    credit = db.scalar(select(MakeupCredit).where(
+        MakeupCredit.organization_id == org_id,
+        MakeupCredit.student_id == student_id,
+        MakeupCredit.status == "pending",
+        MakeupCredit.original_session_id != target_session_id,
+    ).order_by(MakeupCredit.created_at))
+    if credit is not None:
+        credit.status = "completed"
+        credit.target_session_id = target_session_id
+        credit.completed_at = datetime.now(timezone.utc)
+
+
+def _renew_after_last_lesson(db: Session, org_id: UUID, subscription: StudentSubscription, plan: SubscriptionPlan, session: LessonSession, actor_user_id: UUID | None) -> None:
+    if not subscription.auto_renew or plan.renewal_trigger != "last_lesson" or plan.lessons_included is None:
+        return
+    if subscription_usage_summary(db, org_id, subscription)["remaining_lessons"] != 0:
+        return
+    existing = db.scalar(select(StudentSubscription).where(
+        StudentSubscription.organization_id == org_id,
+        StudentSubscription.renewal_of_id == subscription.id,
+        StudentSubscription.status != SubscriptionStatus.CANCELLED,
+    ))
+    if existing is not None:
+        return
+    organization = require_organization(db, org_id)
+    next_start = _comparable_dt(session.starts_at, organization.timezone).date() + timedelta(days=1)
+    next_subscription = StudentSubscription(
+        organization_id=org_id, student_id=subscription.student_id, plan_id=plan.id, group_id=subscription.group_id,
+        status=SubscriptionStatus.ACTIVE, starts_on=next_start, ends_on=next_start + timedelta(days=plan.period_days - 1),
+        price_minor=plan.price_minor, discount_minor=0, discount_label=None, auto_renew=True, renewal_of_id=subscription.id,
+    )
+    db.add(next_subscription)
+    db.flush()
+    payment = Payment(
+        organization_id=org_id, student_id=subscription.student_id, subscription_id=next_subscription.id,
+        amount_minor=plan.price_minor, currency=organization.currency, due_date=next_start,
+        note=f"{plan.name} · продовження після останнього заняття",
+    )
+    db.add(payment)
+    subscription.status = SubscriptionStatus.EXPIRED
+    record_audit(db, org_id, "student", subscription.student_id, "subscription.renewed_after_last_lesson", {
+        "previous_subscription_id": str(subscription.id), "subscription_id": str(next_subscription.id),
+        "payment_id": str(payment.id), "session_id": str(session.id),
+    }, actor_user_id=actor_user_id)
+
+
+def _sync_attendance_usage(db: Session, org_id: UUID, session: LessonSession, attendance: Attendance, explicit_consume: bool | None, actor_user_id: UUID | None) -> None:
+    current = db.scalar(select(SubscriptionUsage).where(
+        SubscriptionUsage.organization_id == org_id,
+        SubscriptionUsage.session_id == session.id,
+        SubscriptionUsage.student_id == attendance.student_id,
+    ))
+    eligible = _eligible_subscription_for_session(db, org_id, attendance.student_id, session)
+    plan = eligible[1] if eligible else None
+    _sync_makeup_credit(db, org_id, session, attendance.student_id, plan, attendance.status)
+    should_consume = bool(plan and _attendance_should_consume(plan, attendance.status, explicit_consume))
+    if should_consume and eligible is not None:
+        subscription, plan = eligible
+        if current is None:
+            current = SubscriptionUsage(
+                organization_id=org_id, subscription_id=subscription.id, student_id=attendance.student_id,
+                session_id=session.id, attendance_id=attendance.id, units=1, source_status=attendance.status.value,
+            )
+            db.add(current)
+            db.flush()
+        else:
+            current.subscription_id = subscription.id
+            current.attendance_id = attendance.id
+            current.source_status = attendance.status.value
+        if attendance.status in {AttendanceStatus.PRESENT, AttendanceStatus.LATE}:
+            _complete_oldest_makeup(db, org_id, attendance.student_id, session.id)
+        db.flush()
+        _renew_after_last_lesson(db, org_id, subscription, plan, session, actor_user_id)
+    elif current is not None:
+        db.delete(current)
+        db.flush()
+
+
 def mark_attendance_bulk(db: Session, org_id: UUID, session_id: UUID, items, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[Attendance]:
     session = scoped_get(db, LessonSession, org_id, session_id)
     ensure_group_access(db, org_id, user_id, role, session.group_id)
@@ -1166,6 +1311,8 @@ def mark_attendance_bulk(db: Session, org_id: UUID, session_id: UUID, items, use
         else:
             row.status = mark.status
             row.note = mark.note
+        db.flush()
+        _sync_attendance_usage(db, org_id, session, row, getattr(mark, "consume_lesson", None), user_id)
         result.append(row)
 
     if roster_ids and roster_ids.issubset(set(submitted_ids)):
@@ -1297,6 +1444,7 @@ def create_student_subscription(db: Session, org_id: UUID, data) -> StudentSubsc
         organization_id=org_id,
         student_id=student.id,
         plan_id=plan.id,
+        group_id=getattr(data, "group_id", None),
         starts_on=data.starts_on,
         ends_on=ends_on,
         price_minor=price_minor,
@@ -1310,12 +1458,31 @@ def create_student_subscription(db: Session, org_id: UUID, data) -> StudentSubsc
     return item
 
 
+def subscription_usage_summary(db: Session, org_id: UUID, subscription: StudentSubscription) -> dict:
+    plan = scoped_get(db, SubscriptionPlan, org_id, subscription.plan_id)
+    used = db.scalar(select(func.coalesce(func.sum(SubscriptionUsage.units), 0)).where(
+        SubscriptionUsage.organization_id == org_id,
+        SubscriptionUsage.subscription_id == subscription.id,
+    )) or 0
+    remaining = max(0, plan.lessons_included - int(used)) if plan.lessons_included is not None else None
+    return {"used_lessons": int(used), "remaining_lessons": remaining, "needs_renewal": remaining == 1 if remaining is not None else False}
+
+
+def _attach_subscription_usage(db: Session, org_id: UUID, subscription: StudentSubscription) -> StudentSubscription:
+    summary = subscription_usage_summary(db, org_id, subscription)
+    subscription.used_lessons = summary["used_lessons"]
+    subscription.remaining_lessons = summary["remaining_lessons"]
+    subscription.needs_renewal = summary["needs_renewal"]
+    return subscription
+
+
 def list_student_subscriptions(db: Session, org_id: UUID, student_id: UUID | None = None) -> list[StudentSubscription]:
     stmt = select(StudentSubscription).where(StudentSubscription.organization_id == org_id)
     if student_id is not None:
         scoped_get(db, Student, org_id, student_id)
         stmt = stmt.where(StudentSubscription.student_id == student_id)
-    return list(db.scalars(stmt.order_by(StudentSubscription.starts_on.desc())))
+    rows = list(db.scalars(stmt.order_by(StudentSubscription.starts_on.desc())))
+    return [_attach_subscription_usage(db, org_id, row) for row in rows]
 
 
 def set_subscription_auto_renew(
@@ -1640,6 +1807,7 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
         organization_id=org_id,
         student_id=student.id,
         plan_id=plan.id,
+        group_id=getattr(data, "group_id", None),
         starts_on=data.starts_on,
         ends_on=data.starts_on + timedelta(days=plan.period_days - 1),
         price_minor=plan.price_minor,
