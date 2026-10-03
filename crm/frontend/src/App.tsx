@@ -2085,7 +2085,7 @@ function App() {
                   ? "Контакт запланований " + new Date(lead.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
                   : lead.parent + " · " + formatUaPhone(lead.phone);
                 return <button className="todayActionRow" key={"lead-" + lead.id} onClick={() => openLead(lead.id)}>
-                  <span className="todayActionType lead">Заявка</span>
+                  <span className={"todayActionType lead action-" + leadActionMeta(lead).type}>{leadActionMeta(lead).icon} {leadActionMeta(lead).label}</span>
                   <span className="todayActionText"><b>{lead.child}</b><small>{kind} · {detail}</small></span>
                   <span className="todayActionArrow">→</span>
                 </button>;
@@ -2937,10 +2937,10 @@ function App() {
                 </select>
               </label>}
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
-          {selected.nextContactAt && <div className="noteBox followUpBox"><span>Наступний контакт</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>}
+          {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : action.label}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>; })()}
           {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
           {selected.comment && <div className="noteBox"><span>Коментар</span><p>{selected.comment}</p></div>}
-          {selected.trialAt && <div className="trialSummary"><span>Пробне заняття</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
+          {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
           <div className="preferenceSummary">
             <div><span>Бажана локація</span><b>{selected.preferredLocationName ?? "Не вказано"}</b></div>
             <div><span>Бажаний час</span><b>{availabilityLabel(selected.availability ?? [])}</b></div>
@@ -3161,7 +3161,7 @@ function LeadKanban({
             {lead.preferredLocationName && <span className="locationBadge">{lead.preferredLocationName}</span>}
             {lead.recommendedLevel && <span className="levelBadge">{lead.recommendedLevel}</span>}
           </div>
-          <div className={"kanbanNextAction " + urgency}><i></i><span>{leadNextAction(lead)}</span></div>
+          {(() => { const action = leadActionMeta(lead); return <div className={"kanbanNextAction action-" + action.type + " " + urgency}><i>{urgency === "overdue" ? "!" : action.icon}</i><span><b>{urgency === "overdue" ? "Прострочено" : action.label}</b><small>{leadNextAction(lead)}</small></span></div>; })()}
           {lead.phone && <div className="kanbanPhone">{formatUaPhone(lead.phone)}</div>}
           {movingId === lead.id && <div className="kanbanSaving">Оновлюємо…</div>}
         </article>;
@@ -3198,7 +3198,7 @@ function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) =>
     <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span><span>Наступна дія</span></div>
     {leads.length === 0 && <div className="emptyState">За цим фільтром заявок немає.</div>}
     {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}>
-      <b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{leadSourceLabel(lead.source)}</span><span className="pill">{leadDisplayStatus(lead)}</span><span className={"nextAction " + (lead.nextContactAt && dateValue(lead.nextContactAt) < Date.now() ? "overdue" : "")}>{leadNextAction(lead)}</span>
+      <b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{leadSourceLabel(lead.source)}</span><span className="pill">{leadDisplayStatus(lead)}</span>{(() => { const action = leadActionMeta(lead); const overdue = Boolean(lead.nextContactAt && dateValue(lead.nextContactAt) < Date.now()); return <span className={"nextAction actionTag action-" + action.type + (overdue ? " overdue" : "")}><i>{overdue ? "!" : action.icon}</i><span>{leadNextAction(lead)}</span></span>; })()}
     </button>)}
   </div>;
 }
@@ -3381,6 +3381,15 @@ function leadNextAction(lead: Lead) {
   }
   if (lead.status === "Очікує групу") return "Підібрати групу";
   return "Продовжити контакт";
+}
+
+function leadActionMeta(lead: Lead): { type: "call" | "trial" | "decision" | "group" | "closed" | "general"; icon: string; label: string } {
+  if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return { type: "closed", icon: "×", label: "Закрито" };
+  if (lead.status === "Пробне заплановано") return { type: "trial", icon: "◷", label: "Пробне" };
+  if (lead.trialResult === "no_show" || lead.trialResult === "cancelled" || lead.nextContactAt || lead.status === "Нова" || lead.status === "Зв'язались") return { type: "call", icon: "☎", label: "Контакт" };
+  if (lead.status === "Після пробного") return { type: "decision", icon: "?", label: "Рішення" };
+  if (lead.status === "Очікує групу") return { type: "group", icon: "→", label: "Група" };
+  return { type: "general", icon: "•", label: "Дія" };
 }
 
 function closeReasonLabel(reason: string | null | undefined) {
