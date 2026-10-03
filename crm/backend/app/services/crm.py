@@ -1120,7 +1120,29 @@ def list_lesson_sessions(db: Session, org_id: UUID, group_id: UUID | None = None
         if not allowed:
             return []
         stmt = stmt.where(LessonSession.group_id.in_(allowed))
-    return list(db.scalars(stmt.order_by(LessonSession.starts_at)))
+    rows = list(db.scalars(stmt.order_by(LessonSession.starts_at)))
+    if not rows:
+        return rows
+    counts = {item.id: {"present": 0, "absent": 0, "late": 0, "excused": 0, "total": 0} for item in rows}
+    for mark in db.scalars(select(Attendance).where(
+        Attendance.organization_id == org_id,
+        Attendance.session_id.in_(list(counts)),
+    )):
+        bucket = counts.get(mark.session_id)
+        if bucket is None:
+            continue
+        key = mark.status.value
+        if key in bucket:
+            bucket[key] += 1
+        bucket["total"] += 1
+    for item in rows:
+        summary = counts[item.id]
+        item.attendance_present = summary["present"]
+        item.attendance_absent = summary["absent"]
+        item.attendance_late = summary["late"]
+        item.attendance_excused = summary["excused"]
+        item.attendance_total = summary["total"]
+    return rows
 
 
 def update_lesson_session(db: Session, org_id: UUID, session_id: UUID, data, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> LessonSession:

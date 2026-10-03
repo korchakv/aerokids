@@ -442,6 +442,11 @@ export type ApiLessonSession = {
   topic: string | null;
   notes: string | null;
   status: "scheduled" | "completed" | "cancelled";
+  attendance_present: number;
+  attendance_absent: number;
+  attendance_late: number;
+  attendance_excused: number;
+  attendance_total: number;
 };
 
 export type ApiAttendance = {
@@ -474,6 +479,9 @@ export type ApiGroupMemberDetail = {
   billing: {
     status: "current" | "upcoming" | "due" | "overdue" | "no_plan";
     plan_name: string | null;
+    lessons_used: number | null;
+    lessons_included: number | null;
+    lessons_remaining: number | null;
     amount_due_minor: number;
     next_due_date: string | null;
     last_paid_at: string | null;

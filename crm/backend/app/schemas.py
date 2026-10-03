@@ -505,6 +505,11 @@ class LessonSessionRead(ORMModel):
     topic: str | None
     notes: str | None
     status: LessonStatus
+    attendance_present: int = 0
+    attendance_absent: int = 0
+    attendance_late: int = 0
+    attendance_excused: int = 0
+    attendance_total: int = 0
 
 
 class LessonSessionUpdate(BaseModel):
