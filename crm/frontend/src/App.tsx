@@ -72,6 +72,7 @@ type LessonItem = {
   startsAt: string;
   duration: number;
   topic: string;
+  notes?: string;
   status?: "scheduled" | "completed" | "cancelled";
 };
 
@@ -235,6 +236,9 @@ function App() {
   });
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceSaving, setAttendanceSaving] = useState(false);
+  const [lessonTopicDraft, setLessonTopicDraft] = useState("");
+  const [lessonNotesDraft, setLessonNotesDraft] = useState("");
+  const [lessonDetailsSaving, setLessonDetailsSaving] = useState(false);
   const [plans, setPlans] = useState<PlanDemo[]>([
     { id: "1", name: "8 занять / 30 днів", price: 1800, lessons: 8 },
     { id: "2", name: "Індивідуальний", price: 0, lessons: null },
@@ -931,6 +935,11 @@ function App() {
   const lessonStudents = lessonGroup ? leads.filter((lead) => lessonGroup.members.includes(lead.id)) : [];
 
   useEffect(() => {
+    setLessonTopicDraft(selectedLesson?.topic ?? "");
+    setLessonNotesDraft(selectedLesson?.notes ?? "");
+  }, [selectedLesson?.id, selectedLesson?.topic, selectedLesson?.notes]);
+
+  useEffect(() => {
     if (!apiEnabled || !session || !selectedLesson?.id) return;
     let cancelled = false;
     setAttendanceLoading(true);
@@ -1045,6 +1054,29 @@ function App() {
     }]);
     setSelectedLessonId(nextId);
     setActive("Відвідування");
+  };
+
+  const saveLessonDetails = async () => {
+    if (!selectedLesson || lessonDetailsSaving) return;
+    const topic = lessonTopicDraft.trim() || "Заняття";
+    const notes = lessonNotesDraft.trim();
+    setLessonDetailsSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiPatch(`/lesson-sessions/${selectedLesson.id}`, {
+          topic,
+          notes: notes || null,
+        }, session);
+        await syncWorkspace(session);
+      } else {
+        setLessons((items) => items.map((lesson) => lesson.id === selectedLesson.id ? { ...lesson, topic, notes: notes || undefined } : lesson));
+      }
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти дані заняття.");
+    } finally {
+      setLessonDetailsSaving(false);
+    }
   };
 
   const saveAttendance = async () => {
@@ -1803,7 +1835,11 @@ function App() {
           <article className="panel attendancePanel">
             {selectedLesson && <>
               <div className="panelHead"><div><p className="eyebrow">Відвідування</p><h2>{lessonGroup?.name}</h2><p className="lessonMeta">{new Date(selectedLesson.startsAt).toLocaleString("uk-UA")} · {selectedLesson.duration} хв</p></div><div className="attendanceQuickActions"><button className="search" onClick={markAllPresent}>Усі присутні</button><button className="search" onClick={markUnmarkedAbsent}>Непозначені → відсутні</button></div></div>
-              <div className="topicBox"><span>Тема заняття</span><b>{selectedLesson.topic}</b></div>
+              <div className="lessonDetailsEditor">
+                <label>Тема заняття<input value={lessonTopicDraft} onChange={(e) => setLessonTopicDraft(e.target.value)} maxLength={240} placeholder="Що вивчаємо на занятті" /></label>
+                <label>Домашнє завдання / примітки<textarea value={lessonNotesDraft} onChange={(e) => setLessonNotesDraft(e.target.value)} maxLength={4000} placeholder="Наприклад: 3 кола в симуляторі без падіння. Або внутрішня примітка викладача." /></label>
+                <div className="lessonDetailsActions"><small>Ці дані належать конкретному заняттю, а не групі чи регулярному розкладу.</small><button className="search" disabled={lessonDetailsSaving} onClick={saveLessonDetails}>{lessonDetailsSaving ? "Зберігаємо…" : "Зберегти тему і завдання"}</button></div>
+              </div>
               <div className="attendanceTable">
                 {lessonStudents.map((student) => {
                   const value = attendance[selectedLesson.id]?.[student.id];
@@ -2657,6 +2693,7 @@ function applyTeaching(
     startsAt: item.starts_at,
     duration: item.duration_minutes,
     topic: item.topic ?? "Заняття",
+    notes: item.notes ?? undefined,
     status: item.status,
   })));
 

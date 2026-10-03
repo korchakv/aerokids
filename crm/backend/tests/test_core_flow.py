@@ -416,6 +416,15 @@ def test_schedule_session_and_attendance_flow(client):
     assert session.status_code == 201, session.text
     session_id = session.json()["id"]
 
+    updated_lesson = client.patch(
+        f"/lesson-sessions/{session_id}",
+        headers=headers,
+        json={"topic": "FPV gates", "notes": "Домашня траса: 3 кола без падіння"},
+    )
+    assert updated_lesson.status_code == 200, updated_lesson.text
+    assert updated_lesson.json()["topic"] == "FPV gates"
+    assert updated_lesson.json()["notes"] == "Домашня траса: 3 кола без падіння"
+
     marked = client.put(
         f"/lesson-sessions/{session_id}/attendance",
         headers=headers,

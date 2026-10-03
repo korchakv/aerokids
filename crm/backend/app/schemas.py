@@ -507,6 +507,14 @@ class LessonSessionRead(ORMModel):
     status: LessonStatus
 
 
+class LessonSessionUpdate(BaseModel):
+    topic: str | None = Field(default=None, max_length=240)
+    notes: str | None = Field(default=None, max_length=4000)
+
+    _topic = field_validator("topic")(normalize_optional_text)
+    _notes = field_validator("notes")(normalize_optional_text)
+
+
 class AttendanceMark(BaseModel):
     student_id: UUID
     status: AttendanceStatus

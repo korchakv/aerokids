@@ -1027,6 +1027,29 @@ def list_lesson_sessions(db: Session, org_id: UUID, group_id: UUID | None = None
     return list(db.scalars(stmt.order_by(LessonSession.starts_at)))
 
 
+def update_lesson_session(db: Session, org_id: UUID, session_id: UUID, data, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> LessonSession:
+    item = scoped_get(db, LessonSession, org_id, session_id)
+    ensure_group_access(db, org_id, user_id, role, item.group_id)
+    changes = data.model_dump(exclude_unset=True)
+    before = {"topic": item.topic, "notes": item.notes}
+    if "topic" in changes:
+        item.topic = changes["topic"]
+    if "notes" in changes:
+        item.notes = changes["notes"]
+    record_audit(
+        db,
+        org_id,
+        "lesson_session",
+        item.id,
+        "lesson.details_updated",
+        {"before": before, "after": {"topic": item.topic, "notes": item.notes}, "group_id": str(item.group_id)},
+        actor_user_id=user_id,
+    )
+    db.commit()
+    db.refresh(item)
+    return item
+
+
 def mark_attendance_bulk(db: Session, org_id: UUID, session_id: UUID, items, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[Attendance]:
     session = scoped_get(db, LessonSession, org_id, session_id)
     ensure_group_access(db, org_id, user_id, role, session.group_id)
