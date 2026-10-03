@@ -344,6 +344,7 @@ function App() {
   const [scheduleWeekday, setScheduleWeekday] = useState(0);
   const [scheduleTime, setScheduleTime] = useState("17:00");
   const [scheduleDuration, setScheduleDuration] = useState(60);
+  const [scheduleWeekOffset, setScheduleWeekOffset] = useState(0);
   useEffect(() => {
     setStaffResetLink("");
   }, [selectedStaffId]);
@@ -1669,6 +1670,16 @@ function App() {
   const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
   const canManageStaff = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
   const todayKey = localDateInput(new Date());
+  const scheduleWeekStart = startOfLocalWeek(addLocalDays(new Date(), scheduleWeekOffset * 7));
+  const scheduleWeekDays = Array.from({ length: 7 }, (_, index) => addLocalDays(scheduleWeekStart, index));
+  const scheduleWeekEnd = addLocalDays(scheduleWeekStart, 6);
+  const lessonsThisWeek = lessons
+    .filter((lesson) => {
+      if (lesson.status === "cancelled") return false;
+      const lessonDate = localDateInput(new Date(lesson.startsAt));
+      return lessonDate >= localDateInput(scheduleWeekStart) && lessonDate <= localDateInput(scheduleWeekEnd);
+    })
+    .sort((a, b) => dateValue(a.startsAt) - dateValue(b.startsAt));
   const canSeeLeads = navigation.includes("Заявки");
   const canSeePayments = navigation.includes("Оплати");
   const canSeeSchedule = navigation.includes("Розклад") || navigation.includes("Відвідування");
@@ -1899,50 +1910,69 @@ function App() {
 
         {active === "Розклад" && <section className="scheduleLayout">
           <article className="panel schedulePanel">
-            <div className="panelHead"><div><p className="eyebrow">Тиждень</p><h2>Заняття та регулярні слоти</h2></div><span className="counter">{lessons.filter((lesson) => lesson.status !== "cancelled").length}</span></div>
-            <p className="scheduleHint">Конкретне заняття відкриває власний журнал відвідування. Регулярний слот — це лише шаблон графіка групи й не веде в картку групи.</p>
-            <div className="weekGrid">
-              {["Пн","Вт","Ср","Чт","Пт","Сб","Нд"].map((day) => <div className="dayColumn" key={day}>
-                <b>{day}</b>
-                {lessons
-                  .filter((lesson) => lesson.status !== "cancelled" && lessonWeekdayLabel(lesson.startsAt) === day)
-                  .sort((a, b) => dateValue(a.startsAt) - dateValue(b.startsAt))
-                  .map((lesson) => {
-                    const group = groups.find((item) => item.id === lesson.groupId);
-                    return <button className="scheduleCard concreteLessonCard" key={lesson.id} onClick={() => { setSelectedLessonId(lesson.id); setActive("Відвідування"); }}>
-                      <time>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
-                      <strong>{group?.name ?? "Група"}</strong>
-                      <span>{lesson.topic || "Заняття"}</span>
-                      <small>{new Date(lesson.startsAt).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · {lesson.duration} хв · відкрити журнал →</small>
-                    </button>;
-                  })}
-                {groups.flatMap((group) => scheduleSlots(group).filter((slot) => slot.day === day).map((slot, index) =>
-                  <div className="scheduleCard recurringScheduleCard" key={"slot-" + group.id + "-" + day + "-" + slot.time + "-" + index}>
-                    <time>{slot.time}</time><strong>{group.name}</strong><span>{group.location}</span><small>Регулярний слот · {group.members.length}/{group.capacity} учнів</small>
+            <div className="scheduleToolbar">
+              <div>
+                <p className="eyebrow">Тижневий розклад</p>
+                <h2>{scheduleWeekStart.toLocaleDateString("uk-UA", { day: "numeric", month: "short" })} — {scheduleWeekEnd.toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" })}</h2>
+              </div>
+              <div className="scheduleNav">
+                <button className="search" onClick={() => setScheduleWeekOffset((value) => value - 1)}>←</button>
+                <button className="search" onClick={() => setScheduleWeekOffset(0)} disabled={scheduleWeekOffset === 0}>Сьогодні</button>
+                <button className="search" onClick={() => setScheduleWeekOffset((value) => value + 1)}>→</button>
+              </div>
+            </div>
+            <p className="scheduleHint">У календарі показані лише конкретні заняття. Натисніть на заняття, щоб відкрити його журнал, відмітити присутність і записати тему.</p>
+            <div className="weekGrid weekGridConcrete">
+              {scheduleWeekDays.map((date) => {
+                const dayKey = localDateInput(date);
+                const dayLessons = lessonsThisWeek.filter((lesson) => localDateInput(new Date(lesson.startsAt)) === dayKey);
+                const isToday = dayKey === todayKey;
+                return <div className={"dayColumn scheduleDay " + (isToday ? "today" : "")} key={dayKey}>
+                  <div className="scheduleDayHead">
+                    <b>{date.toLocaleDateString("uk-UA", { weekday: "short" })}</b>
+                    <span>{date.getDate()}</span>
                   </div>
-                ))}
-              </div>)}
+                  <div className="scheduleDayLessons">
+                    {dayLessons.map((lesson) => {
+                      const group = groups.find((item) => item.id === lesson.groupId);
+                      const marked = Object.keys(attendance[lesson.id] ?? {}).length;
+                      const total = group?.members.length ?? 0;
+                      return <button className="scheduleCard concreteLessonCard" key={lesson.id} onClick={() => goToLesson(lesson.id)}>
+                        <div className="scheduleCardTop">
+                          <time>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
+                          {marked > 0 && <span>{marked}/{total}</span>}
+                        </div>
+                        <strong>{group?.name ?? "Група"}</strong>
+                        <small>{lesson.topic || "Тема ще не вказана"}</small>
+                        <em>Відкрити заняття →</em>
+                      </button>;
+                    })}
+                    {dayLessons.length === 0 && <div className="scheduleDayEmpty">Немає занять</div>}
+                  </div>
+                </div>;
+              })}
             </div>
           </article>
           <aside className="scheduleSide">
-            {canManageRecurringSchedule && <article className="panel lessonCreate">
-              <p className="eyebrow">Регулярний розклад</p><h2>Додати слот</h2>
+            <article className="panel lessonCreate">
+              <p className="eyebrow">Нове заняття</p><h2>Додати заняття</h2>
+              <label>Група<select value={newLessonGroupId} onChange={(e) => setNewLessonGroupId(e.target.value)}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
+              <DateTimeEditor label="Дата і час" value={newLessonAt} onChange={setNewLessonAt} />
+              <DurationSelect value={newLessonDuration} onChange={setNewLessonDuration} />
+              <label>Тема<input value={newLessonTopic} onChange={(e) => setNewLessonTopic(e.target.value)} placeholder="Можна заповнити пізніше в журналі" /></label>
+              <button className="primary full" onClick={createLesson}>Створити заняття</button>
+            </article>
+            {canManageRecurringSchedule && <article className="panel lessonCreate recurringSettings">
+              <p className="eyebrow">Шаблон групи</p><h2>Регулярний час</h2>
+              <p className="scheduleSideHint">Регулярний час не є заняттям і не відкриває журнал. Він потрібен лише як шаблон для планування.</p>
               <label>Група<select value={scheduleGroupId} onChange={(e) => setScheduleGroupId(e.target.value)}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
               <div className="formTwo">
                 <label>День<select value={scheduleWeekday} onChange={(e) => setScheduleWeekday(Number(e.target.value))}>{["Пн","Вт","Ср","Чт","Пт","Сб","Нд"].map((day,index) => <option value={index} key={day}>{day}</option>)}</select></label>
                 <TimeSelect label="Час" value={scheduleTime} onChange={setScheduleTime} />
               </div>
               <DurationSelect value={scheduleDuration} onChange={setScheduleDuration} />
-              <button className="search full" onClick={createGroupSchedule}>Додати в розклад</button>
+              <button className="search full" onClick={createGroupSchedule}>Зберегти регулярний час</button>
             </article>}
-            <article className="panel lessonCreate">
-              <p className="eyebrow">Нове заняття</p><h2>Додати заняття</h2>
-              <label>Група<select value={newLessonGroupId} onChange={(e) => setNewLessonGroupId(e.target.value)}>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
-              <DateTimeEditor label="Дата і час" value={newLessonAt} onChange={setNewLessonAt} />
-              <DurationSelect value={newLessonDuration} onChange={setNewLessonDuration} />
-              <label>Тема<input value={newLessonTopic} onChange={(e) => setNewLessonTopic(e.target.value)} /></label>
-              <button className="primary full" onClick={createLesson}>Створити заняття</button>
-            </article>
           </aside>
         </section>}
 
@@ -1963,7 +1993,7 @@ function App() {
           </article>
           <article className="panel attendancePanel">
             {selectedLesson && <>
-              <div className="panelHead"><div><p className="eyebrow">Відвідування</p><h2>{lessonGroup?.name}</h2><p className="lessonMeta">{new Date(selectedLesson.startsAt).toLocaleString("uk-UA")} · {selectedLesson.duration} хв</p></div><div className="attendanceQuickActions"><button className="search" onClick={markAllPresent}>Усі присутні</button><button className="search" onClick={markUnmarkedAbsent}>Непозначені → відсутні</button></div></div>
+              <div className="lessonJournalHead"><button className="lessonBackButton" onClick={() => setActive("Розклад")}>← До розкладу</button><div className="panelHead"><div><p className="eyebrow">Конкретне заняття</p><h2>{lessonGroup?.name}</h2><p className="lessonMeta">{new Date(selectedLesson.startsAt).toLocaleString("uk-UA")} · {selectedLesson.duration} хв</p></div><div className="attendanceQuickActions"><button className="search" onClick={markAllPresent}>Усі присутні</button><button className="search" onClick={markUnmarkedAbsent}>Непозначені → відсутні</button></div></div></div>
               <div className="lessonDetailsEditor">
                 <label>Тема заняття<input value={lessonTopicDraft} onChange={(e) => setLessonTopicDraft(e.target.value)} maxLength={240} placeholder="Що вивчаємо на занятті" /></label>
                 <label>Домашнє завдання / примітки<textarea value={lessonNotesDraft} onChange={(e) => setLessonNotesDraft(e.target.value)} maxLength={4000} placeholder="Наприклад: 3 кола в симуляторі без падіння. Або внутрішня примітка викладача." /></label>
@@ -3385,6 +3415,21 @@ function roleLabel(role?: string) {
     accountant: "Бухгалтер",
   };
   return role ? labels[role] ?? role : "Demo";
+}
+
+function addLocalDays(value: Date, amount: number) {
+  const next = new Date(value);
+  next.setHours(12, 0, 0, 0);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function startOfLocalWeek(value: Date) {
+  const next = new Date(value);
+  next.setHours(12, 0, 0, 0);
+  const mondayOffset = (next.getDay() + 6) % 7;
+  next.setDate(next.getDate() - mondayOffset);
+  return next;
 }
 
 function localDateInput(value: Date) {
