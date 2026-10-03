@@ -248,8 +248,7 @@ function App() {
   const [organizationCurrency, setOrganizationCurrency] = useState("UAH");
   const [organizationLocale, setOrganizationLocale] = useState("uk-UA");
   const [organizationSaving, setOrganizationSaving] = useState(false);
-  const [leadFilter, setLeadFilter] = useState<"all" | "action" | "new" | "trial" | "no_show" | "after_trial" | "waiting" | "closed">("action");
-  const [leadSort, setLeadSort] = useState<"priority" | "newest" | "oldest" | "trial" | "age">("priority");
+  const [leadSort, setLeadSort] = useState<"priority" | "next_action" | "newest">("priority");
   const [leadSourceFilter, setLeadSourceFilter] = useState("all");
   const [leadMoveSavingId, setLeadMoveSavingId] = useState<EntityId | null>(null);
   const [leadProcedureTarget, setLeadProcedureTarget] = useState<LeadKanbanColumnId | null>(null);
@@ -528,17 +527,7 @@ function App() {
     .slice(0, 5), [leads]);
 
   const visibleLeads = useMemo(() => {
-    const closed = new Set<LeadStatus>(["Відмовились", "Не відповідає", "Неактуально", "Зарахований"]);
-    let items = leads.filter((item) => {
-      if (leadFilter === "action") return !closed.has(item.status);
-      if (leadFilter === "new") return item.status === "Нова";
-      if (leadFilter === "trial") return item.status === "Пробне заплановано";
-      if (leadFilter === "no_show") return item.trialResult === "no_show";
-      if (leadFilter === "after_trial") return item.status === "Після пробного";
-      if (leadFilter === "waiting") return item.status === "Очікує групу";
-      if (leadFilter === "closed") return ["Відмовились", "Не відповідає", "Неактуально"].includes(item.status);
-      return true;
-    });
+    let items = leads.filter((item) => item.status !== "Зарахований");
 
     if (leadSourceFilter !== "all") {
       items = items.filter((item) => canonicalLeadSource(item.source) === leadSourceFilter);
@@ -546,19 +535,21 @@ function App() {
 
     items = [...items].sort((a, b) => {
       if (leadSort === "newest") return dateValue(b.createdAt) - dateValue(a.createdAt);
-      if (leadSort === "oldest") return dateValue(a.createdAt) - dateValue(b.createdAt);
-      if (leadSort === "trial") return dateValue(a.trialAt, Number.MAX_SAFE_INTEGER) - dateValue(b.trialAt, Number.MAX_SAFE_INTEGER);
-      if (leadSort === "age") return a.age - b.age;
+      if (leadSort === "next_action") {
+        const aAction = dateValue(a.nextContactAt ?? a.trialAt, Number.MAX_SAFE_INTEGER);
+        const bAction = dateValue(b.nextContactAt ?? b.trialAt, Number.MAX_SAFE_INTEGER);
+        if (aAction !== bAction) return aAction - bAction;
+        return leadActionPriority(a) - leadActionPriority(b);
+      }
       const priority = leadActionPriority(a) - leadActionPriority(b);
       if (priority !== 0) return priority;
-      if (a.nextContactAt || b.nextContactAt) {
-        const followUpOrder = dateValue(a.nextContactAt, Number.MAX_SAFE_INTEGER) - dateValue(b.nextContactAt, Number.MAX_SAFE_INTEGER);
-        if (followUpOrder !== 0) return followUpOrder;
-      }
+      const followUpOrder = dateValue(a.nextContactAt ?? a.trialAt, Number.MAX_SAFE_INTEGER)
+        - dateValue(b.nextContactAt ?? b.trialAt, Number.MAX_SAFE_INTEGER);
+      if (followUpOrder !== 0) return followUpOrder;
       return dateValue(b.createdAt) - dateValue(a.createdAt);
     });
     return items;
-  }, [leads, leadFilter, leadSort, leadSourceFilter]);
+  }, [leads, leadSort, leadSourceFilter]);
 
   const leadActionCount = useMemo(() => leads.filter((lead) => {
     if (["Відмовились", "Не відповідає", "Неактуально", "Зарахований"].includes(lead.status)) return false;
@@ -567,6 +558,10 @@ function App() {
     if (lead.status === "Нова" || lead.status === "Після пробного") return true;
     return false;
   }).length, [leads]);
+
+  const leadActiveCount = useMemo(() => leads.filter((lead) =>
+    !["Відмовились", "Не відповідає", "Неактуально", "Зарахований"].includes(lead.status)
+  ).length, [leads]);
 
   const visibleStudents = useMemo(() => activeStudents.filter((item) => {
     const state = studentStates[item.id] ?? "Активний";
@@ -2108,30 +2103,17 @@ function App() {
                 <option value="all">Усі джерела</option>
                 {Array.from(new Set(leads.map((lead) => canonicalLeadSource(lead.source)).filter(Boolean))).sort().map((source) => <option value={source} key={source}>{leadSourceLabel(source)}</option>)}
               </select></label>
-              <label className="leadSort">Сортування<select value={leadSort} onChange={(e) => setLeadSort(e.target.value as typeof leadSort)}>
-                <option value="priority">Потребують дії</option>
-                <option value="newest">Найновіші</option>
-                <option value="oldest">Найстаріші</option>
-                <option value="trial">Найближче пробне</option>
-                <option value="age">За віком</option>
+              <label className="leadSort">Порядок карток<select value={leadSort} onChange={(e) => setLeadSort(e.target.value as typeof leadSort)}>
+                <option value="priority">Термінові спочатку</option>
+                <option value="next_action">Найближча дія</option>
+                <option value="newest">Нові заявки</option>
               </select></label>
             </div>
           </div>
-          <div className="filters leadFilters">
-            <button className={"chip " + (leadFilter === "all" ? "active" : "")} onClick={() => setLeadFilter("all")}>Усі</button>
-            <button className={"chip " + (leadFilter === "action" ? "active" : "")} onClick={() => setLeadFilter("action")}>В роботі</button>
-            <button className={"chip " + (leadFilter === "new" ? "active" : "")} onClick={() => setLeadFilter("new")}>Нові</button>
-            <button className={"chip " + (leadFilter === "trial" ? "active" : "")} onClick={() => setLeadFilter("trial")}>Пробні</button>
-            <button className={"chip " + (leadFilter === "no_show" ? "active" : "")} onClick={() => setLeadFilter("no_show")}>Не прийшли</button>
-            <button className={"chip " + (leadFilter === "after_trial" ? "active" : "")} onClick={() => setLeadFilter("after_trial")}>Після пробного</button>
-            <button className={"chip " + (leadFilter === "waiting" ? "active" : "")} onClick={() => setLeadFilter("waiting")}>Очікують групу</button>
-            <button className={"chip " + (leadFilter === "closed" ? "active" : "")} onClick={() => setLeadFilter("closed")}>Закриті</button>
-          </div>
-          <div className="kanbanSummary">
-            <button className={"kanbanActionCounter " + (leadFilter === "action" ? "active" : "")} onClick={() => setLeadFilter("action")}>
-              <span>Потрібна дія</span><strong>{leadActionCount}</strong>
-            </button>
-            <span className="kanbanHint">Картку можна переносити одразу на будь-який етап. Якщо цільовому етапу потрібні дані, CRM відкриє тільки необхідну процедуру.</span>
+          <div className="kanbanSummary kanbanSummarySimple">
+            <div className="kanbanSummaryStat"><span>В роботі</span><strong>{leadActiveCount}</strong></div>
+            <div className="kanbanSummaryStat attention"><span>Потрібна дія</span><strong>{leadActionCount}</strong></div>
+            <span className="kanbanHint">Етапи вже видно в колонках. Зверху лишили тільки джерело та порядок карток усередині етапів.</span>
           </div>
           <LeadKanban leads={visibleLeads.filter((lead) => lead.status !== "Зарахований")} onOpen={openLead} onMove={moveLeadOnBoard} movingId={leadMoveSavingId} />
         </section>}
