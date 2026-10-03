@@ -290,6 +290,8 @@ function App() {
   const [leadProcedureTarget, setLeadProcedureTarget] = useState<LeadKanbanColumnId | null>(null);
   const [leadEnrollmentGroupId, setLeadEnrollmentGroupId] = useState<EntityId | "">("");
   const [leadEnrollmentSaving, setLeadEnrollmentSaving] = useState(false);
+  const [leadActionsOpen, setLeadActionsOpen] = useState(false);
+  const [leadStatusMenuOpen, setLeadStatusMenuOpen] = useState(false);
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateAgeFilter, setCandidateAgeFilter] = useState<"all" | "8-10" | "11-13">("all");
   const [candidateLevelFilter, setCandidateLevelFilter] = useState("all");
@@ -806,7 +808,8 @@ function App() {
         await apiPatch(`/students/${id}/crm-status`, { crm_status: crmStatusValue(status) }, session);
         await syncWorkspace(session);
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося змінити статус заявки.");
         return;
       }
     }
@@ -896,8 +899,10 @@ function App() {
     setPreferenceMode(false);
     setLeadProcedureTarget(null);
     setLeadEnrollmentGroupId("");
+    setLeadActionsOpen(false);
+    setLeadStatusMenuOpen(false);
     const lead = leads.find((item) => item.id === id);
-    if (lead?.trialAt) setTrialAt(toLocalDateTimeInput(lead.trialAt));
+    setTrialAt(lead?.trialAt ? toLocalDateTimeInput(lead.trialAt) : toLocalDateTimeInput(new Date().toISOString()));
     if (lead?.trialLocation) setTrialLocation(lead.trialLocation);
     if (lead?.trialLocationId) setTrialLocationId(lead.trialLocationId);
     if (lead?.recommendedLevel) setRecommendedLevel(lead.recommendedLevel);
@@ -975,6 +980,95 @@ function App() {
     if (!selected) return;
     const status = selected.trialResult === "completed" ? "trial_completed" : "contacted";
     void saveLeadOutcome(status);
+  };
+
+  const revealLeadWorkflow = (id: string) => {
+    window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
+
+  const beginTrialScheduling = () => {
+    if (!selected) return;
+    setLeadActionsOpen(false);
+    setLeadStatusMenuOpen(false);
+    setPostTrialMode(null);
+    setLeadProcedureTarget("trial");
+    setTrialAt(selected.trialAt ? toLocalDateTimeInput(selected.trialAt) : toLocalDateTimeInput(new Date().toISOString()));
+    setTrialMode("schedule");
+    revealLeadWorkflow("lead-trial-workflow");
+  };
+
+  const beginTrialResult = () => {
+    if (!selected) return;
+    setLeadActionsOpen(false);
+    setLeadStatusMenuOpen(false);
+    setPostTrialMode(null);
+    setLeadProcedureTarget("after_trial");
+    setTrialMode("complete");
+    revealLeadWorkflow("lead-trial-result-workflow");
+  };
+
+  const beginLeadFollowUp = () => {
+    setLeadActionsOpen(false);
+    setLeadStatusMenuOpen(false);
+    setTrialMode(null);
+    setPostTrialMode("thinking");
+    revealLeadWorkflow("lead-followup-workflow");
+  };
+
+  const beginLeadEnrollment = () => {
+    setLeadActionsOpen(false);
+    setLeadStatusMenuOpen(false);
+    setTrialMode(null);
+    setPostTrialMode(null);
+    setLeadProcedureTarget("waiting");
+    revealLeadWorkflow("lead-enrollment-workflow");
+  };
+
+  const beginLeadClose = () => {
+    setLeadActionsOpen(false);
+    setLeadStatusMenuOpen(false);
+    setCloseKind("declined");
+    setPostTrialMode("close");
+    revealLeadWorkflow("lead-close-workflow");
+  };
+
+  const handleLeadPrimaryAction = () => {
+    if (!selected) return;
+    if (["Відмовились", "Не відповідає", "Неактуально"].includes(selected.status)) {
+      reopenLead();
+      return;
+    }
+    if (selected.status === "Зарахований") {
+      setSelectedId(null);
+      setSelectedStudentId(selected.id);
+      setActive("Учні");
+      return;
+    }
+    if (selected.status === "Нова") {
+      void updateStatus(selected.id, "Зв'язались");
+      return;
+    }
+    if (selected.status === "Пробне заплановано") {
+      beginTrialResult();
+      return;
+    }
+    if (selected.status === "Після пробного") {
+      setLeadStatusMenuOpen(false);
+      setLeadActionsOpen(true);
+      return;
+    }
+    if (selected.status === "Очікує групу") {
+      beginLeadEnrollment();
+      return;
+    }
+    beginTrialScheduling();
+  };
+
+  const setLeadMobileStatus = (status: "Нова" | "Зв'язались" | "Очікує групу") => {
+    if (!selected) return;
+    setLeadStatusMenuOpen(false);
+    setLeadActionsOpen(false);
+    void updateStatus(selected.id, status);
   };
 
   const enrollLeadDirectly = async () => {
@@ -3128,19 +3222,26 @@ function App() {
         </div>
       </div>}
 
-      {selected && <div className="drawerBackdrop" onClick={() => setSelectedId(null)}>
-        <aside className="drawer" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setSelectedId(null)}>×</button>
+      {selected && <div className="drawerBackdrop leadDrawerBackdrop">
+        <aside className="drawer leadDrawer" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>×</button>
           <p className="eyebrow">Картка заявки</p>
-          <h2>{selected.child}, {selected.age} років</h2>
+          <div className="leadDrawerTitleRow">
+            <h2>{selected.child}, {selected.age} років</h2>
+            <button className={"mobileLeadStatusTrigger stage-" + leadKanbanColumn(selected)} onClick={() => { setLeadActionsOpen(false); setLeadStatusMenuOpen(true); }}>
+              <span>{leadDisplayStatus(selected)}</span><i>⌄</i>
+            </button>
+          </div>
           <div className="contactCard"><span>Контакт</span><b>{selected.parent}</b><a href={"tel:" + selected.phone.replace(/\s/g, "")}>{selected.phone}</a></div>
-          {["Пробне заплановано","Після пробного","Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) || ["no_show","cancelled"].includes(selected.trialResult ?? "")
-            ? <div className="statusField statusReadonly">Статус<strong>{leadDisplayStatus(selected)}</strong></div>
-            : <label className="statusField">Статус
-                <select value={selected.status} onChange={(e) => updateStatus(selected.id, e.target.value as LeadStatus)}>
-                  {statuses.filter((status) => ["Нова","Зв'язались","Очікує групу"].includes(status)).map((status) => <option key={status}>{status}</option>)}
-                </select>
-              </label>}
+          <div className="desktopLeadStatus">
+            {["Пробне заплановано","Після пробного","Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) || ["no_show","cancelled"].includes(selected.trialResult ?? "")
+              ? <div className="statusField statusReadonly">Статус<strong>{leadDisplayStatus(selected)}</strong></div>
+              : <label className="statusField">Статус
+                  <select value={selected.status} onChange={(e) => updateStatus(selected.id, e.target.value as LeadStatus)}>
+                    {statuses.filter((status) => ["Нова","Зв'язались","Очікує групу"].includes(status)).map((status) => <option key={status}>{status}</option>)}
+                  </select>
+                </label>}
+          </div>
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : action.label}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>; })()}
           {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
@@ -3167,7 +3268,7 @@ function App() {
 
 
 
-          {trialMode === "schedule" && <div className="workflowBox">
+          {trialMode === "schedule" && <div id="lead-trial-workflow" className="workflowBox leadWorkflowBox">
             <div className="workflowHead"><h3>Запис на пробне</h3><button onClick={() => setTrialMode(null)}>×</button></div>
             <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
             {activeLocations.length === 1
@@ -3179,7 +3280,7 @@ function App() {
             <button className="primary full" onClick={scheduleTrial}>Підтвердити пробне</button>
           </div>}
 
-          {trialMode === "complete" && <div className="workflowBox">
+          {trialMode === "complete" && <div id="lead-trial-result-workflow" className="workflowBox leadWorkflowBox">
             <div className="workflowHead"><h3>{leadProcedureTarget === "no_show" ? "Зафіксувати пропущене пробне" : "Результат пробного"}</h3><button onClick={() => { setTrialMode(null); setLeadProcedureTarget(null); }}>×</button></div>
             {!selected.trialId && <><DateTimeEditor label="Коли було пробне" value={trialAt} onChange={setTrialAt} />{activeLocations.length === 1 ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label> : <label>Локація<select value={trialLocationId} onChange={(e) => setTrialLocationId(e.target.value)}><option value="">Без локації</option>{activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label>}</>}
             <label>Рекомендований рівень<select value={recommendedLevel} onChange={(e) => setRecommendedLevel(e.target.value)}><option>Початковий</option><option>Середній</option><option>Просунутий</option></select></label>
@@ -3202,7 +3303,7 @@ function App() {
             {selected.status === "Очікує групу" && <small>Готові навчатися · потрібно підібрати групу.</small>}
           </div>}
 
-          {leadProcedureTarget === "waiting" && <div className="workflowBox leadDirectEnrollmentStep">
+          {leadProcedureTarget === "waiting" && <div id="lead-enrollment-workflow" className="workflowBox leadWorkflowBox leadDirectEnrollmentStep">
             <div className="workflowHead"><h3>Зарахувати в групу</h3><button onClick={() => { setLeadProcedureTarget(null); setLeadEnrollmentGroupId(""); }}>×</button></div>
             <p className="softPreferenceHint">Попередні етапи можна пропустити. Для зарахування обов’язково лише обрати групу з вільним місцем.</p>
             <label>Група<select value={leadEnrollmentGroupId} onChange={(e) => setLeadEnrollmentGroupId(e.target.value)}>
@@ -3238,14 +3339,14 @@ function App() {
             </div>
           </div>}
 
-          {postTrialMode === "thinking" && <div className="workflowBox">
+          {postTrialMode === "thinking" && <div id="lead-followup-workflow" className="workflowBox leadWorkflowBox">
             <div className="workflowHead"><h3>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Передзвонити пізніше" : "Ще думають"}</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
             <p className="softPreferenceHint">Залишаємо заявку в роботі й ставимо дату, коли треба зв’язатися з батьками знову.</p>
             <DateTimeEditor label="Наступний контакт" value={followUpAt} onChange={setFollowUpAt} />
             <button className="primary full" disabled={!followUpAt} onClick={saveThinkingFollowUp}>Зберегти нагадування</button>
           </div>}
 
-          {postTrialMode === "close" && <div className="workflowBox">
+          {postTrialMode === "close" && <div id="lead-close-workflow" className="workflowBox leadWorkflowBox">
             <div className="workflowHead"><h3>Закрити заявку</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
             <label>Результат<select value={closeKind} onChange={(e) => setCloseKind(e.target.value as typeof closeKind)}>
               <option value="declined">Відмовились</option>
@@ -3266,7 +3367,49 @@ function App() {
           </div>}
 
           {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && postTrialMode !== "close" && <div className="leadCancelBeforeHistory">
-            <button className="search dangerSoft" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Скасувати заявку</button>
+            <button className="search dangerSoft" onClick={beginLeadClose}>Скасувати заявку</button>
+          </div>}
+
+          <div className="mobileLeadActionBar" aria-label="Дії із заявкою">
+            <button className="primary mobileLeadPrimaryAction" onClick={handleLeadPrimaryAction}>
+              <small>Наступна дія</small>
+              <strong>{leadPrimaryActionLabel(selected)}</strong>
+            </button>
+            <button className="mobileLeadMoreAction" aria-label="Інші дії" onClick={() => { setLeadStatusMenuOpen(false); setLeadActionsOpen(true); }}>•••</button>
+          </div>
+
+          {leadActionsOpen && <div className="mobileLeadSheetLayer">
+            <section className="mobileLeadSheet" role="dialog" aria-modal="true" aria-label="Дії із заявкою">
+              <div className="mobileLeadSheetHead"><div><span>Заявка</span><h3>{selected.child}</h3></div><button aria-label="Закрити меню дій" onClick={() => setLeadActionsOpen(false)}>×</button></div>
+              <div className="mobileLeadSheetActions">
+                {selected.phone && <a className="mobileLeadSheetAction" href={"tel:" + selected.phone.replace(/\s/g, "")}><i>☎</i><span><b>Подзвонити</b><small>{formatUaPhone(selected.phone)}</small></span></a>}
+                {selected.status === "Нова" && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void updateStatus(selected.id, "Зв'язались"); }}><i>✓</i><span><b>Позначити «Зв'язались»</b><small>Перейти до наступного етапу</small></span></button>}
+                {(selected.status === "Зв'язались" || selected.trialResult === "no_show" || selected.trialResult === "cancelled") && <button className="mobileLeadSheetAction" onClick={beginTrialScheduling}><i>◷</i><span><b>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</b><small>Обрати дату, час і локацію</small></span></button>}
+                {selected.status === "Пробне заплановано" && <><button className="mobileLeadSheetAction" onClick={beginTrialResult}><i>✓</i><span><b>Внести результат пробного</b><small>Був / не прийшов / скасували</small></span></button><button className="mobileLeadSheetAction" onClick={beginTrialScheduling}><i>↻</i><span><b>Перенести пробне</b><small>Змінити дату, час або локацію</small></span></button></>}
+                {selected.status === "Після пробного" && <><button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void saveLeadOutcome("waiting_for_group"); }}><i>✓</i><span><b>Готові навчатися</b><small>Перемістити в «Очікує групу»</small></span></button><button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>☎</i><span><b>Ще думають</b><small>Запланувати наступний контакт</small></span></button></>}
+                {selected.status === "Очікує групу" && <button className="mobileLeadSheetAction" onClick={beginLeadEnrollment}><i>→</i><span><b>Зарахувати в групу</b><small>Обрати існуючу або створити нову</small></span></button>}
+                {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Пробне заплановано" && <button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>◷</i><span><b>Запланувати дзвінок</b><small>Поставити дату наступного контакту</small></span></button>}
+                {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Очікує групу" && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void updateStatus(selected.id, "Очікує групу"); }}><i>◎</i><span><b>Очікує групу</b><small>Позначити готовність до підбору групи</small></span></button>}
+                <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); setLeadStatusMenuOpen(true); }}><i>⇄</i><span><b>Перемістити заявку</b><small>Змінити етап вручну</small></span></button>
+                {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction danger" onClick={beginLeadClose}><i>×</i><span><b>Закрити заявку</b><small>Відмова, немає відповіді або неактуально</small></span></button>}
+                {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); reopenLead(); }}><i>↺</i><span><b>Повернути в роботу</b><small>Відновити активну заявку</small></span></button>}
+              </div>
+            </section>
+          </div>}
+
+          {leadStatusMenuOpen && <div className="mobileLeadSheetLayer">
+            <section className="mobileLeadSheet" role="dialog" aria-modal="true" aria-label="Перемістити заявку">
+              <div className="mobileLeadSheetHead"><div><span>Статус</span><h3>Перемістити заявку</h3></div><button aria-label="Закрити вибір статусу" onClick={() => setLeadStatusMenuOpen(false)}>×</button></div>
+              <div className="mobileLeadStageList">
+                <button className={"mobileLeadStageOption stage-new " + (selected.status === "Нова" ? "active" : "")} onClick={() => setLeadMobileStatus("Нова")}><i></i><span><b>Нова</b><small>Ще не опрацьована</small></span>{selected.status === "Нова" && <strong>✓</strong>}</button>
+                <button className={"mobileLeadStageOption stage-contacted " + (selected.status === "Зв'язались" ? "active" : "")} onClick={() => setLeadMobileStatus("Зв'язались")}><i></i><span><b>Зв'язались</b><small>Контакт уже відбувся</small></span>{selected.status === "Зв'язались" && <strong>✓</strong>}</button>
+                <button className={"mobileLeadStageOption stage-trial " + (selected.status === "Пробне заплановано" ? "active" : "")} onClick={beginTrialScheduling}><i></i><span><b>Пробне заплановано</b><small>Спочатку вкажіть дату і час</small></span>{selected.status === "Пробне заплановано" && <strong>✓</strong>}</button>
+                <button className={"mobileLeadStageOption stage-after_trial " + (selected.status === "Після пробного" ? "active" : "")} onClick={beginTrialResult}><i></i><span><b>Після пробного</b><small>Зафіксувати результат заняття</small></span>{selected.status === "Після пробного" && <strong>✓</strong>}</button>
+                <button className={"mobileLeadStageOption stage-waiting " + (selected.status === "Очікує групу" ? "active" : "")} onClick={() => setLeadMobileStatus("Очікує групу")}><i></i><span><b>Очікує групу</b><small>Готові до підбору групи</small></span>{selected.status === "Очікує групу" && <strong>✓</strong>}</button>
+                <button className={"mobileLeadStageOption stage-enrolled " + (selected.status === "Зарахований" ? "active" : "")} onClick={beginLeadEnrollment}><i></i><span><b>Зарахувати в групу</b><small>Потрібно обрати групу</small></span>{selected.status === "Зарахований" && <strong>✓</strong>}</button>
+                <button className="mobileLeadStageOption stage-closed" onClick={beginLeadClose}><i></i><span><b>Закрити заявку</b><small>Зберегти причину закриття</small></span></button>
+              </div>
+            </section>
           </div>}
 
           {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} /> : <div className="history">
@@ -3568,6 +3711,17 @@ function leadDisplayStatus(lead: Lead) {
   if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "Не прийшов";
   if (lead.trialResult === "cancelled" && lead.status === "Зв'язались") return "Скасували пробне";
   return lead.status;
+}
+
+function leadPrimaryActionLabel(lead: Lead) {
+  if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return "Повернути в роботу";
+  if (lead.status === "Зарахований") return "Відкрити картку учня";
+  if (lead.status === "Нова") return "Позначити «Зв'язались»";
+  if (lead.trialResult === "no_show" || lead.trialResult === "cancelled") return "Перезаписати на пробне";
+  if (lead.status === "Пробне заплановано") return "Внести результат пробного";
+  if (lead.status === "Після пробного") return "Рішення після пробного";
+  if (lead.status === "Очікує групу") return "Зарахувати в групу";
+  return "Записати на пробне";
 }
 
 function leadNextAction(lead: Lead) {
