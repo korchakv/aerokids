@@ -994,8 +994,8 @@ def _lesson_conflict_reason(
 def materialize_recurring_lesson_sessions(
     db: Session,
     org_id: UUID,
-    weeks_back: int = 4,
-    weeks_forward: int = 12,
+    weeks_back: int = 0,
+    weeks_forward: int = 8,
 ) -> int:
     """Create concrete lesson sessions from active recurring group schedules.
 
@@ -1145,7 +1145,7 @@ def mark_attendance_bulk(db: Session, org_id: UUID, session_id: UUID, items, use
     if len(set(submitted_ids)) != len(submitted_ids):
         raise HTTPException(status_code=422, detail="Duplicate students in attendance payload")
     if not set(submitted_ids).issubset(roster_ids):
-        raise HTTPException(status_code=409, detail="Attendance can only be marked for active students in this group")
+        raise HTTPException(status_code=409, detail="Відвідування можна відмічати лише для активних учнів цієї групи")
 
     result: list[Attendance] = []
     for mark in items:

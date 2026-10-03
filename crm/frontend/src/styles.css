@@ -215,3 +215,52 @@ input,select,textarea{min-width:0;max-width:100%}textarea{resize:vertical}
 .drawer h2{font-size:24px}.detailGrid b{font-size:15px}.history h3{font-size:14px}
 @media(max-width:1100px){main{padding-left:24px;padding-right:24px}.panel{padding:18px}.paymentRow{min-width:760px}}
 @media(max-width:720px){body{font-size:13.5px}h1{font-size:26px}h2{font-size:19px}.panel{padding:15px}.primary,.search,.link{font-size:13px}.todayIntro h2{font-size:20px}.weekGridConcrete{grid-template-columns:repeat(7,148px)}.weekGridConcrete .concreteLessonCard{padding:9px}.attendanceButtons button{flex:1 1 120px}}
+
+/* Attendance geometry pass */
+.attendanceLayout{grid-template-columns:330px minmax(0,1fr);gap:16px;align-items:start}
+.lessonListPanel,.attendanceLayout>.panel{min-width:0}
+.lessonListPanel{padding:18px}
+.lessonList{gap:8px}
+.lessonRow{min-height:62px;grid-template-columns:60px minmax(0,1fr) 42px;gap:10px;padding:10px 12px;border-color:var(--ak-border)}
+.lessonRow time{font-size:13px;line-height:1.25}
+.lessonRow span b{font-size:13px;line-height:1.25}
+.lessonRow span small,.lessonRow time small{font-size:11.5px;line-height:1.3}
+.lessonRow i{justify-self:end;font-size:12px}
+.lessonJournalHead{gap:12px}
+.lessonJournalHead .panelHead{align-items:center;gap:16px}
+.lessonJournalHead .panelHead>div:first-child{min-width:0}
+.attendanceQuickActions{display:grid;grid-template-columns:repeat(2,max-content);gap:8px}
+.attendanceQuickActions .search{min-height:40px;padding:9px 13px}
+.lessonDetailsEditor{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:16px;border-color:var(--ak-border);border-radius:14px}
+.lessonDetailsEditor label{min-width:0}
+.lessonDetailsEditor input,.lessonDetailsEditor textarea{height:74px;min-height:74px;padding:11px 12px;border-radius:10px;line-height:1.4;vertical-align:top}
+.lessonDetailsEditor input{display:block}
+.lessonDetailsActions{min-height:42px;margin-top:0}
+.lessonDetailsActions .search{min-height:40px;white-space:nowrap}
+.attendanceTable{margin-top:4px}
+.attendanceRow{grid-template-columns:minmax(210px,1fr) minmax(420px,520px);gap:18px;min-height:68px;padding:11px 4px}
+.attendanceRow>div:first-child{min-width:0}
+.attendanceButtons{display:grid;grid-template-columns:repeat(4,minmax(98px,1fr));gap:7px;width:100%;justify-content:stretch}
+.attendanceButtons button{min-width:0!important;min-height:36px;padding:7px 8px;border-color:var(--ak-border);white-space:normal;line-height:1.15}
+.attendanceReasonInput{grid-column:2;width:100%;min-height:38px}
+.attendanceFooter{min-height:64px;padding:10px 14px;border-radius:14px}
+.attendanceFooter .primary{min-height:40px;padding:10px 15px}
+@media(max-width:1200px){
+  .attendanceRow{grid-template-columns:minmax(180px,1fr) minmax(380px,470px)}
+  .attendanceButtons{grid-template-columns:repeat(2,minmax(130px,1fr))}
+}
+@media(max-width:1050px){
+  .attendanceLayout{grid-template-columns:1fr}
+  .lessonListPanel{order:2}
+  .attendanceRow{grid-template-columns:minmax(180px,1fr) minmax(420px,520px)}
+  .attendanceButtons{grid-template-columns:repeat(4,minmax(98px,1fr))}
+}
+@media(max-width:760px){
+  .lessonJournalHead .panelHead{align-items:flex-start;flex-direction:column}
+  .attendanceQuickActions{grid-template-columns:1fr 1fr;width:100%}
+  .lessonDetailsEditor{grid-template-columns:1fr}
+  .lessonDetailsActions{flex-direction:column;align-items:stretch}
+  .attendanceRow{grid-template-columns:1fr;gap:9px;padding:13px 0}
+  .attendanceButtons{grid-template-columns:1fr 1fr}
+  .attendanceReasonInput{grid-column:1}
+}

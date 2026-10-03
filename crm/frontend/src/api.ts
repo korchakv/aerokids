@@ -500,6 +500,17 @@ export type ApiPaymentReminder = {
   last_reminder_at: string | null;
 };
 
+export type ApiGroupRosterStudent = {
+  student_id: string;
+  first_name: string;
+  last_name: string | null;
+  age: number | null;
+};
+
+export function loadGroupRoster(groupId: string, session: Session) {
+  return apiGet<ApiGroupRosterStudent[]>(`/groups/${groupId}/roster`, session);
+}
+
 export function loadGroupDetail(groupId: string, session: Session) {
   return apiGet<ApiGroupDetail>(`/groups/${groupId}/detail`, session);
 }

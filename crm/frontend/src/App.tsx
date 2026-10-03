@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiPaymentReminder, type ApiStudentSubscription, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentSubscription, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
@@ -242,6 +242,8 @@ function App() {
   const [attendanceNotes, setAttendanceNotes] = useState<Record<EntityId, Record<EntityId, string>>>({});
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceSaving, setAttendanceSaving] = useState(false);
+  const [lessonRoster, setLessonRoster] = useState<ApiGroupRosterStudent[] | null>(null);
+  const [lessonRosterLoading, setLessonRosterLoading] = useState(false);
   const [lessonTopicDraft, setLessonTopicDraft] = useState("");
   const [lessonNotesDraft, setLessonNotesDraft] = useState("");
   const [lessonDetailsSaving, setLessonDetailsSaving] = useState(false);
@@ -392,7 +394,14 @@ function App() {
       applyTeaching(teaching, setLessons, setGroups);
       setOverviewReport(report);
       setPaymentReminders(reminders);
-      setSelectedLessonId((current) => teaching.lessons.some((item) => item.id === current) ? current : (teaching.lessons[0]?.id ?? ""));
+      setSelectedLessonId((current) => {
+        if (teaching.lessons.some((item) => item.id === current)) return current;
+        const now = Date.now();
+        const nearest = [...teaching.lessons].sort((a, b) =>
+          Math.abs(new Date(a.starts_at).getTime() - now) - Math.abs(new Date(b.starts_at).getTime() - now)
+        )[0];
+        return nearest?.id ?? "";
+      });
       setWorkspaceLoaded(true);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити дані CRM");
@@ -936,16 +945,55 @@ function App() {
     setStudentStates((states) => ({ ...states, [id]: state }));
   };
 
+  const nearestLesson = [...lessons].sort((a, b) => {
+    const now = Date.now();
+    return Math.abs(dateValue(a.startsAt) - now) - Math.abs(dateValue(b.startsAt) - now);
+  })[0];
   const selectedLesson = apiEnabled && !workspaceLoaded
     ? undefined
-    : lessons.find((lesson) => lesson.id === selectedLessonId) ?? lessons[0];
+    : lessons.find((lesson) => lesson.id === selectedLessonId) ?? nearestLesson;
   const lessonGroup = selectedLesson ? groups.find((group) => group.id === selectedLesson.groupId) : undefined;
-  const lessonStudents = lessonGroup ? leads.filter((lead) => lessonGroup.members.includes(lead.id)) : [];
+  const lessonStudents = lessonGroup
+    ? (lessonRoster
+        ? lessonRoster.map((student) => leads.find((lead) => lead.id === student.student_id)).filter((lead): lead is Lead => Boolean(lead))
+        : leads.filter((lead) => lessonGroup.members.includes(lead.id) && (studentStates[lead.id] ?? "Активний") === "Активний"))
+    : [];
+  const journalStart = addLocalDays(startOfLocalWeek(new Date()), -7);
+  const journalEnd = addLocalDays(startOfLocalWeek(new Date()), 28);
+  const journalLessons = lessons
+    .filter((lesson) => {
+      const value = localDateInput(new Date(lesson.startsAt));
+      return value >= localDateInput(journalStart) && value <= localDateInput(journalEnd);
+    })
+    .sort((a, b) => dateValue(a.startsAt) - dateValue(b.startsAt));
 
   useEffect(() => {
     setLessonTopicDraft(selectedLesson?.topic ?? "");
     setLessonNotesDraft(selectedLesson?.notes ?? "");
   }, [selectedLesson?.id, selectedLesson?.topic, selectedLesson?.notes]);
+
+  useEffect(() => {
+    if (!apiEnabled || !session || !selectedLesson?.groupId) {
+      setLessonRoster(null);
+      return;
+    }
+    let cancelled = false;
+    setLessonRosterLoading(true);
+    loadGroupRoster(selectedLesson.groupId, session)
+      .then((rows) => {
+        if (!cancelled) setLessonRoster(rows);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setLessonRoster(null);
+          setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити список учнів групи.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLessonRosterLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [selectedLesson?.groupId, session?.accessToken, session?.organizationId]);
 
   useEffect(() => {
     if (!apiEnabled || !session || !selectedLesson?.id) return;
@@ -1978,9 +2026,9 @@ function App() {
 
         {active === "Відвідування" && <section className="attendanceLayout">
           <article className="panel lessonListPanel">
-            <div className="panelHead"><div><p className="eyebrow">Заняття</p><h2>Журнал</h2></div><span className="counter">{lessons.length}</span></div>
+            <div className="panelHead"><div><p className="eyebrow">Заняття</p><h2>Журнал</h2></div><span className="counter">{journalLessons.length}</span></div>
             <div className="lessonList">
-              {lessons.map((lesson) => {
+              {journalLessons.map((lesson) => {
                 const group = groups.find((g) => g.id === lesson.groupId);
                 const marked = Object.keys(attendance[lesson.id] ?? {}).length;
                 return <button className={"lessonRow " + (lesson.id === selectedLessonId ? "active" : "")} key={lesson.id} onClick={() => setSelectedLessonId(lesson.id)}>
