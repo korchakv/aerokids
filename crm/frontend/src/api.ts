@@ -521,6 +521,22 @@ export type ApiPaymentReminder = {
   last_reminder_at: string | null;
 };
 
+export type ApiStudentAttendanceHistoryItem = {
+  session_id: string;
+  group_id: string;
+  group_name: string;
+  starts_at: string;
+  duration_minutes: number;
+  topic: string | null;
+  lesson_status: "scheduled" | "completed" | "cancelled";
+  status: "present" | "absent" | "late" | "excused";
+  note: string | null;
+};
+
+export function loadStudentAttendanceHistory(studentId: string, session: Session) {
+  return apiGet<ApiStudentAttendanceHistoryItem[]>(`/students/${studentId}/attendance-history`, session);
+}
+
 export type ApiGroupRosterStudent = {
   student_id: string;
   first_name: string;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentSubscription, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
@@ -289,6 +289,9 @@ function App() {
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceSaving, setAttendanceSaving] = useState(false);
   const [focusedAttendanceStudentId, setFocusedAttendanceStudentId] = useState<EntityId | null>(null);
+  const [focusedAttendanceGroupId, setFocusedAttendanceGroupId] = useState<EntityId | null>(null);
+  const [studentAttendanceHistory, setStudentAttendanceHistory] = useState<ApiStudentAttendanceHistoryItem[]>([]);
+  const [studentAttendanceHistoryLoading, setStudentAttendanceHistoryLoading] = useState(false);
   const [lessonSaveNotice, setLessonSaveNotice] = useState<"" | "details" | "attendance">("");
   const [lessonRoster, setLessonRoster] = useState<ApiGroupRosterStudent[] | null>(null);
   const [lessonRosterLoading, setLessonRosterLoading] = useState(false);
@@ -1058,6 +1061,18 @@ function App() {
         ? lessonRoster.map((student) => leads.find((lead) => lead.id === student.student_id)).filter((lead): lead is Lead => Boolean(lead))
         : leads.filter((lead) => lessonGroup.members.includes(lead.id) && (studentStates[lead.id] ?? "Активний") === "Активний"))
     : [];
+  const focusedAttendanceStudent = focusedAttendanceStudentId ? leads.find((lead) => lead.id === focusedAttendanceStudentId) : undefined;
+  const focusedAttendanceGroup = focusedAttendanceGroupId ? groups.find((group) => group.id === focusedAttendanceGroupId) : undefined;
+  const focusedAttendanceRows = studentAttendanceHistory.filter((row) => !focusedAttendanceGroupId || row.group_id === focusedAttendanceGroupId);
+  const focusedAttendanceCounts = focusedAttendanceRows.reduce((acc, row) => {
+    acc.total += 1;
+    acc[row.status] += 1;
+    return acc;
+  }, { present: 0, absent: 0, late: 0, excused: 0, total: 0 });
+  const focusedAttendanceRate = focusedAttendanceCounts.total
+    ? Math.round(((focusedAttendanceCounts.present + focusedAttendanceCounts.late) / focusedAttendanceCounts.total) * 100)
+    : 0;
+
   const attendanceWeekStart = startOfLocalWeek(addLocalDays(new Date(), attendanceWeekOffset * 7));
   const attendanceWeekEnd = addLocalDays(attendanceWeekStart, 6);
   const journalLessons = lessons
@@ -1075,6 +1090,47 @@ function App() {
   useEffect(() => {
     setLessonEditing(selectedLesson?.status !== "completed");
   }, [selectedLesson?.id, selectedLesson?.status]);
+
+  useEffect(() => {
+    if (!focusedAttendanceStudentId) {
+      setStudentAttendanceHistory([]);
+      return;
+    }
+    if (!apiEnabled || !session) {
+      const demoRows: ApiStudentAttendanceHistoryItem[] = lessons
+        .filter((lesson) => !focusedAttendanceGroupId || lesson.groupId === focusedAttendanceGroupId)
+        .flatMap((lesson) => {
+          const status = attendance[lesson.id]?.[focusedAttendanceStudentId];
+          if (!status) return [];
+          return [{
+            session_id: lesson.id,
+            group_id: lesson.groupId,
+            group_name: groups.find((group) => group.id === lesson.groupId)?.name ?? "Група",
+            starts_at: lesson.startsAt,
+            duration_minutes: lesson.duration,
+            topic: lesson.topic ?? null,
+            lesson_status: lesson.status ?? "scheduled",
+            status,
+            note: attendanceNotes[lesson.id]?.[focusedAttendanceStudentId] ?? null,
+          }];
+        })
+        .sort((a, b) => dateValue(b.starts_at) - dateValue(a.starts_at));
+      setStudentAttendanceHistory(demoRows);
+      return;
+    }
+    let cancelled = false;
+    setStudentAttendanceHistoryLoading(true);
+    loadStudentAttendanceHistory(focusedAttendanceStudentId, session)
+      .then((rows) => { if (!cancelled) setStudentAttendanceHistory(rows); })
+      .catch((error) => {
+        if (!cancelled) {
+          setStudentAttendanceHistory([]);
+          setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити історію відвідування.");
+        }
+      })
+      .finally(() => { if (!cancelled) setStudentAttendanceHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [focusedAttendanceStudentId, focusedAttendanceGroupId, session?.accessToken, session?.organizationId]);
 
   useEffect(() => {
     if (!apiEnabled || !session || !selectedLesson?.groupId) {
@@ -1412,6 +1468,7 @@ function App() {
     if (target) setAttendanceWeekOffset(weekOffsetForDate(target.startsAt));
     setSelectedLessonId(lessonId);
     setFocusedAttendanceStudentId(null);
+    setFocusedAttendanceGroupId(null);
     setActive("Відвідування");
   };
 
@@ -1429,22 +1486,10 @@ function App() {
   };
 
   const goToStudentAttendance = (studentId: EntityId, groupId: EntityId) => {
-    const groupLessons = lessons.filter((lesson) => lesson.groupId === groupId && lesson.status !== "cancelled");
-    const now = Date.now();
-    const target = [...groupLessons].sort((a, b) => {
-      const aPast = dateValue(a.startsAt) <= now ? 0 : 1;
-      const bPast = dateValue(b.startsAt) <= now ? 0 : 1;
-      if (aPast !== bPast) return aPast - bPast;
-      return aPast === 0 ? dateValue(b.startsAt) - dateValue(a.startsAt) : dateValue(a.startsAt) - dateValue(b.startsAt);
-    })[0];
-    if (target) {
-      setSelectedLessonId(target.id);
-      setAttendanceWeekOffset(weekOffsetForDate(target.startsAt));
-    }
     setFocusedAttendanceStudentId(studentId);
+    setFocusedAttendanceGroupId(groupId);
     closeGroupDetail();
     setActive("Відвідування");
-    window.setTimeout(() => document.getElementById("attendance-student-" + studentId)?.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
   };
 
   const goToStudentPayments = (studentId: EntityId, preferredId?: EntityId) => {
@@ -2215,7 +2260,33 @@ function App() {
           </article>
           <article className="panel attendancePanel">
             {lessonSaveNotice && <div className="lessonSaveNotice">✓ Збережено</div>}
-            {selectedLesson && <>
+            {focusedAttendanceStudentId ? <div className="studentAttendanceOverview">
+              <div className="studentAttendanceHero">
+                <button className="lessonBackButton" onClick={() => { setFocusedAttendanceStudentId(null); setFocusedAttendanceGroupId(null); }}>← До журналу занять</button>
+                <div className="studentAttendanceTitle">
+                  <span>{focusedAttendanceStudent?.child?.[0] ?? "?"}</span>
+                  <div><p className="eyebrow">Відвідування учня</p><h2>{focusedAttendanceStudent?.child ?? "Учень"}</h2><small>{focusedAttendanceGroup?.name ?? "Усі групи"}{focusedAttendanceStudent?.parent ? " · " + focusedAttendanceStudent.parent : ""}</small></div>
+                </div>
+              </div>
+              <div className="studentAttendanceStats">
+                <article><small>Відвідуваність</small><strong>{focusedAttendanceRate}%</strong><span>{focusedAttendanceCounts.total} занять</span></article>
+                <article><small>Був</small><strong>{focusedAttendanceCounts.present}</strong><span>занять</span></article>
+                <article><small>Запізнився</small><strong>{focusedAttendanceCounts.late}</strong><span>занять</span></article>
+                <article><small>Пропуски</small><strong>{focusedAttendanceCounts.absent + focusedAttendanceCounts.excused}</strong><span>{focusedAttendanceCounts.excused} поважних</span></article>
+              </div>
+              <div className="studentAttendanceHistory">
+                <div className="studentAttendanceHistoryHead"><span>Дата</span><span>Заняття</span><span>Статус</span><span>Коментар</span><span></span></div>
+                {studentAttendanceHistoryLoading && <div className="emptyState compactEmpty">Завантажуємо історію…</div>}
+                {!studentAttendanceHistoryLoading && focusedAttendanceRows.length === 0 && <div className="emptyState">У цього учня ще немає відмічених занять у цій групі.</div>}
+                {focusedAttendanceRows.map((row) => <div className="studentAttendanceHistoryRow" key={row.session_id}>
+                  <time><b>{weekdayLong(row.starts_at)}</b><span>{new Date(row.starts_at).toLocaleDateString("uk-UA")}</span><small>{new Date(row.starts_at).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</small></time>
+                  <span><b>{row.topic || "Заняття"}</b><small>{row.group_name} · {row.duration_minutes} хв</small></span>
+                  <span><b className={"protocolStatus " + row.status}>{attendanceStatusLabel(row.status)}</b></span>
+                  <span className="protocolNote">{row.note || "—"}</span>
+                  <button className="link" onClick={() => goToLesson(row.session_id)}>Заняття →</button>
+                </div>)}
+              </div>
+            </div> : selectedLesson && <>
               <div className="lessonJournalHead">
                 <button className="lessonBackButton" onClick={() => setActive("Розклад")}>← До розкладу</button>
                 <div className="panelHead">
@@ -2889,12 +2960,6 @@ function App() {
 
 
 
-          {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <div className="drawerActions">
-            <button className="primary" onClick={() => setTrialMode("schedule")}>{selected.trialAt ? "Змінити пробне" : "Записати на пробне"}</button>
-            {selected.trialAt && !["completed","no_show","cancelled"].includes(selected.trialResult ?? "") && <button className="search" onClick={() => setTrialMode("complete")}>Результат пробного</button>}
-            {!["completed","no_show","cancelled"].includes(selected.trialResult ?? "") && <button className="search dangerSoft" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Закрити заявку</button>}
-          </div>}
-
           {trialMode === "schedule" && <div className="workflowBox">
             <div className="workflowHead"><h3>Запис на пробне</h3><button onClick={() => setTrialMode(null)}>×</button></div>
             <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
@@ -2990,6 +3055,10 @@ function App() {
             <button className="primary full" onClick={closeLead}>Закрити заявку</button>
           </div>}
 
+          {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && postTrialMode !== "close" && <div className="leadCancelBeforeHistory">
+            <button className="search dangerSoft" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Скасувати заявку</button>
+          </div>}
+
           {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} /> : <div className="history">
             <h3>Історія</h3>
             <div><i></i><p><b>Заявка створена</b><span>Джерело: {leadSourceLabel(selected.source)}</span></p></div>
@@ -3039,65 +3108,84 @@ function LeadKanban({
 }) {
   const [draggedId, setDraggedId] = useState<EntityId | null>(null);
   const [overColumn, setOverColumn] = useState<LeadKanbanColumnId | null>(null);
+  const [closedExpanded, setClosedExpanded] = useState(false);
+  const activeColumns = leadKanbanColumns.filter((column) => column.id !== "closed");
+  const closedColumn = leadKanbanColumns.find((column) => column.id === "closed")!;
+  const closedItems = leads.filter((lead) => leadKanbanColumn(lead) === "closed");
 
-  return <div className="leadKanban">
-    {leadKanbanColumns.map((column) => {
-      const items = leads.filter((lead) => leadKanbanColumn(lead) === column.id);
-      return <section
-        className={"kanbanColumn column-" + column.id + (overColumn === column.id ? " dragOver" : "")}
-        key={column.id}
-        onDragOver={(event) => { event.preventDefault(); setOverColumn(column.id); }}
-        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
-        onDrop={(event) => {
-          event.preventDefault();
-          const id = event.dataTransfer.getData("text/lead-id") || draggedId;
-          const lead = leads.find((item) => item.id === id);
-          setDraggedId(null);
-          setOverColumn(null);
-          if (lead) void onMove(lead, column.id);
-        }}
-      >
-        <header className="kanbanColumnHead">
-          <div><i></i><b>{column.title}</b><span>{column.hint}</span></div>
-          <strong>{items.length}</strong>
-        </header>
-        <div className="kanbanCards">
-          {items.length === 0 && <div className="kanbanEmpty">Перетягніть сюди заявку</div>}
-          {items.map((lead) => {
-            const urgency = leadUrgency(lead);
-            return <article
-              key={lead.id}
-              draggable={movingId !== lead.id}
-              className={"leadKanbanCard urgency-" + urgency + (movingId === lead.id ? " saving" : "")}
-              onDragStart={(event) => {
-                setDraggedId(lead.id);
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/lead-id", lead.id);
-              }}
-              onDragEnd={() => { setDraggedId(null); setOverColumn(null); }}
-              onClick={() => onOpen(lead.id)}
-            >
-              <div className="kanbanCardTop">
-                <span className="leadMiniAvatar">{lead.child.slice(0, 1)}</span>
-                <div><b>{lead.child}</b><small>{lead.age ? lead.age + " років" : "Вік не вказано"} · {lead.parent}</small></div>
-                <button className="kanbanMore" aria-label="Відкрити заявку" onClick={(event) => { event.stopPropagation(); onOpen(lead.id); }}>•••</button>
-              </div>
-              <div className="kanbanMeta">
-                <span className="sourceBadge">{leadSourceLabel(lead.source)}</span>
-                {lead.preferredLocationName && <span className="locationBadge">{lead.preferredLocationName}</span>}
-                {lead.recommendedLevel && <span className="levelBadge">{lead.recommendedLevel}</span>}
-              </div>
-              <div className={"kanbanNextAction " + urgency}>
-                <i></i><span>{leadNextAction(lead)}</span>
-              </div>
-              {lead.phone && <div className="kanbanPhone">{formatUaPhone(lead.phone)}</div>}
-              {lead.comment && <p className="kanbanComment">{lead.comment}</p>}
-              {movingId === lead.id && <div className="kanbanSaving">Оновлюємо…</div>}
-            </article>;
-          })}
-        </div>
-      </section>;
-    })}
+  const renderColumn = (column: (typeof leadKanbanColumns)[number], items: Lead[], compact = false) => <section
+    className={"kanbanColumn column-" + column.id + (compact ? " closedKanbanColumn" : "") + (overColumn === column.id ? " dragOver" : "")}
+    key={column.id}
+    onDragOver={(event) => { event.preventDefault(); setOverColumn(column.id); }}
+    onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
+    onDrop={(event) => {
+      event.preventDefault();
+      const id = event.dataTransfer.getData("text/lead-id") || draggedId;
+      const lead = leads.find((item) => item.id === id);
+      setDraggedId(null);
+      setOverColumn(null);
+      if (lead) void onMove(lead, column.id);
+    }}
+  >
+    <header className="kanbanColumnHead">
+      <div><i></i><b>{column.title}</b><span>{column.hint}</span></div>
+      <strong>{items.length}</strong>
+    </header>
+    <div className="kanbanCards">
+      {items.length === 0 && <div className="kanbanEmpty">Перетягніть сюди заявку</div>}
+      {items.map((lead) => {
+        const urgency = leadUrgency(lead);
+        return <article
+          key={lead.id}
+          draggable={movingId !== lead.id}
+          className={"leadKanbanCard urgency-" + urgency + (movingId === lead.id ? " saving" : "")}
+          onDragStart={(event) => {
+            setDraggedId(lead.id);
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/lead-id", lead.id);
+          }}
+          onDragEnd={() => { setDraggedId(null); setOverColumn(null); }}
+          onClick={() => onOpen(lead.id)}
+        >
+          <div className="kanbanCardTop">
+            <span className="leadMiniAvatar">{lead.child.slice(0, 1)}</span>
+            <div><b>{lead.child}</b><small>{lead.age ? lead.age + " років" : "Вік не вказано"} · {lead.parent}</small></div>
+            <button className="kanbanMore" aria-label="Відкрити заявку" onClick={(event) => { event.stopPropagation(); onOpen(lead.id); }}>•••</button>
+          </div>
+          <div className="kanbanMeta">
+            <span className="sourceBadge">{leadSourceLabel(lead.source)}</span>
+            {lead.preferredLocationName && <span className="locationBadge">{lead.preferredLocationName}</span>}
+            {lead.recommendedLevel && <span className="levelBadge">{lead.recommendedLevel}</span>}
+          </div>
+          <div className={"kanbanNextAction " + urgency}><i></i><span>{leadNextAction(lead)}</span></div>
+          {lead.phone && <div className="kanbanPhone">{formatUaPhone(lead.phone)}</div>}
+          {movingId === lead.id && <div className="kanbanSaving">Оновлюємо…</div>}
+        </article>;
+      })}
+    </div>
+  </section>;
+
+  return <div className="kanbanBoard">
+    <div className="leadKanban">{activeColumns.map((column) => renderColumn(column, leads.filter((lead) => leadKanbanColumn(lead) === column.id)))}</div>
+    <div
+      className={"closedKanbanDock " + (closedExpanded ? "expanded " : "") + (overColumn === "closed" ? "dragOver" : "")}
+      onDragOver={(event) => { event.preventDefault(); setOverColumn("closed"); }}
+      onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const id = event.dataTransfer.getData("text/lead-id") || draggedId;
+        const lead = leads.find((item) => item.id === id);
+        setDraggedId(null);
+        setOverColumn(null);
+        if (lead) void onMove(lead, "closed");
+      }}
+    >
+      <button className="closedKanbanToggle" onClick={() => setClosedExpanded((value) => !value)}>
+        <span><i></i><b>{closedColumn.title}</b><small>{closedColumn.hint}</small></span>
+        <span><strong>{closedItems.length}</strong><em>{closedExpanded ? "Згорнути ↑" : "Розгорнути ↓"}</em></span>
+      </button>
+      {closedExpanded && <div className="closedKanbanContent">{renderColumn(closedColumn, closedItems, true)}</div>}
+    </div>
   </div>;
 }
 
