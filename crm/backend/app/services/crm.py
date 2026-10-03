@@ -991,6 +991,90 @@ def _lesson_conflict_reason(
     return None
 
 
+def materialize_recurring_lesson_sessions(
+    db: Session,
+    org_id: UUID,
+    weeks_back: int = 4,
+    weeks_forward: int = 12,
+) -> int:
+    """Create concrete lesson sessions from active recurring group schedules.
+
+    This is intentionally idempotent: an existing lesson for the same group
+    and exact start time is reused, so manual sessions and previously generated
+    sessions are never duplicated.
+    """
+    organization = scoped_get(db, Organization, org_id)
+    try:
+        tz = ZoneInfo(organization.timezone)
+    except Exception:
+        tz = timezone.utc
+
+    local_today = datetime.now(tz).date()
+    current_monday = local_today - timedelta(days=local_today.weekday())
+    window_start = current_monday - timedelta(weeks=weeks_back)
+    window_end = current_monday + timedelta(weeks=weeks_forward + 1) - timedelta(days=1)
+
+    schedules = list(db.scalars(
+        select(GroupSchedule)
+        .join(Group, Group.id == GroupSchedule.group_id)
+        .where(
+            GroupSchedule.organization_id == org_id,
+            GroupSchedule.is_active.is_(True),
+            Group.organization_id == org_id,
+            Group.is_active.is_(True),
+        )
+        .order_by(GroupSchedule.group_id, GroupSchedule.weekday, GroupSchedule.start_time)
+    ))
+    if not schedules:
+        return 0
+
+    groups = {
+        group.id: group
+        for group in db.scalars(
+            select(Group).where(
+                Group.organization_id == org_id,
+                Group.id.in_({slot.group_id for slot in schedules}),
+            )
+        )
+    }
+
+    created = 0
+    for slot in schedules:
+        group = groups.get(slot.group_id)
+        if group is None:
+            continue
+
+        first_date = window_start + timedelta(days=slot.weekday)
+        current_date = first_date
+        while current_date <= window_end:
+            local_start = datetime.combine(current_date, slot.start_time).replace(tzinfo=tz)
+            starts_at = local_start.astimezone(timezone.utc)
+            exists = db.scalar(
+                select(LessonSession.id).where(
+                    LessonSession.organization_id == org_id,
+                    LessonSession.group_id == group.id,
+                    LessonSession.starts_at == starts_at,
+                )
+            )
+            if exists is None:
+                db.add(LessonSession(
+                    organization_id=org_id,
+                    group_id=group.id,
+                    location_id=group.location_id,
+                    starts_at=starts_at,
+                    duration_minutes=slot.duration_minutes,
+                    topic=None,
+                    notes=None,
+                    status=LessonStatus.SCHEDULED,
+                ))
+                created += 1
+            current_date += timedelta(days=7)
+
+    if created:
+        db.commit()
+    return created
+
+
 def create_lesson_session(db: Session, org_id: UUID, data, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> LessonSession:
     group = ensure_group_access(db, org_id, user_id, role, data.group_id)
     location_id = data.location_id if data.location_id is not None else group.location_id
@@ -1015,6 +1099,7 @@ def create_lesson_session(db: Session, org_id: UUID, data, user_id: UUID | None 
 
 
 def list_lesson_sessions(db: Session, org_id: UUID, group_id: UUID | None = None, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[LessonSession]:
+    materialize_recurring_lesson_sessions(db, org_id)
     allowed = assigned_group_ids_for_user(db, org_id, user_id, role)
     stmt = select(LessonSession).where(LessonSession.organization_id == org_id)
     if group_id is not None:

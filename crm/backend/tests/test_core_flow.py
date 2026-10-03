@@ -439,7 +439,44 @@ def test_schedule_session_and_attendance_flow(client):
 
     sessions = client.get("/lesson-sessions", headers=headers)
     assert sessions.status_code == 200
-    assert sessions.json()[0]["status"] == "completed"
+    completed = next(item for item in sessions.json() if item["id"] == session_id)
+    assert completed["status"] == "completed"
+
+
+def test_recurring_schedule_materializes_concrete_lessons(client):
+    org = create_org(client, "Recurring School", "recurring-lessons")
+    headers = {"X-Organization-Id": org["id"]}
+
+    student = client.post("/students", headers=headers, json={"first_name": "Марко", "age_at_inquiry": 10}).json()
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Tech Group", "capacity": 8, "student_ids": [student["id"]]},
+    )
+    assert formed.status_code == 201, formed.text
+    group_id = formed.json()["group"]["id"]
+
+    schedule = client.post(
+        "/group-schedules",
+        headers=headers,
+        json={"group_id": group_id, "weekday": 0, "start_time": "17:00", "duration_minutes": 60},
+    )
+    assert schedule.status_code == 201, schedule.text
+
+    first = client.get("/lesson-sessions", headers=headers)
+    assert first.status_code == 200, first.text
+    generated = [item for item in first.json() if item["group_id"] == group_id]
+    assert len(generated) >= 8
+    assert all(item["duration_minutes"] == 60 for item in generated)
+
+    second = client.get("/lesson-sessions", headers=headers)
+    assert second.status_code == 200, second.text
+    assert len(second.json()) == len(first.json())
 
 
 def test_attendance_rejects_student_from_another_group(client):
