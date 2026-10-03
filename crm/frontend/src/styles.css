@@ -1030,3 +1030,217 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
   .mobileLeadStats{grid-column:1}
   .mobileScheduleDay{grid-template-columns:60px minmax(0,1fr)}
 }
+
+
+/* Mobile lead actions v1 */
+.leadDrawerTitleRow{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.leadDrawerTitleRow h2{min-width:0}
+.mobileLeadStatusTrigger,.mobileLeadActionBar,.mobileLeadSheetLayer{display:none}
+.leadWorkflowBox{scroll-margin-top:18px}
+
+@media(max-width:720px){
+  .leadDrawerBackdrop{z-index:150!important;background:var(--ak-overlay-strong)}
+  .leadDrawer{padding:18px 14px calc(112px + env(safe-area-inset-bottom))!important}
+  .leadDrawer>.eyebrow{padding-right:48px}
+  .leadDrawerTitleRow{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:14px;padding-right:46px}
+  .leadDrawerTitleRow h2{margin:0!important;font-size:24px!important;line-height:1.16}
+  .desktopLeadStatus{display:none!important}
+  .mobileLeadStatusTrigger{
+    display:inline-flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    width:max-content;
+    max-width:100%;
+    min-height:34px;
+    padding:7px 10px;
+    border:1px solid var(--ak-border);
+    border-radius:999px;
+    background:var(--ak-surface-2);
+    color:var(--ak-text-soft);
+    font:inherit;
+    font-size:12px;
+    font-weight:800;
+    cursor:pointer;
+  }
+  .mobileLeadStatusTrigger i{font-style:normal;color:var(--ak-muted);font-size:13px}
+  .mobileLeadStatusTrigger.stage-new{border-color:var(--ak-border)}
+  .mobileLeadStatusTrigger.stage-contacted{border-color:rgba(54,145,190,.36);color:#78bfe0}
+  .mobileLeadStatusTrigger.stage-trial{border-color:rgba(146,102,224,.36);color:#b8a1ec}
+  .mobileLeadStatusTrigger.stage-no_show{border-color:rgba(217,108,117,.38);color:#df858e}
+  .mobileLeadStatusTrigger.stage-after_trial{border-color:rgba(219,166,67,.38);color:#d8b86e}
+  .mobileLeadStatusTrigger.stage-waiting{border-color:rgba(42,165,137,.38);color:#72cbb5}
+  .mobileLeadStatusTrigger.stage-closed{border-color:rgba(217,108,117,.28);color:#df858e}
+  .leadDrawer .contactCard{margin-bottom:12px}
+  .leadDrawer .detailGrid{grid-template-columns:1fr 1fr!important}
+  .leadDrawer .preferenceSummary{margin-bottom:12px}
+  .leadDrawer .leadWorkflowBox{
+    scroll-margin-top:12px;
+    margin:12px 0 16px!important;
+    padding:14px!important;
+    border-radius:14px!important;
+    background:var(--ak-surface-2)!important;
+    box-shadow:0 12px 34px rgba(0,0,0,.12);
+  }
+  .leadDrawer .leadWorkflowBox .workflowHead{position:sticky;top:-14px;z-index:2;margin:-14px -14px 10px;padding:12px 14px 10px;background:var(--ak-surface-2);border-radius:14px 14px 0 0;border-bottom:1px solid var(--ak-border)}
+  .leadDrawer .leadWorkflowBox input,.leadDrawer .leadWorkflowBox select,.leadDrawer .leadWorkflowBox textarea{min-height:46px;font-size:16px}
+  .leadDrawer .leadWorkflowBox textarea{min-height:96px}
+  .leadDrawer .leadWorkflowBox .primary,.leadDrawer .leadWorkflowBox .search{min-height:46px}
+  .mobileLeadActionBar{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 52px;
+    gap:8px;
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    z-index:165;
+    padding:10px 10px calc(10px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--ak-border);
+    background:var(--ak-bg-glass);
+    backdrop-filter:blur(18px);
+    box-shadow:0 -14px 34px rgba(0,0,0,.14);
+  }
+  .mobileLeadPrimaryAction{
+    min-height:54px;
+    display:grid;
+    justify-items:start;
+    align-content:center;
+    gap:1px;
+    padding:8px 14px!important;
+    text-align:left;
+    border-radius:13px!important;
+  }
+  .mobileLeadPrimaryAction small{font-size:9px;text-transform:uppercase;letter-spacing:.08em;opacity:.72}
+  .mobileLeadPrimaryAction strong{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+  .mobileLeadMoreAction{
+    min-width:52px;
+    min-height:54px;
+    padding:0;
+    border:1px solid var(--ak-border);
+    border-radius:13px;
+    background:var(--ak-surface);
+    color:var(--ak-text);
+    font:inherit;
+    font-size:20px;
+    font-weight:900;
+    letter-spacing:2px;
+    cursor:pointer;
+  }
+  .mobileLeadSheetLayer{
+    display:flex;
+    align-items:flex-end;
+    position:fixed;
+    inset:0;
+    z-index:180;
+    padding:12px 8px calc(8px + env(safe-area-inset-bottom));
+    background:var(--ak-overlay-strong);
+    backdrop-filter:blur(6px);
+  }
+  .mobileLeadSheet{
+    width:100%;
+    max-height:min(78dvh,720px);
+    overflow:auto;
+    padding:10px 10px 12px;
+    border:1px solid var(--ak-border);
+    border-radius:20px;
+    background:var(--ak-bg);
+    box-shadow:0 24px 70px rgba(0,0,0,.28);
+  }
+  .mobileLeadSheet:before{
+    content:"";
+    display:block;
+    width:42px;
+    height:4px;
+    margin:0 auto 8px;
+    border-radius:999px;
+    background:var(--ak-border);
+  }
+  .mobileLeadSheetHead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 4px 10px}
+  .mobileLeadSheetHead>div{display:grid;gap:1px}
+  .mobileLeadSheetHead span{font-size:9px;text-transform:uppercase;letter-spacing:.09em;color:var(--ak-muted)}
+  .mobileLeadSheetHead h3{margin:0;font-size:18px}
+  .mobileLeadSheetHead button{
+    display:grid;
+    place-items:center;
+    flex:0 0 40px;
+    width:40px;
+    height:40px;
+    padding:0;
+    border:1px solid var(--ak-border);
+    border-radius:50%;
+    background:var(--ak-surface);
+    color:var(--ak-text);
+    font-size:23px;
+    cursor:pointer;
+  }
+  .mobileLeadSheetActions,.mobileLeadStageList{display:grid;gap:7px}
+  .mobileLeadSheetAction{
+    width:100%;
+    display:grid;
+    grid-template-columns:38px minmax(0,1fr);
+    gap:10px;
+    align-items:center;
+    min-height:58px;
+    padding:9px 10px;
+    border:1px solid var(--ak-border);
+    border-radius:13px;
+    background:var(--ak-surface-2);
+    color:var(--ak-text);
+    text-align:left;
+    text-decoration:none;
+    font:inherit;
+    cursor:pointer;
+  }
+  .mobileLeadSheetAction>i{
+    display:grid;
+    place-items:center;
+    width:36px;
+    height:36px;
+    border-radius:10px;
+    background:var(--ak-surface);
+    color:var(--ak-accent-text);
+    font-style:normal;
+    font-weight:900;
+  }
+  .mobileLeadSheetAction>span{display:grid;gap:2px;min-width:0}
+  .mobileLeadSheetAction b{font-size:13px}
+  .mobileLeadSheetAction small{font-size:10.5px;line-height:1.35;color:var(--ak-muted)}
+  .mobileLeadSheetAction.danger{border-color:rgba(217,108,117,.25)}
+  .mobileLeadSheetAction.danger>i,.mobileLeadSheetAction.danger b{color:#df858e}
+  .mobileLeadStageOption{
+    width:100%;
+    display:grid;
+    grid-template-columns:12px minmax(0,1fr) 24px;
+    gap:10px;
+    align-items:center;
+    min-height:58px;
+    padding:9px 12px;
+    border:1px solid var(--ak-border);
+    border-radius:13px;
+    background:var(--ak-surface-2);
+    color:var(--ak-text);
+    text-align:left;
+    font:inherit;
+    cursor:pointer;
+  }
+  .mobileLeadStageOption>i{width:10px;height:10px;border-radius:50%;background:var(--ak-muted-2)}
+  .mobileLeadStageOption>span{display:grid;gap:2px}
+  .mobileLeadStageOption b{font-size:13px}
+  .mobileLeadStageOption small{font-size:10.5px;color:var(--ak-muted)}
+  .mobileLeadStageOption>strong{justify-self:end;color:var(--ak-accent-text)}
+  .mobileLeadStageOption.active{border-color:var(--ak-accent-strong);background:var(--ak-surface)}
+  .mobileLeadStageOption.stage-contacted>i{background:#4fa0c8}
+  .mobileLeadStageOption.stage-trial>i{background:#9266e0}
+  .mobileLeadStageOption.stage-after_trial>i{background:#dba643}
+  .mobileLeadStageOption.stage-waiting>i,.mobileLeadStageOption.stage-enrolled>i{background:#2aa589}
+  .mobileLeadStageOption.stage-closed>i{background:#d96c75}
+}
+
+@media(max-width:420px){
+  .leadDrawer{padding-left:10px!important;padding-right:10px!important}
+  .leadDrawerTitleRow{padding-right:42px}
+  .leadDrawerTitleRow h2{font-size:22px!important}
+  .mobileLeadActionBar{grid-template-columns:minmax(0,1fr) 50px;padding-left:8px;padding-right:8px}
+  .mobileLeadMoreAction{min-width:50px}
+}
