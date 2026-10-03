@@ -74,6 +74,11 @@ type LessonItem = {
   topic: string;
   notes?: string;
   status?: "scheduled" | "completed" | "cancelled";
+  attendancePresent?: number;
+  attendanceAbsent?: number;
+  attendanceLate?: number;
+  attendanceExcused?: number;
+  attendanceTotal?: number;
 };
 
 type PlanDemo = {
@@ -170,6 +175,29 @@ function formatUaPhone(value: string): string {
   return "+380 " + n.slice(0, 2) + " " + n.slice(2, 5) + " " + n.slice(5, 7) + " " + n.slice(7, 9);
 }
 
+function normalizedSearch(value: string) {
+  return cleanSpaces(value).toLocaleLowerCase("uk-UA");
+}
+
+function searchMatches(query: string, value: string | null | undefined) {
+  if (!value) return false;
+  if (normalizedSearch(value).includes(query)) return true;
+  const queryDigits = query.replace(/\D/g, "");
+  const valueDigits = value.replace(/\D/g, "");
+  return queryDigits.length >= 3 && valueDigits.includes(queryDigits);
+}
+
+function weekOffsetForDate(value: string | Date) {
+  const current = startOfLocalWeek(new Date()).getTime();
+  const target = startOfLocalWeek(typeof value === "string" ? new Date(value) : value).getTime();
+  return Math.round((target - current) / (7 * 24 * 60 * 60 * 1000));
+}
+
+function weekdayLong(value: string) {
+  const text = new Date(value).toLocaleDateString("uk-UA", { weekday: "long" });
+  return text ? text.charAt(0).toLocaleUpperCase("uk-UA") + text.slice(1) : "";
+}
+
 function emailError(value: string, required = false): string {
   const email = value.trim().toLowerCase();
   if (!email) return required ? "Email обов’язковий" : "";
@@ -247,6 +275,8 @@ function App() {
   const [attendanceConsume, setAttendanceConsume] = useState<Record<EntityId, Record<EntityId, boolean>>>({});
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceSaving, setAttendanceSaving] = useState(false);
+  const [focusedAttendanceStudentId, setFocusedAttendanceStudentId] = useState<EntityId | null>(null);
+  const [lessonSaveNotice, setLessonSaveNotice] = useState<"" | "details" | "attendance">("");
   const [lessonRoster, setLessonRoster] = useState<ApiGroupRosterStudent[] | null>(null);
   const [lessonRosterLoading, setLessonRosterLoading] = useState(false);
   const [lessonTopicDraft, setLessonTopicDraft] = useState("");
@@ -356,9 +386,16 @@ function App() {
   const [scheduleTime, setScheduleTime] = useState("17:00");
   const [scheduleDuration, setScheduleDuration] = useState(60);
   const [scheduleWeekOffset, setScheduleWeekOffset] = useState(0);
+  const [attendanceWeekOffset, setAttendanceWeekOffset] = useState(0);
   useEffect(() => {
     setStaffResetLink("");
   }, [selectedStaffId]);
+
+  useEffect(() => {
+    if (!lessonSaveNotice) return;
+    const timer = window.setTimeout(() => setLessonSaveNotice(""), 2200);
+    return () => window.clearTimeout(timer);
+  }, [lessonSaveNotice]);
 
   useEffect(() => {
     if (!apiEnabled || !session) return;
@@ -967,12 +1004,12 @@ function App() {
         ? lessonRoster.map((student) => leads.find((lead) => lead.id === student.student_id)).filter((lead): lead is Lead => Boolean(lead))
         : leads.filter((lead) => lessonGroup.members.includes(lead.id) && (studentStates[lead.id] ?? "Активний") === "Активний"))
     : [];
-  const journalStart = addLocalDays(startOfLocalWeek(new Date()), -7);
-  const journalEnd = addLocalDays(startOfLocalWeek(new Date()), 28);
+  const attendanceWeekStart = startOfLocalWeek(addLocalDays(new Date(), attendanceWeekOffset * 7));
+  const attendanceWeekEnd = addLocalDays(attendanceWeekStart, 6);
   const journalLessons = lessons
     .filter((lesson) => {
       const value = localDateInput(new Date(lesson.startsAt));
-      return value >= localDateInput(journalStart) && value <= localDateInput(journalEnd);
+      return value >= localDateInput(attendanceWeekStart) && value <= localDateInput(attendanceWeekEnd);
     })
     .sort((a, b) => dateValue(a.startsAt) - dateValue(b.startsAt));
 
@@ -1151,6 +1188,7 @@ function App() {
       } else {
         setLessons((items) => items.map((lesson) => lesson.id === selectedLesson.id ? { ...lesson, topic, notes: notes || undefined } : lesson));
       }
+      setLessonSaveNotice("details");
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти дані заняття.");
     } finally {
@@ -1178,6 +1216,7 @@ function App() {
           })),
         }, session);
         await syncWorkspace(session);
+        setLessonSaveNotice("attendance");
       } catch (error) {
         setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти відвідування.");
         return;
@@ -1206,27 +1245,27 @@ function App() {
     }
   };
 
-  const addCandidateToExistingGroup = async () => {
-    if (!selectedGroupId || !groupCandidateId || groupCandidateSaving) return;
-    const candidate = leads.find((lead) => lead.id === groupCandidateId);
+  const addCandidateToExistingGroup = async (candidateId?: EntityId) => {
+    const targetId = candidateId || groupCandidateId;
+    if (!selectedGroupId || !targetId || groupCandidateSaving) return;
+    const candidate = leads.find((lead) => lead.id === targetId);
     if (!candidate) return;
     setGroupCandidateSaving(true);
     setWorkspaceError("");
     try {
       if (apiEnabled && session) {
         await apiPost("/enrollments", {
-          student_id: groupCandidateId,
+          student_id: targetId,
           group_id: selectedGroupId,
           started_at: localDateInput(new Date()),
         }, session);
         await syncWorkspace(session);
         setGroupDetail(await loadGroupDetail(selectedGroupId, session));
       } else {
-        setGroups((items) => items.map((group) => group.id === selectedGroupId ? { ...group, members: Array.from(new Set([...group.members, groupCandidateId])) } : group));
-        setLeads((items) => items.map((lead) => lead.id === groupCandidateId ? { ...lead, status: "Зарахований" } : lead));
+        setGroups((items) => items.map((group) => group.id === selectedGroupId ? { ...group, members: Array.from(new Set([...group.members, targetId])) } : group));
+        setLeads((items) => items.map((lead) => lead.id === targetId ? { ...lead, status: "Зарахований" } : lead));
       }
       setGroupCandidateId("");
-      setShowGroupCandidatePicker(false);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося додати учня до групи.");
     } finally {
@@ -1310,13 +1349,54 @@ function App() {
   };
 
   const goToLesson = (lessonId: EntityId) => {
+    const target = lessons.find((lesson) => lesson.id === lessonId);
+    if (target) setAttendanceWeekOffset(weekOffsetForDate(target.startsAt));
     setSelectedLessonId(lessonId);
+    setFocusedAttendanceStudentId(null);
     setActive("Відвідування");
   };
 
   const goToGroup = (groupId: EntityId) => {
     setActive("Групи");
     void openGroup(groupId);
+  };
+
+  const closeGroupDetail = () => {
+    setSelectedGroupId(null);
+    setGroupDetail(null);
+    setShowGroupCandidatePicker(false);
+    setGroupCandidateId("");
+    setGroupTeacherEditing(false);
+  };
+
+  const goToStudentAttendance = (studentId: EntityId, groupId: EntityId) => {
+    const groupLessons = lessons.filter((lesson) => lesson.groupId === groupId && lesson.status !== "cancelled");
+    const now = Date.now();
+    const target = [...groupLessons].sort((a, b) => {
+      const aPast = dateValue(a.startsAt) <= now ? 0 : 1;
+      const bPast = dateValue(b.startsAt) <= now ? 0 : 1;
+      if (aPast !== bPast) return aPast - bPast;
+      return aPast === 0 ? dateValue(b.startsAt) - dateValue(a.startsAt) : dateValue(a.startsAt) - dateValue(b.startsAt);
+    })[0];
+    if (target) {
+      setSelectedLessonId(target.id);
+      setAttendanceWeekOffset(weekOffsetForDate(target.startsAt));
+    }
+    setFocusedAttendanceStudentId(studentId);
+    closeGroupDetail();
+    setActive("Відвідування");
+    window.setTimeout(() => document.getElementById("attendance-student-" + studentId)?.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
+  };
+
+  const goToStudentPayments = (studentId: EntityId, preferredId?: EntityId) => {
+    const studentPayments = payments.filter((payment) => payment.studentId === studentId).sort((a, b) => dateValue(b.dueDate) - dateValue(a.dueDate));
+    const paymentId = preferredId ?? studentPayments.find((payment) => payment.balanceAmount > 0)?.id ?? studentPayments[0]?.id;
+    closeGroupDetail();
+    setActive("Оплати");
+    if (paymentId) {
+      setFocusedPaymentId(paymentId);
+      window.setTimeout(() => document.getElementById("payment-" + paymentId)?.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
+    }
   };
 
   const createPayment = async () => {
@@ -1765,16 +1845,23 @@ function App() {
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || b.balanceAmount - a.balanceAmount) : [];
   const renewalSubscriptionTasks = canSeePayments ? subscriptions.filter((item) => item.status === "active" && item.needs_renewal) : [];
   const dashboardTaskCount = dashboardLeadTasks.length + dashboardPaymentTasks.length + renewalSubscriptionTasks.length;
-  const searchTerm = searchQuery.trim().toLocaleLowerCase("uk-UA");
+  const searchTerm = normalizedSearch(searchQuery);
   const searchLeads = searchTerm ? leads.filter((item) =>
-    [item.child, item.parent, item.phone, item.source].some((value) => value.toLocaleLowerCase("uk-UA").includes(searchTerm))
-  ).slice(0, 8) : [];
+    [item.child, item.parent, item.phone, item.childPhone, item.source, item.status, studentGroup(item.id)?.name]
+      .some((value) => searchMatches(searchTerm, value))
+  ).slice(0, 10) : [];
   const searchGroups = searchTerm ? groups.filter((item) =>
-    [item.name, item.ages, item.location].some((value) => value.toLocaleLowerCase("uk-UA").includes(searchTerm))
-  ).slice(0, 5) : [];
+    [item.name, item.ages, item.location, item.teacherName].some((value) => searchMatches(searchTerm, value))
+  ).slice(0, 6) : [];
   const searchStaff = searchTerm ? staff.filter((item) =>
-    [item.fullName, item.email, item.phone, item.role].some((value) => value.toLocaleLowerCase("uk-UA").includes(searchTerm))
-  ).slice(0, 5) : [];
+    [item.fullName, item.email, item.phone, item.role].some((value) => searchMatches(searchTerm, value))
+  ).slice(0, 6) : [];
+  const searchPayments = searchTerm ? payments.filter((payment) => {
+    const student = leads.find((lead) => lead.id === payment.studentId);
+    const plan = plans.find((item) => item.id === payment.planId);
+    return [student?.child, student?.parent, student?.phone, student?.childPhone, plan?.name]
+      .some((value) => searchMatches(searchTerm, value));
+  }).slice(0, 6) : [];
 
   return (
     <div className="shell">
@@ -1789,7 +1876,20 @@ function App() {
           }
           setActive(item);
         }} className={active === item ? "active" : ""} key={item}>{item}</button>)}</nav>
-        <div className="asideFooter">MVP 1 · crm-v1</div>
+        <div className="asideFooter">
+          <button
+            className="themeToggle asideThemeToggle"
+            type="button"
+            role="switch"
+            aria-checked={theme === "light"}
+            aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"}
+            onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+          >
+            <span className="themeToggleTrack" aria-hidden="true"><i>{theme === "dark" ? "☾" : "☀"}</i></span>
+            <span>{theme === "dark" ? "Темна тема" : "Світла тема"}</span>
+          </button>
+          <small>MVP 1 · crm-v1</small>
+        </div>
       </aside>
 
       <main>
@@ -1802,17 +1902,6 @@ function App() {
               </select>
               <span>{roleLabel(currentMembership?.role)}</span>
             </div>}
-            <button
-              className="themeToggle"
-              type="button"
-              role="switch"
-              aria-checked={theme === "light"}
-              aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"}
-              onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
-            >
-              <span className="themeToggleTrack" aria-hidden="true"><i>{theme === "dark" ? "☾" : "☀"}</i></span>
-              <span>{theme === "dark" ? "Темна" : "Світла"}</span>
-            </button>
             <button className="search" onClick={() => { setSearchQuery(""); setShowSearch(true); }}>⌕ Пошук</button>
             {canManageLeads && <button className="primary" onClick={() => setShowLeadForm(true)}>+ Нова заявка</button>}
             {session && <button className="search" onClick={() => { clearSession(); setSession(null); }}>Вийти</button>}
@@ -2047,22 +2136,28 @@ function App() {
 
         {active === "Відвідування" && <section className="attendanceLayout">
           <article className="panel lessonListPanel">
-            <div className="panelHead"><div><p className="eyebrow">Заняття</p><h2>Журнал</h2></div><span className="counter">{journalLessons.length}</span></div>
+            <div className="attendanceWeekHead"><div><p className="eyebrow">Журнал</p><h2>{attendanceWeekStart.toLocaleDateString("uk-UA", { day: "numeric", month: "short" })} — {attendanceWeekEnd.toLocaleDateString("uk-UA", { day: "numeric", month: "short" })}</h2></div><span className="counter">{journalLessons.length}</span></div>
+            <div className="attendanceWeekNav"><button className="search" onClick={() => setAttendanceWeekOffset((value) => value - 1)}>←</button><button className="search" disabled={attendanceWeekOffset === 0} onClick={() => setAttendanceWeekOffset(0)}>Сьогодні</button><button className="search" onClick={() => setAttendanceWeekOffset((value) => value + 1)}>→</button></div>
             <div className="lessonList">
               {journalLessons.map((lesson) => {
                 const group = groups.find((g) => g.id === lesson.groupId);
-                const marked = Object.keys(attendance[lesson.id] ?? {}).length;
-                return <button className={"lessonRow " + (lesson.id === selectedLessonId ? "active" : "")} key={lesson.id} onClick={() => setSelectedLessonId(lesson.id)}>
-                  <time>{new Date(lesson.startsAt).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })}<small>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</small></time>
-                  <span><b>{group?.name ?? "Група"}</b><small>{lesson.topic}</small></span>
-                  <i>{marked}/{group?.members.length ?? 0}</i>
+                const isPast = dateValue(lesson.startsAt) < Date.now();
+                const completed = lesson.status === "completed";
+                const rowState = completed ? "completed" : isPast ? "missed" : "planned";
+                const summary = completed ? `${lesson.attendancePresent ?? 0} є · ${lesson.attendanceLate ?? 0} зап. · ${lesson.attendanceAbsent ?? 0} нема · ${lesson.attendanceExcused ?? 0} поважн.` : isPast ? "Журнал не завершено" : "Заплановано";
+                return <button className={"lessonRow " + rowState + " " + (lesson.id === selectedLessonId ? "active" : "")} key={lesson.id} onClick={() => setSelectedLessonId(lesson.id)}>
+                  <time><b>{weekdayLong(lesson.startsAt)}</b>{new Date(lesson.startsAt).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })}<small>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</small></time>
+                  <span><b>{group?.name ?? "Група"}</b><small>{summary}</small></span>
+                  <i>{completed ? "✓" : isPast ? "!" : "•"}</i>
                 </button>;
               })}
+              {journalLessons.length === 0 && <div className="emptyState compactEmpty">На цей тиждень занять немає.</div>}
             </div>
           </article>
           <article className="panel attendancePanel">
+            {lessonSaveNotice && <div className="lessonSaveNotice">✓ Збережено</div>}
             {selectedLesson && <>
-              <div className="lessonJournalHead"><button className="lessonBackButton" onClick={() => setActive("Розклад")}>← До розкладу</button><div className="panelHead"><div><p className="eyebrow">Конкретне заняття</p><h2>{lessonGroup?.name}</h2><p className="lessonMeta">{new Date(selectedLesson.startsAt).toLocaleString("uk-UA")} · {selectedLesson.duration} хв</p></div><div className="attendanceQuickActions"><button className="search" onClick={markAllPresent}>Усі присутні</button><button className="search" onClick={markUnmarkedAbsent}>Непозначені → відсутні</button></div></div></div>
+              <div className="lessonJournalHead"><button className="lessonBackButton" onClick={() => setActive("Розклад")}>← До розкладу</button><div className="panelHead"><div><p className="eyebrow">Конкретне заняття</p><h2>{lessonGroup?.name}</h2><p className="lessonMeta"><b>{weekdayLong(selectedLesson.startsAt)}</b> · {new Date(selectedLesson.startsAt).toLocaleDateString("uk-UA")} · {new Date(selectedLesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })} · {selectedLesson.duration} хв</p></div><div className="attendanceQuickActions"><button className="search" onClick={markAllPresent}>Усі присутні</button><button className="search" onClick={markUnmarkedAbsent}>Непозначені → відсутні</button></div></div></div>
               <div className="lessonDetailsEditor">
                 <label>Тема заняття<input value={lessonTopicDraft} onChange={(e) => setLessonTopicDraft(e.target.value)} maxLength={240} placeholder="Що вивчаємо на занятті" /></label>
                 <label>Домашнє завдання / примітки<textarea value={lessonNotesDraft} onChange={(e) => setLessonNotesDraft(e.target.value)} maxLength={4000} placeholder="Наприклад: 3 кола в симуляторі без падіння. Або внутрішня примітка викладача." /></label>
@@ -2071,7 +2166,7 @@ function App() {
               <div className="attendanceTable">
                 {lessonStudents.map((student) => {
                   const value = attendance[selectedLesson.id]?.[student.id];
-                  return <div className={"attendanceRow " + (!value ? "unmarked" : "")} key={student.id}>
+                  return <div id={"attendance-student-" + student.id} className={"attendanceRow " + (!value ? "unmarked " : "") + (focusedAttendanceStudentId === student.id ? "focusedStudent" : "")} key={student.id}>
                     <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років{student.parent ? " · " + student.parent : ""}</small></b>{!value && <em className="unmarkedBadge">Не відмічено</em>}</span>
                     <div className="attendanceButtons">
                       <button className={value === "present" ? "active present" : ""} onClick={() => markAttendance(student.id, "present")}>✓ Є</button>
@@ -2347,29 +2442,14 @@ function App() {
       {showSearch && <div className="modalBackdrop">
         <div className="groupModal searchModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setShowSearch(false)}>×</button>
-          <p className="eyebrow">Пошук</p><h2>Знайти в CRM</h2>
-          <input className="globalSearchInput" autoFocus value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Ім’я, телефон, група, працівник…" />
-          {!searchTerm && <div className="searchHint">Почніть вводити ім’я, телефон або назву групи.</div>}
-          {searchTerm && searchLeads.length + searchGroups.length + searchStaff.length === 0 && <div className="searchHint">Нічого не знайдено.</div>}
-          {searchLeads.length > 0 && <div className="searchResults">
-            <h3>Діти та заявки</h3>
-            {searchLeads.map((item) => <button key={item.id} onClick={() => {
-              if (item.status === "Зарахований") setSelectedStudentId(item.id); else setSelectedId(item.id);
-              setShowSearch(false);
-            }}><span><b>{item.child}</b><small>{item.parent} · {item.phone}</small></span><i>{item.status}</i></button>)}
-          </div>}
-          {searchGroups.length > 0 && <div className="searchResults">
-            <h3>Групи</h3>
-            {searchGroups.map((item) => <button key={item.id} onClick={() => { setActive("Групи"); setShowSearch(false); openGroup(item.id); }}>
-              <span><b>{item.name}</b><small>{item.ages} · {item.location}</small></span><i>{item.members.length}/{item.capacity}</i>
-            </button>)}
-          </div>}
-          {searchStaff.length > 0 && <div className="searchResults">
-            <h3>Працівники</h3>
-            {searchStaff.map((item) => <button key={item.id} onClick={() => { setSelectedStaffId(item.id); setShowSearch(false); }}>
-              <span><b>{item.fullName}</b><small>{item.role} · {item.email || item.phone}</small></span><i>{item.isActive ? "Активний" : "Неактивний"}</i>
-            </button>)}
-          </div>}
+          <p className="eyebrow">Глобальний пошук</p><h2>Знайти в CRM</h2>
+          <input className="globalSearchInput" autoFocus value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Ім’я, прізвище, телефон, відповідальний, група…" />
+          {!searchTerm && <div className="searchHint">Введіть ім’я, частину телефону, відповідального або назву групи.</div>}
+          {searchTerm && searchLeads.length + searchGroups.length + searchStaff.length + searchPayments.length === 0 && <div className="searchHint">Нічого не знайдено.</div>}
+          {searchLeads.length > 0 && <div className="searchResults"><h3>Діти та заявки</h3>{searchLeads.map((item) => <button key={item.id} onClick={() => { if (item.status === "Зарахований") { setActive("Учні"); setSelectedStudentId(item.id); } else { setActive("Заявки"); setSelectedId(item.id); } setShowSearch(false); }}><span><b>{item.child}</b><small>{item.age} років · {item.parent}{item.phone ? " · " + formatUaPhone(item.phone) : ""}{item.childPhone ? " · дитина " + formatUaPhone(item.childPhone) : ""}</small></span><i>{item.status}</i></button>)}</div>}
+          {searchGroups.length > 0 && <div className="searchResults"><h3>Групи</h3>{searchGroups.map((item) => <button key={item.id} onClick={() => { setActive("Групи"); setShowSearch(false); void openGroup(item.id); }}><span><b>{item.name}</b><small>{item.ages} · {item.location}{item.teacherName ? " · " + item.teacherName : ""}</small></span><i>{item.members.length}/{item.capacity}</i></button>)}</div>}
+          {searchPayments.length > 0 && <div className="searchResults"><h3>Оплати</h3>{searchPayments.map((payment) => { const student = leads.find((lead) => lead.id === payment.studentId); const plan = plans.find((item) => item.id === payment.planId); return <button key={payment.id} onClick={() => { setShowSearch(false); goToPayment(payment.id); }}><span><b>{student?.child ?? "Учень"} · {plan?.name ?? "Оплата"}</b><small>{student?.parent ?? "Відповідальний не вказаний"}{student?.phone ? " · " + formatUaPhone(student.phone) : ""}</small></span><i>{payment.balanceAmount > 0 ? "Залишок " + money(payment.balanceAmount) : "Сплачено"}</i></button>; })}</div>}
+          {searchStaff.length > 0 && <div className="searchResults"><h3>Працівники</h3>{searchStaff.map((item) => <button key={item.id} onClick={() => { setActive("Працівники"); setSelectedStaffId(item.id); setShowSearch(false); }}><span><b>{item.fullName}</b><small>{item.role} · {item.email || item.phone}</small></span><i>{item.isActive ? "Активний" : "Неактивний"}</i></button>)}</div>}
         </div>
       </div>}
 
@@ -2465,20 +2545,19 @@ function App() {
             <div className="groupTeacherAssignActions"><button className="search" onClick={() => setGroupTeacherEditing(false)}>Скасувати</button><button className="primary" disabled={groupTeacherSaving} onClick={assignTeacherToSelectedGroup}>{groupTeacherSaving ? "Зберігаємо…" : "Зберегти"}</button></div>
           </div>}
           {showGroupCandidatePicker && <div className="groupCandidatePicker">
-            <div className="groupCandidatePickerHead"><div><b>Додати в існуючу групу</b><small>Доступні діти, які пройшли пробне або вже очікують групу.</small></div><span>{existingGroupCandidates.length} кандидатів</span></div>
-            {existingGroupCandidates.length === 0 ? <div className="emptyState compactEmpty">Немає кандидатів після пробного, яких можна додати до цієї групи.</div> : <>
-              <label>Кандидат<select value={groupCandidateId} onChange={(e) => setGroupCandidateId(e.target.value)}>
-                {existingGroupCandidates.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.child} · {candidate.age} років · {candidate.recommendedLevel ?? "рівень не вказано"} · {candidate.status}</option>)}
-              </select></label>
-              {groupCandidateId && (() => {
-                const candidate = existingGroupCandidates.find((item) => item.id === groupCandidateId);
-                if (!candidate) return null;
+            <div className="groupCandidatePickerHead"><div><b>Нові учасники</b><small>Кандидати, яких можна додати до цієї групи.</small></div><span>{existingGroupCandidates.length} кандидатів</span></div>
+            {existingGroupCandidates.length === 0 ? <div className="emptyState compactEmpty">Немає кандидатів після пробного, яких можна додати до цієї групи.</div> : <div className="groupCandidateRows">
+              {existingGroupCandidates.map((candidate) => {
                 const slots = (groupDetail?.schedules ?? []).map((slot) => ({ weekday: slot.weekday, start_time: slot.start_time.slice(0,5), duration_minutes: slot.duration_minutes }));
                 const match = candidateCompatibility(candidate, slots, groupDetail?.group.location_id ?? null);
-                return <div className="groupCandidatePreview"><span className="candidateAvatar">{candidate.child[0]}</span><div><b>{candidate.child}</b><small>{candidate.parent} · {candidate.phone}</small><small>{availabilityLabel(candidate.availability ?? [])}</small></div><MatchBadge match={match} /></div>;
-              })()}
-              <div className="groupCandidatePickerActions"><button className="search" onClick={() => { setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>Скасувати</button><button className="primary" disabled={!groupCandidateId || groupCandidateSaving} onClick={addCandidateToExistingGroup}>{groupCandidateSaving ? "Додаємо…" : "Додати до групи"}</button></div>
-            </>}
+                return <article className="groupMemberCard groupCandidateMemberRow" key={candidate.id}>
+                  <div className="groupMemberTop"><span className="candidateAvatar">{candidate.child[0]}</span><div><b>{candidate.child}</b><small>{candidate.age} років · {candidate.recommendedLevel ?? "рівень не вказано"} · {candidate.status}</small><small>{candidate.parent}{candidate.phone ? " · " + formatUaPhone(candidate.phone) : ""}</small></div></div>
+                  <div className="candidateRowMatch"><MatchBadge match={match} /><small>{availabilityLabel(candidate.availability ?? [])}</small></div>
+                  <button className="primary compact" disabled={groupCandidateSaving && groupCandidateId === candidate.id} onClick={() => addCandidateToExistingGroup(candidate.id)}>{groupCandidateSaving && groupCandidateId === candidate.id ? "Додаємо…" : "Додати до групи"}</button>
+                </article>;
+              })}
+            </div>}
+            <div className="groupCandidatePickerActions"><button className="search" onClick={() => { setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>Закрити</button></div>
           </div>}
           {groupDetailLoading && <div className="emptyState">Завантажуємо дані групи…</div>}
           {!apiEnabled && selectedGroup && <div className="groupMemberList">{selectedGroup.members.map((studentId) => {
@@ -2492,20 +2571,26 @@ function App() {
             </article>;
           })}</div>}
           {apiEnabled && groupDetail && <div className="groupMemberList">
+            <div className="groupMemberSectionHead"><div><b>Активні учасники</b><small>{groupDetail.members.length} у групі</small></div></div>
             {groupDetail.members.length === 0 && <div className="emptyState">У групі немає активних або призупинених учнів.</div>}
             {groupDetail.members.map((member) => {
               const billingLabel = member.billing?.status === "overdue" ? "Прострочено" : member.billing?.status === "due" ? "Оплата сьогодні" : member.billing?.status === "upcoming" ? "Очікується" : member.billing?.status === "current" ? "Сплачено" : "Без тарифу";
+              const latestPayment = member.payments.find((payment) => payment.balance_minor > 0) ?? member.payments[0];
+              const usage = member.billing?.lessons_included != null ? `${member.billing.lessons_used ?? 0}/${member.billing.lessons_included} використано · залишилось ${member.billing.lessons_remaining ?? 0}` : "";
               return <article className="groupMemberCard groupMemberCardCompact" key={member.student_id}>
-                <div className="groupMemberHeaderRow">
-                  <div className="groupMemberTop"><span className="candidateAvatar">{member.first_name[0]}</span><div><b>{member.first_name} {member.last_name ?? ""}</b><small>{member.age ?? "—"} років · у групі з {new Date(member.enrollment_started_at + "T00:00:00").toLocaleDateString("uk-UA")}</small><small>Дитина: {member.student_phone ? formatUaPhone(member.student_phone) : "телефон не вказано"}</small><small>Відповідальний: {member.contact_name ?? "не вказано"}{member.contact_phone ? " · " + formatUaPhone(member.contact_phone) : ""}</small></div></div>
-                  <button className="link groupMemberOpen" onClick={() => { setSelectedStudentId(member.student_id); setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); }}>Відкрити картку →</button>
+                <div className="groupMemberIdentityCell">
+                  <div className="groupMemberTop"><span className="candidateAvatar">{member.first_name[0]}</span><div><b>{member.first_name} {member.last_name ?? ""}</b><small>{member.age ?? "—"} років · з {new Date(member.enrollment_started_at + "T00:00:00").toLocaleDateString("uk-UA")}</small><small>{member.contact_name ?? "Відповідальний не вказаний"}{member.contact_phone ? " · " + formatUaPhone(member.contact_phone) : ""}</small></div></div>
+                  <button className="link groupMemberOpen" onClick={() => { setSelectedStudentId(member.student_id); closeGroupDetail(); setActive("Учні"); }}>Картка →</button>
                 </div>
-                <div className="groupMemberMetrics groupMemberMetricsCompact">
-                  <span><small>Відвідування</small><b>{member.attendance.attendance_rate}%</b><em>{member.attendance.present} був · {member.attendance.late} запізн. · {member.attendance.absent} пропусків · {member.attendance.excused} поважних</em></span>
-                  {member.billing ? <span><small>Оплата</small><b className={"billingText " + member.billing.status}>{billingLabel}</b><em>{member.billing.plan_name ?? "Тариф не вказано"}{member.billing.next_due_date ? " · до " + new Date(member.billing.next_due_date + "T00:00:00").toLocaleDateString("uk-UA") : ""}</em></span> : <span><small>Оплата</small><b>Приховано для ролі</b><em>Фінансові дані недоступні викладачу</em></span>}
-                  {member.billing && <span><small>Борг</small><b>{money(member.billing.amount_due_minor / 100)}</b><em>{member.billing.last_paid_at ? "Остання оплата " + new Date(member.billing.last_paid_at).toLocaleDateString("uk-UA") : "Оплат ще не було"}</em></span>}
-                </div>
-                {member.payments.length > 0 && <details className="memberPayments memberPaymentsCompact"><summary>Історія оплат ({member.payments.length})</summary><div>{member.payments.map((payment) => <p key={payment.id}><span>{payment.note ?? "Нарахування"}<small>{payment.due_date ? "До " + new Date(payment.due_date + "T00:00:00").toLocaleDateString("uk-UA") : "Без дати"}</small></span><b>{money(payment.adjusted_amount_minor / 100)}<small>{payment.balance_minor > 0 ? "Залишок " + money(payment.balance_minor / 100) : payment.status === "cancelled" ? "Скасовано" : payment.status === "refunded" ? "Повернено" : "Сплачено"}{payment.refunded_minor > 0 ? " · повернено " + money(payment.refunded_minor / 100) : ""}</small></b></p>)}</div></details>}
+                <button className="groupMemberMetricButton attendanceMetric" onClick={() => goToStudentAttendance(member.student_id, groupDetail.group.id)}>
+                  <small>Відвідування</small><b>{member.attendance.attendance_rate}%</b><em>{member.attendance.present} був · {member.attendance.late} запізн. · {member.attendance.absent} нема · {member.attendance.excused} поважн.</em><i>Відкрити →</i>
+                </button>
+                {member.billing ? <div className="groupMemberFinanceCell">
+                  <button className="groupMemberMetricButton paymentMetric" onClick={() => goToStudentPayments(member.student_id, latestPayment?.id)}>
+                    <small>Оплата</small><b className={"billingText " + member.billing.status}>{billingLabel}</b><em>{member.billing.plan_name ?? "Тариф не вказано"}{usage ? " · " + usage : ""}{member.billing.subscription_ends_on ? " · до " + new Date(member.billing.subscription_ends_on + "T00:00:00").toLocaleDateString("uk-UA") : ""}</em><i>{member.billing.amount_due_minor > 0 ? "Борг " + money(member.billing.amount_due_minor / 100) : "Відкрити →"}</i>
+                  </button>
+                  {member.payments.length > 0 && <details className="memberPayments memberPaymentsInline"><summary>Історія оплат ({member.payments.length})</summary><div>{member.payments.map((payment) => <button className="memberPaymentHistoryRow" key={payment.id} onClick={() => goToStudentPayments(member.student_id, payment.id)}><span>{payment.note ?? "Нарахування"}<small>{payment.due_date ? "До " + new Date(payment.due_date + "T00:00:00").toLocaleDateString("uk-UA") : "Без дати"}</small></span><b>{money(payment.adjusted_amount_minor / 100)}<small>{payment.balance_minor > 0 ? "Залишок " + money(payment.balance_minor / 100) : payment.status === "cancelled" ? "Скасовано" : payment.status === "refunded" ? "Повернено" : "Сплачено"}</small></b></button>)}</div></details>}
+                </div> : <div className="groupMemberFinanceCell"><span className="groupMemberMetricStatic"><small>Оплата</small><b>Приховано для ролі</b><em>Фінансові дані недоступні</em></span></div>}
               </article>;
             })}
           </div>}
@@ -2924,6 +3009,11 @@ function applyTeaching(
     topic: item.topic ?? "Заняття",
     notes: item.notes ?? undefined,
     status: item.status,
+    attendancePresent: item.attendance_present,
+    attendanceAbsent: item.attendance_absent,
+    attendanceLate: item.attendance_late,
+    attendanceExcused: item.attendance_excused,
+    attendanceTotal: item.attendance_total,
   })));
 
   const byGroup = new Map<EntityId, TeachingBundle["schedules"]>();
