@@ -261,6 +261,7 @@ function App() {
   const [subscriptions, setSubscriptions] = useState<ApiStudentSubscription[]>([]);
   const [paymentAutoRenew, setPaymentAutoRenew] = useState(true);
   const [paymentActionId, setPaymentActionId] = useState<EntityId | null>(null);
+  const [focusedPaymentId, setFocusedPaymentId] = useState<EntityId | null>(null);
   const [paymentActionType, setPaymentActionType] = useState<"partial" | "refund" | "adjustment" | null>(null);
   const [paymentActionAmount, setPaymentActionAmount] = useState("");
   const [paymentActionReason, setPaymentActionReason] = useState("");
@@ -1241,6 +1242,24 @@ function App() {
     setShowPaymentForm(true);
   };
 
+  const goToPayment = (paymentId: EntityId) => {
+    setFocusedPaymentId(paymentId);
+    setActive("Оплати");
+    window.setTimeout(() => {
+      document.getElementById("payment-" + paymentId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  };
+
+  const goToLesson = (lessonId: EntityId) => {
+    setSelectedLessonId(lessonId);
+    setActive("Відвідування");
+  };
+
+  const goToGroup = (groupId: EntityId) => {
+    setActive("Групи");
+    void openGroup(groupId);
+  };
+
   const createPayment = async () => {
     if (!paymentStudentId || !activeStudents.some((student) => student.id === paymentStudentId)) {
       setWorkspaceError("Оберіть учня для нарахування.");
@@ -1649,6 +1668,32 @@ function App() {
   const canManageStudents = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
   const canManageStaff = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
+  const todayKey = localDateInput(new Date());
+  const canSeeLeads = navigation.includes("Заявки");
+  const canSeePayments = navigation.includes("Оплати");
+  const canSeeSchedule = navigation.includes("Розклад") || navigation.includes("Відвідування");
+  const todayLessons = lessons
+    .filter((lesson) => localDateInput(new Date(lesson.startsAt)) === todayKey && lesson.status !== "cancelled")
+    .sort((a, b) => dateValue(a.startsAt) - dateValue(b.startsAt));
+  const todayTrials = leads
+    .filter((lead) => lead.trialAt && localDateInput(new Date(lead.trialAt)) === todayKey && lead.status === "Пробне заплановано")
+    .sort((a, b) => dateValue(a.trialAt) - dateValue(b.trialAt));
+  const dashboardLeadTasks = canSeeLeads ? leads
+    .filter((lead) => {
+      if (["Відмовились", "Не відповідає", "Неактуально", "Зарахований"].includes(lead.status)) return false;
+      if (lead.status === "Нова" || lead.status === "Після пробного") return true;
+      if (lead.trialResult === "no_show" || lead.trialResult === "cancelled") return true;
+      return Boolean(lead.nextContactAt && localDateInput(new Date(lead.nextContactAt)) <= todayKey);
+    })
+    .sort((a, b) => {
+      const priority = leadActionPriority(a) - leadActionPriority(b);
+      if (priority !== 0) return priority;
+      return dateValue(a.nextContactAt, dateValue(a.createdAt)) - dateValue(b.nextContactAt, dateValue(b.createdAt));
+    }) : [];
+  const dashboardPaymentTasks = canSeePayments ? payments
+    .filter((payment) => payment.balanceAmount > 0 && payment.status !== "cancelled" && Boolean(payment.dueDate) && payment.dueDate <= todayKey)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || b.balanceAmount - a.balanceAmount) : [];
+  const dashboardTaskCount = dashboardLeadTasks.length + dashboardPaymentTasks.length;
   const searchTerm = searchQuery.trim().toLocaleLowerCase("uk-UA");
   const searchLeads = searchTerm ? leads.filter((item) =>
     [item.child, item.parent, item.phone, item.source].some((value) => value.toLocaleLowerCase("uk-UA").includes(searchTerm))
@@ -1707,34 +1752,80 @@ function App() {
         {apiEnabled && workspaceError && <div className="syncBanner error">{workspaceError}</div>}
         {apiEnabled && workspaceLoaded && !workspaceLoading && !workspaceError && <div className="syncStatus">Дані завантажено з CRM API</div>}
 
-        {active === "Дашборд" && <>
-          <section className="stats">
-            <article><span>Нові заявки</span><strong>{stats.newLeads}</strong><small>потребують першого контакту</small></article>
-            <article><span>Пробні заплановано</span><strong>{stats.trial}</strong><small>найближчі записи</small></article>
-            <article><span>Очікують групу</span><strong>{stats.waiting}</strong><small>кандидати до формування</small></article>
-            <article><span>Зараховані</span><strong>{stats.activeStudents}</strong><small>у сформованих групах</small></article>
-          </section>
-          <section className="grid">
-            <article className="panel wide">
-              <div className="panelHead"><div><p className="eyebrow">Потрібно опрацювати</p><h2>Останні заявки</h2></div><button className="link" onClick={() => setActive("Заявки")}>Усі заявки →</button></div>
-              <LeadTable leads={leads.slice(0, 5)} onOpen={openLead} />
-            </article>
-            <article className="panel">
-              <p className="eyebrow">Сьогодні</p><h2>Пробні заняття</h2>
-              <div className="timeline">
-                {upcomingTrials.length === 0 && <div className="emptyState">Запланованих пробних поки немає.</div>}
-                {upcomingTrials.map((lead) => <button className="timelineButton" key={lead.id} onClick={() => openLead(lead.id)}>
-                  <time>{new Date(lead.trialAt!).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })}<small>{new Date(lead.trialAt!).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</small></time>
-                  <p><b>{lead.child}</b><span>{lead.parent}{lead.trialLocation ? " · " + lead.trialLocation : ""}</span></p>
-                </button>)}
-              </div>
-            </article>
-            <article className="panel">
-              <p className="eyebrow">Формування груп</p><h2>Очікують групу</h2>
-              <div className="suggestion"><strong>{waiting.length} дітей</strong><span>відфільтруйте за віком і рівнем</span><button className="primary" onClick={() => setActive("Групи")}>Сформувати групу</button></div>
-            </article>
-          </section>
-        </>}
+        {active === "Дашборд" && <section className="todayDashboard">
+          <div className="todayIntro">
+            <div>
+              <p className="eyebrow">Сьогодні · ${new Date().toLocaleDateString("uk-UA", { weekday: "long", day: "numeric", month: "long" })}</p>
+              <h2>{dashboardTaskCount > 0 ? "Що потребує уваги" : "Усе важливе на сьогодні під контролем"}</h2>
+            </div>
+            {dashboardTaskCount > 0 && <span className="todayTaskCount">{dashboardTaskCount} {dashboardTaskCount === 1 ? "дія" : dashboardTaskCount < 5 ? "дії" : "дій"}</span>}
+          </div>
+
+          {canSeeSchedule && <article className="panel todayLessonsPanel">
+            <div className="todaySectionHead">
+              <div><p className="eyebrow">Розклад</p><h2>Заняття сьогодні</h2></div>
+              <button className="link" onClick={() => setActive("Розклад")}>Розклад →</button>
+            </div>
+            <div className="todayLessonList">
+              {todayLessons.map((lesson) => {
+                const group = groups.find((item) => item.id === lesson.groupId);
+                return <div className="todayLessonRow" key={lesson.id}>
+                  <button className="todayLessonMain" onClick={() => goToLesson(lesson.id)}>
+                    <time>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
+                    <span><b>{group?.name ?? "Заняття"}</b><small>{lesson.topic || "Тема не вказана"} · {lesson.duration} хв{group?.location ? " · " + group.location : ""}</small></span>
+                    <em>Журнал →</em>
+                  </button>
+                  {group && <button className="todayGroupLink" onClick={() => goToGroup(group.id)}>Група</button>}
+                </div>;
+              })}
+              {todayTrials.map((lead) => <button className="todayLessonRow todayTrialRow" key={"trial-" + lead.id} onClick={() => openLead(lead.id)}>
+                <span className="todayLessonMain">
+                  <time>{new Date(lead.trialAt!).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
+                  <span><b>{lead.child} · пробне</b><small>{lead.parent}{lead.trialLocation ? " · " + lead.trialLocation : ""}</small></span>
+                  <em>Заявка →</em>
+                </span>
+              </button>)}
+              {todayLessons.length === 0 && todayTrials.length === 0 && <div className="todayEmpty">На сьогодні занять не заплановано.</div>}
+            </div>
+          </article>}
+
+          <article className="panel todayActionsPanel">
+            <div className="todaySectionHead">
+              <div><p className="eyebrow">Дії</p><h2>Потрібно зробити сьогодні</h2></div>
+            </div>
+            <div className="todayActionList">
+              {dashboardLeadTasks.map((lead) => {
+                const kind = lead.status === "Нова"
+                  ? "Нова заявка"
+                  : lead.status === "Після пробного"
+                    ? "Після пробного"
+                    : lead.trialResult === "no_show"
+                      ? "Не прийшов на пробне"
+                      : lead.trialResult === "cancelled"
+                        ? "Пробне скасовано"
+                        : "Зв’язатися";
+                const detail = lead.nextContactAt && localDateInput(new Date(lead.nextContactAt)) <= todayKey
+                  ? "Контакт запланований " + new Date(lead.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+                  : lead.parent + " · " + formatUaPhone(lead.phone);
+                return <button className="todayActionRow" key={"lead-" + lead.id} onClick={() => openLead(lead.id)}>
+                  <span className="todayActionType lead">Заявка</span>
+                  <span className="todayActionText"><b>{lead.child}</b><small>{kind} · {detail}</small></span>
+                  <span className="todayActionArrow">→</span>
+                </button>;
+              })}
+              {dashboardPaymentTasks.map((payment) => {
+                const student = leads.find((lead) => lead.id === payment.studentId);
+                const isOverdue = payment.dueDate < todayKey || payment.status === "overdue";
+                return <button className="todayActionRow" key={"payment-" + payment.id} onClick={() => goToPayment(payment.id)}>
+                  <span className={"todayActionType payment " + (isOverdue ? "urgent" : "")}>{isOverdue ? "Борг" : "Оплата"}</span>
+                  <span className="todayActionText"><b>{student?.child ?? "Учень"} · {money(payment.balanceAmount)}</b><small>{isOverdue ? "Прострочено" : "Оплатити сьогодні"} · термін {new Date(payment.dueDate + "T00:00:00").toLocaleDateString("uk-UA")}</small></span>
+                  <span className="todayActionArrow">→</span>
+                </button>;
+              })}
+              {dashboardTaskCount === 0 && <div className="todayEmpty done">На сьогодні немає невиконаних важливих дій.</div>}
+            </div>
+          </article>
+        </section>}
 
         {active === "Заявки" && <section className="panel leadsPage">
           <div className="panelHead leadsHead">
@@ -1925,7 +2016,7 @@ function App() {
                   const plan = plans.find((item) => item.id === payment.planId);
                   const subscription = payment.subscriptionId ? subscriptions.find((item) => item.id === payment.subscriptionId) : undefined;
                   const statusLabel = payment.status === "paid" ? "Сплачено" : payment.status === "overdue" ? "Прострочено" : payment.status === "refunded" ? "Повернено" : payment.status === "cancelled" ? "Скасовано" : "Очікується";
-                  return <div className="paymentRow" key={payment.id}>
+                  return <div id={"payment-" + payment.id} className={"paymentRow " + (focusedPaymentId === payment.id ? "paymentFocused" : "")} key={payment.id}>
                     <span className="paymentIdentity"><b>{student?.child ?? "Учень"}</b><small>Дитина{student?.childPhone ? " · " + formatUaPhone(student.childPhone) : ""}</small><small><strong>Відповідальний:</strong> {student?.parent ?? "Не вказано"}{student?.phone ? " · " + formatUaPhone(student.phone) : ""}</small></span>
                     <span className="paymentPlanCell"><b>{plan?.name ?? "—"}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}</span>
                     <span className="paymentAmountCell"><b>{money(payment.adjustedAmount)}</b><small>{payment.balanceAmount > 0 ? <>Залишок: {money(payment.balanceAmount)}</> : <>Внесено: {money(Math.max(0, payment.paidAmount - payment.refundedAmount))}</>}{payment.refundedAmount > 0 ? " · повернено " + money(payment.refundedAmount) : ""}</small></span>
