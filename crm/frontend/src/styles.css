@@ -696,3 +696,206 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 .scheduleTools{display:grid;grid-template-columns:1fr 1fr;gap:12px}.scheduleTools .panel{padding:14px!important}.scheduleToolHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}.scheduleToolHead>div{display:grid;gap:1px}.scheduleToolHead h2{font-size:16px!important}.scheduleToolHead>span{max-width:210px;color:var(--ak-muted);font-size:10px;line-height:1.35;text-align:right}
 @media(max-width:1050px){.scheduleToolbarActions{display:grid;justify-items:stretch}.scheduleGroupFilter select{min-width:0}.scheduleWeekClear{grid-template-columns:repeat(7,150px)!important}.scheduleTools{grid-template-columns:1fr}}
 @media(max-width:720px){.scheduleToolbarActions{width:100%}.scheduleGroupFilter{width:100%}.scheduleGroupFilter select{width:100%}.scheduleNav{width:100%}.scheduleWeekClear{grid-template-columns:repeat(7,138px)!important}.scheduleTools{grid-template-columns:1fr}.scheduleToolHead{display:grid}.scheduleToolHead>span{max-width:none;text-align:left}}
+
+/* Mobile UX simplification v6 */
+.appNav button{display:flex;align-items:center;gap:9px}
+.appNav button svg{flex:0 0 auto}
+.iconButton{display:grid!important;place-items:center!important;width:40px;min-width:40px;height:40px;padding:0!important;border-radius:10px!important}
+.headerThemeButton{display:none!important}
+.headerPrimaryAction{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.loginAction{display:flex!important;align-items:center;justify-content:center;gap:8px}
+.groupBackButton,.lessonBackButton{display:inline-flex!important;align-items:center;gap:6px}
+
+@media(max-width:720px){
+  html,body,#root{min-height:100%;overflow-x:hidden}
+  body{padding-bottom:calc(74px + env(safe-area-inset-bottom))!important}
+  .shell{display:block!important}
+
+  /* Only the real CRM sidebar becomes the bottom mobile navigation. */
+  .shell>.appSidebar{
+    display:block!important;
+    position:fixed!important;
+    inset:auto 0 0 0!important;
+    z-index:130!important;
+    width:100%!important;
+    height:auto!important;
+    min-height:0!important;
+    padding:6px 6px calc(6px + env(safe-area-inset-bottom))!important;
+    border:0!important;
+    border-top:1px solid var(--ak-border)!important;
+    background:var(--ak-bg-glass)!important;
+    backdrop-filter:blur(18px)!important;
+    box-shadow:0 -8px 28px rgba(0,0,0,.08);
+  }
+  /* Undo the old generic aside rule for content sidebars. */
+  .shell main aside{
+    position:static!important;
+    inset:auto!important;
+    width:auto!important;
+    height:auto!important;
+    min-height:0!important;
+    padding:0!important;
+    border:0!important;
+    background:transparent!important;
+    backdrop-filter:none!important;
+    box-shadow:none!important;
+  }
+  .shell>.appSidebar .brand,.shell>.appSidebar .asideFooter{display:none!important}
+  .appNav{
+    display:flex!important;
+    gap:3px!important;
+    width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    padding:0 1px!important;
+    scrollbar-width:none!important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-x:contain;
+    touch-action:pan-x;
+    scroll-snap-type:x proximity;
+  }
+  .appNav::-webkit-scrollbar{display:none!important}
+  .appNav button{
+    display:grid!important;
+    grid-template-rows:20px auto;
+    place-items:center;
+    gap:2px!important;
+    flex:0 0 68px!important;
+    min-width:68px!important;
+    min-height:52px;
+    padding:5px 4px!important;
+    border-radius:10px!important;
+    scroll-snap-align:center;
+    font-size:9px!important;
+    line-height:1.1!important;
+  }
+  .appNav button svg{width:19px;height:19px}
+  .appNav button.active{background:var(--ak-accent-glow)!important;color:var(--ak-accent-text)!important}
+  .appNav .navLabel{display:block;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  main{padding:12px 10px 22px!important}
+  header{display:grid!important;gap:8px!important;margin-bottom:10px!important}
+  header>div:first-child .eyebrow{display:none!important}
+  header h1{font-size:26px!important;margin:0!important}
+  .headerActions{
+    display:flex!important;
+    align-items:center!important;
+    gap:7px!important;
+    width:100%!important;
+    flex-wrap:wrap!important;
+  }
+  .orgSwitcher.singleOrg{display:none!important}
+  .orgSwitcher.multiOrg{
+    order:10!important;
+    display:block!important;
+    width:100%!important;
+    flex:0 0 100%!important;
+  }
+  .orgSwitcher.multiOrg>span{display:none!important}
+  .orgSwitcher.multiOrg select{width:100%!important;max-width:none!important;min-height:38px!important}
+  .globalSearchShell{order:0!important;flex:0 0 42px!important;width:42px!important;min-width:42px!important}
+  .globalSearchShell.open{flex:0 0 100%!important;width:100%!important}
+  .globalSearchTrigger{display:grid!important;place-items:center!important;width:42px!important;height:42px!important;min-width:42px!important;padding:0!important}
+  .globalSearchTrigger>span{display:none!important}
+  .globalSearchDropdown{left:0!important;right:auto!important;top:calc(100% + 6px)!important;width:min(560px,calc(100vw - 20px))!important;max-height:58vh!important}
+  .headerPrimaryAction{order:1;flex:1 1 150px;min-height:42px!important;padding:9px 14px!important}
+  .headerThemeButton{display:grid!important;order:2}
+  .logoutButton{order:3}
+  .syncStatus{display:none!important}
+  .syncBanner{margin:0 0 10px!important;padding:8px 10px!important;font-size:11px!important}
+
+  /* Remove desktop-only overview / explanatory cards. */
+  .studentSummary,.staffSummary,.paymentsSide .financeHint,.settingsHelp{display:none!important}
+  .studentsLayout,.staffLayout,.paymentsLayout,.settingsLayout{grid-template-columns:1fr!important;gap:8px!important}
+  .studentsPanel,.staffPanel{min-height:0!important}
+  .sectionLead,.kanbanSummarySimple .kanbanHint{display:none!important}
+  .scheduleLegend{display:none!important}
+  .scheduleToolHead>span{display:none!important}
+
+  /* Students become compact actionable cards, not a squeezed desktop table. */
+  .studentsPanel{padding:10px!important}
+  .studentsPanel .panelHead{gap:8px!important;margin-bottom:8px!important}
+  .studentsPanel .panelHead h2{font-size:18px!important}
+  .studentsPanel .filters{gap:5px!important;margin:0!important}
+  .studentsPanel .chip{padding:6px 9px!important;font-size:11px!important}
+  .studentTable{gap:6px!important}
+  .studentHead{display:none!important}
+  .studentButton{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    grid-template-rows:auto auto!important;
+    gap:3px 8px!important;
+    padding:10px!important;
+    border:1px solid var(--ak-border)!important;
+    border-radius:11px!important;
+    background:var(--ak-surface)!important;
+  }
+  .studentButton>.studentIdentity{grid-column:1;grid-row:1;min-width:0}
+  .studentIdentity>i{width:34px!important;height:34px!important;flex:0 0 34px!important}
+  .studentIdentity b{font-size:13px!important}
+  .studentIdentity small{font-size:10px!important}
+  .studentButton>span:nth-child(2){
+    display:block!important;
+    grid-column:1!important;
+    grid-row:2!important;
+    padding-left:44px;
+    color:var(--ak-muted)!important;
+    font-size:10.5px!important;
+  }
+  .studentButton>span:nth-child(3){display:none!important}
+  .studentButton>.studentState{
+    display:block!important;
+    grid-column:2!important;
+    grid-row:1!important;
+    align-self:center;
+    justify-self:end;
+    font-size:9.5px!important;
+    padding:4px 7px!important;
+  }
+
+  /* Payments: keep actionable finance, drop explanatory card, compress totals. */
+  .paymentStats{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important}
+  .paymentStats article{padding:9px 8px!important;border-radius:10px!important}
+  .paymentStats span,.paymentStats small{font-size:9px!important}
+  .paymentStats strong{font-size:16px!important;margin:3px 0!important}
+  .paymentsSide{grid-template-columns:1fr!important}
+  .planCard{padding:10px!important}
+
+  /* Staff / locations / reports compact mobile rhythm. */
+  .staffPanel{padding:10px!important}
+  .staffRow{padding:9px 6px!important}
+  .locationCard{min-height:0!important;padding:12px!important}
+  .locationTop{margin-bottom:10px!important}
+  .locationCard>p{min-height:0!important}
+  .reportStats{grid-template-columns:1fr 1fr!important;gap:7px!important}
+  .reportStats article{padding:10px!important;border-radius:11px!important}
+  .reportStats strong{font-size:19px!important}
+
+  /* Calendar focuses on the week; admin creation tools remain below but compact. */
+  .scheduleWeekSummary{overflow-x:auto;flex-wrap:nowrap!important;padding-bottom:2px}
+  .scheduleWeekSummary span{flex:0 0 auto}
+  .scheduleToolbarClear h2{font-size:17px!important}
+  .scheduleTools{gap:8px!important}
+  .scheduleTools .panel{padding:11px!important}
+
+  /* Buttons that only navigate/back use icon-first layout on mobile. */
+  .groupBackButton,.lessonBackButton{min-height:36px!important;padding:7px 9px!important}
+  .groupBackButton span,.lessonBackButton span{font-size:11px}
+  .groupPageClose{width:36px!important;height:36px!important;font-size:0!important}
+
+  /* Drawers/modals sit above the persistent bottom nav. */
+  .drawerBackdrop{z-index:150!important}
+  .modalBackdrop{z-index:160!important}
+  .drawer,.groupDetailDrawer{padding-bottom:calc(22px + env(safe-area-inset-bottom))!important}
+}
+
+@media(max-width:390px){
+  .appNav button{flex-basis:64px!important;min-width:64px!important}
+  .headerPrimaryAction span{font-size:12px}
+  .paymentStats{grid-template-columns:1fr 1fr!important}
+  .paymentStats article:last-child{grid-column:1/-1}
+  .reportStats{grid-template-columns:1fr!important}
+}
+
+.drawerClose,.groupPageClose{display:grid;place-items:center}
+.drawerClose svg,.groupPageClose svg{pointer-events:none}
