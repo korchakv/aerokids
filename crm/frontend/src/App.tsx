@@ -234,6 +234,7 @@ function App() {
   const [attendance, setAttendance] = useState<Record<EntityId, Record<EntityId, AttendanceValue>>>({
     "1": { "8": "present", "9": "late" },
   });
+  const [attendanceNotes, setAttendanceNotes] = useState<Record<EntityId, Record<EntityId, string>>>({});
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceSaving, setAttendanceSaving] = useState(false);
   const [lessonTopicDraft, setLessonTopicDraft] = useState("");
@@ -947,8 +948,13 @@ function App() {
       .then((rows) => {
         if (cancelled) return;
         const mapped: Record<EntityId, AttendanceValue> = {};
-        rows.forEach((row) => { mapped[row.student_id] = row.status; });
+        const mappedNotes: Record<EntityId, string> = {};
+        rows.forEach((row) => {
+          mapped[row.student_id] = row.status;
+          if (row.note) mappedNotes[row.student_id] = row.note;
+        });
         setAttendance((all) => ({ ...all, [selectedLesson.id]: mapped }));
+        setAttendanceNotes((all) => ({ ...all, [selectedLesson.id]: mappedNotes }));
       })
       .catch((error) => {
         if (!cancelled) setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити відвідування");
@@ -967,11 +973,20 @@ function App() {
     }));
   };
 
+  const setAttendanceNote = (studentId: EntityId, note: string) => {
+    if (!selectedLesson) return;
+    setAttendanceNotes((all) => ({
+      ...all,
+      [selectedLesson.id]: { ...(all[selectedLesson.id] ?? {}), [studentId]: note },
+    }));
+  };
+
   const markAllPresent = () => {
     if (!selectedLesson) return;
     const next: Record<EntityId, AttendanceValue> = {};
     lessonStudents.forEach((student) => { next[student.id] = "present"; });
     setAttendance((all) => ({ ...all, [selectedLesson.id]: next }));
+    setAttendanceNotes((all) => ({ ...all, [selectedLesson.id]: {} }));
   };
 
   const markUnmarkedAbsent = () => {
@@ -1094,6 +1109,7 @@ function App() {
           items: lessonStudents.map((student) => ({
             student_id: student.id,
             status: lessonMarks[student.id],
+            note: attendanceNotes[selectedLesson.id]?.[student.id]?.trim() || null,
           })),
         }, session);
         await syncWorkspace(session);
@@ -1851,6 +1867,7 @@ function App() {
                       <button className={value === "excused" ? "active excused" : ""} onClick={() => markAttendance(student.id, "excused")}>Поважна причина</button>
                       <button className={value === "late" ? "active late" : ""} onClick={() => markAttendance(student.id, "late")}>Запізнився</button>
                     </div>
+                    {(value === "absent" || value === "excused") && <input className="attendanceReasonInput" value={attendanceNotes[selectedLesson.id]?.[student.id] ?? ""} onChange={(e) => setAttendanceNote(student.id, e.target.value)} maxLength={300} placeholder={value === "excused" ? "Причина / коментар (за потреби)" : "Причина відсутності (за потреби)"} />}
                   </div>;
                 })}
                 {lessonStudents.length === 0 && <div className="emptyState">У цій групі поки немає активних учнів.</div>}
