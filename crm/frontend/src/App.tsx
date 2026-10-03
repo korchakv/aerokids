@@ -198,6 +198,16 @@ function weekdayLong(value: string) {
   return text ? text.charAt(0).toLocaleUpperCase("uk-UA") + text.slice(1) : "";
 }
 
+function attendanceStatusLabel(value: AttendanceValue | undefined) {
+  const labels: Record<AttendanceValue, string> = {
+    present: "Був",
+    absent: "Не був",
+    excused: "Поважна причина",
+    late: "Запізнився",
+  };
+  return value ? labels[value] : "Не відмічено";
+}
+
 function emailError(value: string, required = false): string {
   const email = value.trim().toLowerCase();
   if (!email) return required ? "Email обов’язковий" : "";
@@ -282,6 +292,7 @@ function App() {
   const [lessonTopicDraft, setLessonTopicDraft] = useState("");
   const [lessonNotesDraft, setLessonNotesDraft] = useState("");
   const [lessonDetailsSaving, setLessonDetailsSaving] = useState(false);
+  const [lessonEditing, setLessonEditing] = useState(true);
   const [plans, setPlans] = useState<PlanDemo[]>([
     { id: "1", name: "8 занять / 30 днів", price: 1800, lessons: 8 },
     { id: "2", name: "Індивідуальний", price: 0, lessons: null },
@@ -1019,6 +1030,10 @@ function App() {
   }, [selectedLesson?.id, selectedLesson?.topic, selectedLesson?.notes]);
 
   useEffect(() => {
+    setLessonEditing(selectedLesson?.status !== "completed");
+  }, [selectedLesson?.id, selectedLesson?.status]);
+
+  useEffect(() => {
     if (!apiEnabled || !session || !selectedLesson?.groupId) {
       setLessonRoster(null);
       return;
@@ -1216,6 +1231,7 @@ function App() {
           })),
         }, session);
         await syncWorkspace(session);
+        setLessonEditing(false);
         setLessonSaveNotice("attendance");
       } catch (error) {
         setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти відвідування.");
@@ -2157,29 +2173,73 @@ function App() {
           <article className="panel attendancePanel">
             {lessonSaveNotice && <div className="lessonSaveNotice">✓ Збережено</div>}
             {selectedLesson && <>
-              <div className="lessonJournalHead"><button className="lessonBackButton" onClick={() => setActive("Розклад")}>← До розкладу</button><div className="panelHead"><div><p className="eyebrow">Конкретне заняття</p><h2>{lessonGroup?.name}</h2><p className="lessonMeta"><b>{weekdayLong(selectedLesson.startsAt)}</b> · {new Date(selectedLesson.startsAt).toLocaleDateString("uk-UA")} · {new Date(selectedLesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })} · {selectedLesson.duration} хв</p></div><div className="attendanceQuickActions"><button className="search" onClick={markAllPresent}>Усі присутні</button><button className="search" onClick={markUnmarkedAbsent}>Непозначені → відсутні</button></div></div></div>
-              <div className="lessonDetailsEditor">
-                <label>Тема заняття<input value={lessonTopicDraft} onChange={(e) => setLessonTopicDraft(e.target.value)} maxLength={240} placeholder="Що вивчаємо на занятті" /></label>
-                <label>Домашнє завдання / примітки<textarea value={lessonNotesDraft} onChange={(e) => setLessonNotesDraft(e.target.value)} maxLength={4000} placeholder="Наприклад: 3 кола в симуляторі без падіння. Або внутрішня примітка викладача." /></label>
-                <div className="lessonDetailsActions"><small>Ці дані належать конкретному заняттю, а не групі чи регулярному розкладу.</small><button className="search" disabled={lessonDetailsSaving} onClick={saveLessonDetails}>{lessonDetailsSaving ? "Зберігаємо…" : "Зберегти тему і завдання"}</button></div>
+              <div className="lessonJournalHead">
+                <button className="lessonBackButton" onClick={() => setActive("Розклад")}>← До розкладу</button>
+                <div className="panelHead">
+                  <div>
+                    <p className="eyebrow">{selectedLesson.status === "completed" ? "Проведене заняття" : "Конкретне заняття"}</p>
+                    <h2>{lessonGroup?.name}</h2>
+                    <p className="lessonMeta"><b>{weekdayLong(selectedLesson.startsAt)}</b> · {new Date(selectedLesson.startsAt).toLocaleDateString("uk-UA")} · {new Date(selectedLesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })} · {selectedLesson.duration} хв</p>
+                  </div>
+                  {selectedLesson.status === "completed" && !lessonEditing
+                    ? <button className="lessonEditButton" onClick={() => setLessonEditing(true)}>Редагувати</button>
+                    : <div className="attendanceQuickActions"><button className="search" onClick={markAllPresent}>Усі присутні</button><button className="search" onClick={markUnmarkedAbsent}>Непозначені → відсутні</button></div>}
+                </div>
               </div>
-              <div className="attendanceTable">
-                {lessonStudents.map((student) => {
-                  const value = attendance[selectedLesson.id]?.[student.id];
-                  return <div id={"attendance-student-" + student.id} className={"attendanceRow " + (!value ? "unmarked " : "") + (focusedAttendanceStudentId === student.id ? "focusedStudent" : "")} key={student.id}>
-                    <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років{student.parent ? " · " + student.parent : ""}</small></b>{!value && <em className="unmarkedBadge">Не відмічено</em>}</span>
-                    <div className="attendanceButtons">
-                      <button className={value === "present" ? "active present" : ""} onClick={() => markAttendance(student.id, "present")}>✓ Є</button>
-                      <button className={value === "absent" ? "active absent" : ""} onClick={() => markAttendance(student.id, "absent")}>Нема</button>
-                      <button className={value === "excused" ? "active excused" : ""} onClick={() => markAttendance(student.id, "excused")}>Поважна причина</button>
-                      <button className={value === "late" ? "active late" : ""} onClick={() => markAttendance(student.id, "late")}>Запізнився</button>
-                    </div>
-                    {(value === "absent" || value === "excused") && <input className="attendanceReasonInput" value={attendanceNotes[selectedLesson.id]?.[student.id] ?? ""} onChange={(e) => setAttendanceNote(student.id, e.target.value)} maxLength={300} placeholder={value === "excused" ? "Причина / коментар (за потреби)" : "Причина відсутності (за потреби)"} />}
-                  </div>;
-                })}
-                {lessonStudents.length === 0 && <div className="emptyState">У цій групі поки немає активних учнів.</div>}
-              </div>
-              <div className="attendanceFooter"><span>{attendanceLoading ? "Завантажуємо…" : <>Позначено: <b>{Object.keys(attendance[selectedLesson.id] ?? {}).length}/{lessonStudents.length}</b>{lessonStudents.length > Object.keys(attendance[selectedLesson.id] ?? {}).length && <small> · ще {lessonStudents.length - Object.keys(attendance[selectedLesson.id] ?? {}).length}</small>}</>}</span><button className="primary" disabled={attendanceSaving || attendanceLoading || Object.keys(attendance[selectedLesson.id] ?? {}).length !== lessonStudents.length} onClick={saveAttendance}>{attendanceSaving ? "Зберігаємо…" : "Зберегти відвідування"}</button></div>
+
+              {lessonEditing ? <>
+                <div className="lessonDetailsEditor">
+                  <label>Тема заняття<input value={lessonTopicDraft} onChange={(e) => setLessonTopicDraft(e.target.value)} maxLength={240} placeholder="Що вивчаємо на занятті" /></label>
+                  <label>Домашнє завдання / примітки<textarea value={lessonNotesDraft} onChange={(e) => setLessonNotesDraft(e.target.value)} maxLength={4000} placeholder="Наприклад: 3 кола в симуляторі без падіння. Або внутрішня примітка викладача." /></label>
+                  <div className="lessonDetailsActions"><small>Ці дані належать конкретному заняттю.</small><button className="search" disabled={lessonDetailsSaving} onClick={saveLessonDetails}>{lessonDetailsSaving ? "Зберігаємо…" : "Зберегти тему і завдання"}</button></div>
+                </div>
+                <div className="attendanceTable">
+                  {lessonStudents.map((student) => {
+                    const value = attendance[selectedLesson.id]?.[student.id];
+                    return <div id={"attendance-student-" + student.id} className={"attendanceRow " + (!value ? "unmarked " : "") + (focusedAttendanceStudentId === student.id ? "focusedStudent" : "")} key={student.id}>
+                      <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років{student.parent ? " · " + student.parent : ""}</small></b>{!value && <em className="unmarkedBadge">Не відмічено</em>}</span>
+                      <div className="attendanceButtons">
+                        <button className={value === "present" ? "active present" : ""} onClick={() => markAttendance(student.id, "present")}>✓ Є</button>
+                        <button className={value === "absent" ? "active absent" : ""} onClick={() => markAttendance(student.id, "absent")}>Нема</button>
+                        <button className={value === "excused" ? "active excused" : ""} onClick={() => markAttendance(student.id, "excused")}>Поважна причина</button>
+                        <button className={value === "late" ? "active late" : ""} onClick={() => markAttendance(student.id, "late")}>Запізнився</button>
+                      </div>
+                      {(value === "absent" || value === "excused") && <input className="attendanceReasonInput" value={attendanceNotes[selectedLesson.id]?.[student.id] ?? ""} onChange={(e) => setAttendanceNote(student.id, e.target.value)} maxLength={300} placeholder={value === "excused" ? "Причина / коментар (за потреби)" : "Причина відсутності (за потреби)"} />}
+                    </div>;
+                  })}
+                  {lessonStudents.length === 0 && <div className="emptyState">У цій групі поки немає активних учнів.</div>}
+                </div>
+                <div className="attendanceFooter">
+                  <span>{attendanceLoading ? "Завантажуємо…" : <>Позначено: <b>{Object.keys(attendance[selectedLesson.id] ?? {}).length}/{lessonStudents.length}</b>{lessonStudents.length > Object.keys(attendance[selectedLesson.id] ?? {}).length && <small> · ще {lessonStudents.length - Object.keys(attendance[selectedLesson.id] ?? {}).length}</small>}</>}</span>
+                  <div className="attendanceFooterActions">
+                    {selectedLesson.status === "completed" && <button className="search" onClick={() => setLessonEditing(false)}>Скасувати</button>}
+                    <button className="primary" disabled={attendanceSaving || attendanceLoading || Object.keys(attendance[selectedLesson.id] ?? {}).length !== lessonStudents.length} onClick={saveAttendance}>{attendanceSaving ? "Зберігаємо…" : selectedLesson.status === "completed" ? "Зберегти зміни" : "Зберегти відвідування"}</button>
+                  </div>
+                </div>
+              </> : <div className="lessonProtocol">
+                <section className="lessonProtocolSummary">
+                  <div><small>Тема заняття</small><strong>{selectedLesson.topic || "Не вказано"}</strong></div>
+                  <div><small>Домашнє завдання / примітки</small><strong>{selectedLesson.notes || "Немає"}</strong></div>
+                </section>
+                <div className="lessonProtocolTable">
+                  <div className="lessonProtocolRow lessonProtocolHead"><span>Учень</span><span>Статус</span><span>Причина / коментар</span></div>
+                  {lessonStudents.map((student) => {
+                    const value = attendance[selectedLesson.id]?.[student.id];
+                    const note = attendanceNotes[selectedLesson.id]?.[student.id]?.trim();
+                    return <div id={"attendance-student-" + student.id} className={"lessonProtocolRow " + (focusedAttendanceStudentId === student.id ? "focusedStudent" : "")} key={student.id}>
+                      <span className="protocolStudent"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років{student.parent ? " · " + student.parent : ""}</small></b></span>
+                      <span><b className={"protocolStatus " + (value ?? "unmarked")}>{attendanceStatusLabel(value)}</b></span>
+                      <span className="protocolNote">{note || "—"}</span>
+                    </div>;
+                  })}
+                </div>
+                <div className="lessonProtocolFooter">
+                  <span><b>{selectedLesson.attendancePresent ?? 0}</b> були</span>
+                  <span><b>{selectedLesson.attendanceLate ?? 0}</b> запізнились</span>
+                  <span><b>{selectedLesson.attendanceAbsent ?? 0}</b> не були</span>
+                  <span><b>{selectedLesson.attendanceExcused ?? 0}</b> поважна причина</span>
+                </div>
+              </div>}
             </>}
           </article>
         </section>}
