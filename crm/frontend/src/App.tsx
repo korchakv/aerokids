@@ -188,6 +188,11 @@ const initialLeads: Lead[] = [
 const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне заплановано", "Після пробного", "Очікує групу"];
 
 function App() {
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    const saved = window.localStorage.getItem("aerokids-crm-theme");
+    if (saved === "dark" || saved === "light") return saved;
+    return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  });
   const [session, setSession] = useState<Session | null>(() => loadSession());
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
@@ -1619,6 +1624,12 @@ function App() {
     }));
   };
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem("aerokids-crm-theme", theme);
+  }, [theme]);
+
   if (apiEnabled && !session) {
     return <LoginView onAuthenticated={setSession} />;
   }
@@ -1675,6 +1686,17 @@ function App() {
               </select>
               <span>{roleLabel(currentMembership?.role)}</span>
             </div>}
+            <button
+              className="themeToggle"
+              type="button"
+              role="switch"
+              aria-checked={theme === "light"}
+              aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"}
+              onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}
+            >
+              <span className="themeToggleTrack" aria-hidden="true"><i>{theme === "dark" ? "☾" : "☀"}</i></span>
+              <span>{theme === "dark" ? "Темна" : "Світла"}</span>
+            </button>
             <button className="search" onClick={() => { setSearchQuery(""); setShowSearch(true); }}>⌕ Пошук</button>
             {canManageLeads && <button className="primary" onClick={() => setShowLeadForm(true)}>+ Нова заявка</button>}
             {session && <button className="search" onClick={() => { clearSession(); setSession(null); }}>Вийти</button>}
