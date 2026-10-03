@@ -2527,18 +2527,21 @@ def test_completed_trial_candidate_can_join_existing_group(client):
     assert [member["student_id"] for member in detail.json()["members"]] == [student["id"]]
 
 
-def test_candidate_without_completed_trial_cannot_join_existing_group(client):
-    org = create_org(client, "Existing Group Guard", "existing-group-guard")
+def test_candidate_without_completed_trial_can_join_existing_group(client):
+    org = create_org(client, "Existing Group Direct", "existing-group-direct")
     headers = {"X-Organization-Id": org["id"]}
     student = client.post("/students", headers=headers, json={"first_name": "Олег"}).json()
-    group = client.post("/groups", headers=headers, json={"name": "FPV Guard", "capacity": 6}).json()
+    group = client.post("/groups", headers=headers, json={"name": "FPV Direct", "capacity": 6}).json()
 
     response = client.post(
         "/enrollments",
         headers=headers,
         json={"student_id": student["id"], "group_id": group["id"]},
     )
-    assert response.status_code == 409
+    assert response.status_code == 201, response.text
+    detail = client.get(f"/students/{student['id']}", headers=headers).json()
+    assert detail["crm_status"] == "enrolled"
+    assert detail["student_status"] == "active"
 
 
 def test_existing_group_enrollment_respects_capacity(client):
