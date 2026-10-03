@@ -2759,27 +2759,57 @@ function App() {
               <button className="link" onClick={() => { setSelectedStudentId(studentId); setSelectedGroupId(null); }}>Відкрити учня →</button>
             </article>;
           })}</div>}
-          {apiEnabled && groupDetail && <div className="groupMemberList">
-            <div className="groupMemberSectionHead"><div><b>Активні учасники</b><small>{groupDetail.members.length} у групі</small></div></div>
+          {apiEnabled && groupDetail && <div className="groupMemberList groupRoster">
+            <div className="groupMemberSectionHead">
+              <div><b>Активні учасники</b><small>{groupDetail.members.length} у групі</small></div>
+              <span className="groupRosterHint">Учень · відвідування · оплата</span>
+            </div>
             {groupDetail.members.length === 0 && <div className="emptyState">У групі немає активних або призупинених учнів.</div>}
             {groupDetail.members.map((member) => {
               const billingLabel = member.billing?.status === "overdue" ? "Прострочено" : member.billing?.status === "due" ? "Оплата сьогодні" : member.billing?.status === "upcoming" ? "Очікується" : member.billing?.status === "current" ? "Сплачено" : "Без тарифу";
               const latestPayment = member.payments.find((payment) => payment.balance_minor > 0) ?? member.payments[0];
-              const usage = member.billing?.lessons_included != null ? `${member.billing.lessons_used ?? 0}/${member.billing.lessons_included} використано · залишилось ${member.billing.lessons_remaining ?? 0}` : "";
-              return <article className="groupMemberCard groupMemberCardCompact" key={member.student_id}>
-                <div className="groupMemberIdentityCell">
-                  <div className="groupMemberTop"><span className="candidateAvatar">{member.first_name[0]}</span><div><b>{member.first_name} {member.last_name ?? ""}</b><small>{member.age ?? "—"} років · з {new Date(member.enrollment_started_at + "T00:00:00").toLocaleDateString("uk-UA")}</small><small>{member.contact_name ?? "Відповідальний не вказаний"}{member.contact_phone ? " · " + formatUaPhone(member.contact_phone) : ""}</small></div></div>
-                  <button className="link groupMemberOpen" onClick={() => { setSelectedStudentId(member.student_id); closeGroupDetail(); setActive("Учні"); }}>Картка →</button>
+              const usage = member.billing?.lessons_included != null ? `${member.billing.lessons_used ?? 0}/${member.billing.lessons_included}` : null;
+              const remaining = member.billing?.lessons_remaining;
+              return <article className="groupMemberCard groupMemberCardCompact groupRosterRow" key={member.student_id}>
+                <div className="groupMemberIdentityCell groupRosterIdentity">
+                  <div className="groupMemberTop">
+                    <span className="candidateAvatar groupRosterAvatar">{member.first_name[0]}</span>
+                    <div>
+                      <b>{member.first_name} {member.last_name ?? ""}</b>
+                      <small>{member.age ?? "—"} років · у групі з {new Date(member.enrollment_started_at + "T00:00:00").toLocaleDateString("uk-UA")}</small>
+                      <small className="groupRosterContact">{member.contact_name ?? "Відповідальний не вказаний"}{member.contact_phone ? " · " + formatUaPhone(member.contact_phone) : ""}</small>
+                    </div>
+                  </div>
+                  <button className="groupRosterStudentLink" onClick={() => { setSelectedStudentId(member.student_id); closeGroupDetail(); setActive("Учні"); }}>Картка учня →</button>
                 </div>
-                <button className="groupMemberMetricButton attendanceMetric" onClick={() => goToStudentAttendance(member.student_id, groupDetail.group.id)}>
-                  <small>Відвідування</small><b>{member.attendance.attendance_rate}%</b><em>{member.attendance.present} був · {member.attendance.late} запізн. · {member.attendance.absent} нема · {member.attendance.excused} поважн.</em><i>Відкрити →</i>
+
+                <button className="groupMemberMetricButton attendanceMetric groupRosterMetric" onClick={() => goToStudentAttendance(member.student_id, groupDetail.group.id)}>
+                  <span className="groupRosterMetricHead"><small>Відвідування</small><b>{member.attendance.attendance_rate}%</b></span>
+                  <span className="groupRosterProgress"><i style={{ width: Math.max(0, Math.min(100, member.attendance.attendance_rate)) + "%" }} /></span>
+                  <em>{member.attendance.present} був · {member.attendance.late} запізн. · {member.attendance.absent} нема · {member.attendance.excused} поважн.</em>
+                  <span className="groupRosterOpen">Журнал →</span>
                 </button>
-                {member.billing ? <div className="groupMemberFinanceCell">
-                  <button className="groupMemberMetricButton paymentMetric" onClick={() => goToStudentPayments(member.student_id, latestPayment?.id)}>
-                    <small>Оплата</small><b className={"billingText " + member.billing.status}>{billingLabel}</b><em>{member.billing.plan_name ?? "Тариф не вказано"}{usage ? " · " + usage : ""}{member.billing.subscription_ends_on ? " · до " + new Date(member.billing.subscription_ends_on + "T00:00:00").toLocaleDateString("uk-UA") : ""}</em><i>{member.billing.amount_due_minor > 0 ? "Борг " + money(member.billing.amount_due_minor / 100) : "Відкрити →"}</i>
+
+                {member.billing ? <div className="groupMemberFinanceCell groupRosterFinance">
+                  <button className="groupMemberMetricButton paymentMetric groupRosterPayment" onClick={() => goToStudentPayments(member.student_id, latestPayment?.id)}>
+                    <span className="groupRosterMetricHead">
+                      <small>Оплата</small>
+                      <b className={"groupPaymentBadge " + member.billing.status}>{billingLabel}</b>
+                    </span>
+                    <span className="groupRosterPlan">
+                      <b>{member.billing.plan_name ?? "Тариф не вказано"}</b>
+                      {usage && <small>{usage} занять{remaining != null ? " · залишилось " + remaining : ""}</small>}
+                    </span>
+                    <span className="groupRosterPaymentFooter">
+                      <small>{member.billing.subscription_ends_on ? "До " + new Date(member.billing.subscription_ends_on + "T00:00:00").toLocaleDateString("uk-UA") : "Без дати завершення"}</small>
+                      <b className={member.billing.amount_due_minor > 0 ? "debt" : "paid"}>{member.billing.amount_due_minor > 0 ? "Борг " + money(member.billing.amount_due_minor / 100) : "Оплачено"}</b>
+                    </span>
                   </button>
-                  {member.payments.length > 0 && <details className="memberPayments memberPaymentsInline"><summary>Історія оплат ({member.payments.length})</summary><div>{member.payments.map((payment) => <button className="memberPaymentHistoryRow" key={payment.id} onClick={() => goToStudentPayments(member.student_id, payment.id)}><span>{payment.note ?? "Нарахування"}<small>{payment.due_date ? "До " + new Date(payment.due_date + "T00:00:00").toLocaleDateString("uk-UA") : "Без дати"}</small></span><b>{money(payment.adjusted_amount_minor / 100)}<small>{payment.balance_minor > 0 ? "Залишок " + money(payment.balance_minor / 100) : payment.status === "cancelled" ? "Скасовано" : payment.status === "refunded" ? "Повернено" : "Сплачено"}</small></b></button>)}</div></details>}
-                </div> : <div className="groupMemberFinanceCell"><span className="groupMemberMetricStatic"><small>Оплата</small><b>Приховано для ролі</b><em>Фінансові дані недоступні</em></span></div>}
+                  {member.payments.length > 0 && <details className="memberPayments memberPaymentsInline groupRosterHistory">
+                    <summary>Історія оплат ({member.payments.length})</summary>
+                    <div>{member.payments.map((payment) => <button className="memberPaymentHistoryRow" key={payment.id} onClick={() => goToStudentPayments(member.student_id, payment.id)}><span>{payment.note ?? "Нарахування"}<small>{payment.due_date ? "До " + new Date(payment.due_date + "T00:00:00").toLocaleDateString("uk-UA") : "Без дати"}</small></span><b>{money(payment.adjusted_amount_minor / 100)}<small>{payment.balance_minor > 0 ? "Залишок " + money(payment.balance_minor / 100) : payment.status === "cancelled" ? "Скасовано" : payment.status === "refunded" ? "Повернено" : "Сплачено"}</small></b></button>)}</div>
+                  </details>}
+                </div> : <div className="groupMemberFinanceCell groupRosterFinance"><span className="groupMemberMetricStatic"><small>Оплата</small><b>Приховано для ролі</b><em>Фінансові дані недоступні</em></span></div>}
               </article>;
             })}
           </div>}

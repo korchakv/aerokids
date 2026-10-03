@@ -608,3 +608,80 @@ img,svg{max-width:100%}
 .kanbanContact small{font-size:9.5px;color:var(--ak-muted);white-space:nowrap}
 @media(max-width:1400px){.kanbanContact small{font-size:9px}}
 @media(max-width:720px){.kanbanContact b{font-size:11px}.kanbanContact small{font-size:10px}}
+
+/* Group page visual redesign v4 */
+.groupDetailDrawer{background:var(--ak-bg)!important}
+.groupDetailDrawer .groupPageTopbar{position:sticky;top:0;z-index:20;margin:-22px -28px 14px;padding:10px 20px;border-bottom:1px solid var(--ak-border);background:var(--ak-bg-glass);backdrop-filter:blur(14px)}
+.groupDetailDrawer>.eyebrow,.groupDetailDrawer>.groupDetailHero,.groupDetailDrawer>.groupTeacherAssign,.groupDetailDrawer>.groupCandidatePicker,.groupDetailDrawer>.groupMemberList,.groupDetailDrawer>.emptyState{width:min(1360px,100%);margin-left:auto;margin-right:auto}
+.groupDetailHero{margin-top:0!important;padding:16px 18px!important;border:1px solid var(--ak-border)!important;border-radius:16px!important;background:linear-gradient(180deg,var(--ak-surface),var(--ak-surface-2))!important}
+.groupDetailHero h2{font-size:24px!important;letter-spacing:-.02em}
+.groupDetailMeta{display:flex;flex-wrap:wrap;gap:7px 14px!important;margin-top:5px}
+.groupDetailMeta>span,.groupTeacherLink{font-size:11px!important;color:var(--ak-muted)!important}
+.groupDetailHeroActions{display:flex;align-items:center;gap:10px}
+.groupDetailHeroActions>strong{font-size:22px!important;color:var(--ak-text)!important;letter-spacing:-.02em}
+.groupDetailHeroActions .primary.compact{min-height:34px;padding:7px 11px!important;border-radius:10px}
+.groupRoster{gap:9px!important;margin-top:16px!important}
+.groupMemberSectionHead{padding:0 2px 4px!important}
+.groupMemberSectionHead>div{display:flex;align-items:baseline;gap:8px}
+.groupMemberSectionHead b{font-size:14px!important}
+.groupMemberSectionHead small{font-size:10.5px!important}
+.groupRosterHint{color:var(--ak-muted-2);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.groupRosterRow{display:grid!important;grid-template-columns:minmax(300px,1.05fr) minmax(260px,.8fr) minmax(380px,1.15fr)!important;gap:10px!important;align-items:stretch!important;padding:9px!important;border:1px solid var(--ak-border)!important;border-radius:14px!important;background:var(--ak-surface)!important;box-shadow:0 6px 18px rgba(0,0,0,.035)!important;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease}
+.groupRosterRow:hover{border-color:var(--ak-accent-shadow)!important;box-shadow:0 10px 28px rgba(0,0,0,.06)!important;transform:translateY(-1px)}
+.groupRosterIdentity{display:grid!important;grid-template-columns:1fr auto;gap:10px!important;align-items:center!important;padding:7px 8px!important;min-width:0}
+.groupRosterAvatar{width:38px!important;height:38px!important;flex:0 0 38px!important;background:var(--ak-accent-glow)!important;border:1px solid var(--ak-accent-shadow)!important;color:var(--ak-accent-text)!important}
+.groupRosterIdentity .groupMemberTop{min-width:0;gap:10px!important}
+.groupRosterIdentity .groupMemberTop>div{min-width:0}
+.groupRosterIdentity .groupMemberTop b{font-size:14px!important;line-height:1.25}
+.groupRosterIdentity .groupMemberTop small{font-size:10.5px!important;line-height:1.35}
+.groupRosterContact{color:var(--ak-text-soft)!important}
+.groupRosterStudentLink{align-self:center;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:var(--ak-accent-text);font:inherit;font-size:10.5px;font-weight:750;white-space:nowrap;cursor:pointer}
+.groupRosterStudentLink:hover{background:var(--ak-accent-glow)}
+.groupRosterMetric{display:grid!important;grid-template-rows:auto auto auto auto;gap:5px!important;align-content:center!important;min-height:86px!important;padding:10px 11px!important;border:1px solid var(--ak-border)!important;border-radius:11px!important;background:var(--ak-surface-2)!important}
+.groupRosterMetric:hover{border-color:var(--ak-accent-soft)!important;background:var(--ak-surface)!important}
+.groupRosterMetricHead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.groupRosterMetricHead small{font-size:9.5px!important;text-transform:uppercase;letter-spacing:.055em;color:var(--ak-muted)}
+.groupRosterMetricHead>b{font-size:15px!important;color:var(--ak-text)}
+.groupRosterProgress{display:block;height:5px;border-radius:999px;background:var(--ak-border);overflow:hidden}
+.groupRosterProgress>i{display:block;height:100%;border-radius:inherit;background:var(--ak-accent);transition:width .2s ease}
+.groupRosterMetric em{font-size:10.5px!important;line-height:1.35!important;color:var(--ak-muted)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.groupRosterOpen{font-size:10px;color:var(--ak-accent-text);font-weight:700}
+.groupRosterFinance{display:grid!important;grid-template-rows:1fr auto;gap:0!important;min-width:0;border:1px solid var(--ak-border)!important;border-radius:11px!important;background:var(--ak-surface-2)!important;overflow:hidden}
+.groupRosterPayment{display:grid!important;gap:6px!important;align-content:center!important;min-height:86px!important;padding:10px 11px!important;border:0!important;border-radius:0!important;background:transparent!important}
+.groupRosterPayment:hover{background:var(--ak-surface)!important}
+.groupPaymentBadge{padding:4px 7px;border-radius:999px;font-size:10px!important;font-weight:800}
+.groupPaymentBadge.current{background:rgba(54,190,143,.12);color:#60c7a1!important}
+.groupPaymentBadge.upcoming{background:var(--ak-accent-glow);color:var(--ak-accent-text)!important}
+.groupPaymentBadge.due{background:rgba(219,166,67,.12);color:#caa651!important}
+.groupPaymentBadge.overdue{background:rgba(217,108,117,.12);color:#d96c75!important}
+.groupRosterPlan{display:flex;align-items:baseline;gap:8px;min-width:0}
+.groupRosterPlan>b{font-size:12px!important;color:var(--ak-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.groupRosterPlan>small{font-size:10px;color:var(--ak-muted);white-space:nowrap}
+.groupRosterPaymentFooter{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.groupRosterPaymentFooter>small{font-size:10px;color:var(--ak-muted)}
+.groupRosterPaymentFooter>b{font-size:10.5px}
+.groupRosterPaymentFooter>.debt{color:#d96c75}.groupRosterPaymentFooter>.paid{color:#60c7a1}
+.groupRosterHistory{margin:0!important;padding:4px 10px 6px!important;border-top:1px solid var(--ak-border)!important}
+.groupRosterHistory summary{padding:2px 0!important;font-size:10px!important;color:var(--ak-muted)!important}
+.groupRosterHistory[open]{background:var(--ak-surface)}
+.memberPaymentHistoryRow{padding:6px 0!important}
+html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04)!important}
+
+@media(max-width:1180px){
+  .groupRosterRow{grid-template-columns:1fr 1fr!important}
+  .groupRosterIdentity{grid-column:1/-1}
+  .groupRosterFinance{grid-column:auto!important}
+}
+@media(max-width:760px){
+  .groupDetailDrawer .groupPageTopbar{margin:-18px -12px 12px;padding:9px 12px}
+  .groupDetailHero{padding:13px!important}
+  .groupDetailHeroActions{width:100%;justify-content:space-between}
+  .groupRosterHint{display:none}
+  .groupRosterRow{grid-template-columns:1fr!important;padding:8px!important}
+  .groupRosterIdentity,.groupRosterFinance{grid-column:auto!important}
+  .groupRosterIdentity{grid-template-columns:1fr!important}
+  .groupRosterStudentLink{justify-self:start;padding-left:0}
+  .groupRosterMetric,.groupRosterPayment{min-height:0!important}
+  .groupRosterPlan{display:grid;gap:2px}
+  .groupRosterPlan>small{white-space:normal}
+}
