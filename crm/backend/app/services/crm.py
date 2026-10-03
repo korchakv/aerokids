@@ -1003,7 +1003,9 @@ def materialize_recurring_lesson_sessions(
     and exact start time is reused, so manual sessions and previously generated
     sessions are never duplicated.
     """
-    organization = scoped_get(db, Organization, org_id)
+    organization = db.get(Organization, org_id)
+    if organization is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
     try:
         tz = ZoneInfo(organization.timezone)
     except Exception:
