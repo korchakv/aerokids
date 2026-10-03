@@ -540,6 +540,18 @@ class AttendanceRead(ORMModel):
     note: str | None
 
 
+class StudentAttendanceHistoryItem(BaseModel):
+    session_id: UUID
+    group_id: UUID
+    group_name: str
+    starts_at: datetime
+    duration_minutes: int
+    topic: str | None
+    lesson_status: LessonStatus
+    status: AttendanceStatus
+    note: str | None
+
+
 class GroupRosterStudent(BaseModel):
     student_id: UUID
     first_name: str

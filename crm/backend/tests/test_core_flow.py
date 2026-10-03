@@ -564,6 +564,32 @@ def test_attendance_consumes_subscription_and_creates_makeup(client):
     assert subs[0]["used_lessons"] == 2 and subs[0]["remaining_lessons"] == 2
 
 
+def test_student_attendance_history_endpoint(client):
+    org = create_org(client, "Attendance History", "attendance-history")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Іван", "age_at_inquiry": 10}).json()
+    group = client.post("/groups", headers=headers, json={"name": "History Group", "capacity": 8}).json()
+    enrollment = client.post("/enrollments", headers=headers, json={"student_id": student["id"], "group_id": group["id"]})
+    assert enrollment.status_code == 201, enrollment.text
+    lesson = client.post("/lesson-sessions", headers=headers, json={
+        "group_id": group["id"], "starts_at": "2026-10-03T17:00:00+03:00", "topic": "FPV basics"
+    }).json()
+    marked = client.put(f"/lesson-sessions/{lesson['id']}/attendance", headers=headers, json={
+        "items": [{"student_id": student["id"], "status": "late", "note": "10 хв"}]
+    })
+    assert marked.status_code == 200, marked.text
+
+    history = client.get(f"/students/{student['id']}/attendance-history", headers=headers)
+    assert history.status_code == 200, history.text
+    rows = history.json()
+    assert len(rows) == 1
+    assert rows[0]["session_id"] == lesson["id"]
+    assert rows[0]["group_name"] == "History Group"
+    assert rows[0]["topic"] == "FPV basics"
+    assert rows[0]["status"] == "late"
+    assert rows[0]["note"] == "10 хв"
+
+
 def test_subscription_and_payment_flow(client):
     org = create_org(client, "AeroKiDS", "aerokids-payments")
     headers = {"X-Organization-Id": org["id"]}

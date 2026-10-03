@@ -1358,6 +1358,47 @@ def list_attendance(db: Session, org_id: UUID, session_id: UUID, user_id: UUID |
     ))
 
 
+def student_attendance_history(
+    db: Session,
+    org_id: UUID,
+    student_id: UUID,
+    user_id: UUID | None = None,
+    role: StaffRole = StaffRole.OWNER,
+) -> list[dict]:
+    scoped_get(db, Student, org_id, student_id)
+    allowed = assigned_group_ids_for_user(db, org_id, user_id, role)
+    stmt = (
+        select(Attendance, LessonSession, Group)
+        .join(LessonSession, LessonSession.id == Attendance.session_id)
+        .join(Group, Group.id == LessonSession.group_id)
+        .where(
+            Attendance.organization_id == org_id,
+            Attendance.student_id == student_id,
+            LessonSession.organization_id == org_id,
+            Group.organization_id == org_id,
+        )
+    )
+    if allowed is not None:
+        if not allowed:
+            return []
+        stmt = stmt.where(LessonSession.group_id.in_(allowed))
+    rows = db.execute(stmt.order_by(LessonSession.starts_at.desc())).all()
+    return [
+        {
+            "session_id": session.id,
+            "group_id": session.group_id,
+            "group_name": group.name,
+            "starts_at": session.starts_at,
+            "duration_minutes": session.duration_minutes,
+            "topic": session.topic,
+            "lesson_status": session.status,
+            "status": attendance.status,
+            "note": attendance.note,
+        }
+        for attendance, session, group in rows
+    ]
+
+
 def _payment_transactions(db: Session, org_id: UUID, payment_id: UUID) -> list[PaymentTransaction]:
     return list(db.scalars(
         select(PaymentTransaction)
