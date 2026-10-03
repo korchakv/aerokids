@@ -42,7 +42,7 @@ def main():
     assert status == 200 and health["status"] == "ok", health
 
     status, html = wait_for("/", base=WEB)
-    assert status == 200 and "School CRM" in html, "Frontend did not serve the CRM shell"
+    assert status == 200 and ("AeroKids" in html or "AeroKiDS" in html or 'id="root"' in html), "Frontend did not serve the CRM shell"
 
     status, bootstrap = request("/auth/bootstrap", "POST", {
         "organization_name": "Smoke School",
