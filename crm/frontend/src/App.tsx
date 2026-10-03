@@ -3168,7 +3168,7 @@ function LeadKanban({
         >
           <div className="kanbanCardTop">
             <span className="leadMiniAvatar">{lead.child.slice(0, 1)}</span>
-            <div><b>{lead.child}</b><small>{lead.age ? lead.age + " років" : "Вік не вказано"} · {lead.parent}</small></div>
+            <div><b>{lead.child}</b><small>{lead.age ? lead.age + " років" : "Вік не вказано"}</small></div>
             <button className="kanbanMore" aria-label="Відкрити заявку" onClick={(event) => { event.stopPropagation(); onOpen(lead.id); }}>•••</button>
           </div>
           <div className="kanbanMeta">
@@ -3177,7 +3177,10 @@ function LeadKanban({
             {lead.recommendedLevel && <span className="levelBadge">{lead.recommendedLevel}</span>}
           </div>
           {(() => { const action = leadActionMeta(lead); return <div className={"kanbanNextAction action-" + action.type + " " + urgency}><i>{urgency === "overdue" ? "!" : action.icon}</i><span><b>{urgency === "overdue" ? "Прострочено" : action.label}</b><small>{leadNextAction(lead)}</small></span></div>; })()}
-          {lead.phone && <div className="kanbanPhone">{formatUaPhone(lead.phone)}</div>}
+          {(lead.parent || lead.phone) && <div className="kanbanContact">
+            {lead.parent && <b>{lead.parent}</b>}
+            {lead.phone && <small>{formatUaPhone(lead.phone)}</small>}
+          </div>}
           {movingId === lead.id && <div className="kanbanSaving">Оновлюємо…</div>}
         </article>;
       })}
