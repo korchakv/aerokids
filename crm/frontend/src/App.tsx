@@ -81,6 +81,10 @@ type PlanDemo = {
   name: string;
   price: number;
   lessons: number | null;
+  usageMode?: "attendance" | "scheduled" | "period";
+  absentRule?: "consume" | "dont_consume" | "choice";
+  excusedRule?: "consume" | "dont_consume" | "makeup";
+  endRule?: "lessons" | "date" | "whichever_first";
 };
 
 type PaymentDemo = {
@@ -240,6 +244,7 @@ function App() {
     "1": { "8": "present", "9": "late" },
   });
   const [attendanceNotes, setAttendanceNotes] = useState<Record<EntityId, Record<EntityId, string>>>({});
+  const [attendanceConsume, setAttendanceConsume] = useState<Record<EntityId, Record<EntityId, boolean>>>({});
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceSaving, setAttendanceSaving] = useState(false);
   const [lessonRoster, setLessonRoster] = useState<ApiGroupRosterStudent[] | null>(null);
@@ -278,6 +283,10 @@ function App() {
   const [planName, setPlanName] = useState("8 занять / 30 днів");
   const [planPrice, setPlanPrice] = useState("");
   const [planLessons, setPlanLessons] = useState("8");
+  const [planUsageMode, setPlanUsageMode] = useState<"attendance" | "scheduled" | "period">("attendance");
+  const [planAbsentRule, setPlanAbsentRule] = useState<"consume" | "dont_consume" | "choice">("choice");
+  const [planExcusedRule, setPlanExcusedRule] = useState<"consume" | "dont_consume" | "makeup">("makeup");
+  const [planEndRule, setPlanEndRule] = useState<"lessons" | "date" | "whichever_first">("whichever_first");
   const [locations, setLocations] = useState<LocationDemo[]>([
     { id: "1", name: "Основна локація", address: "Івано-Франківськ", isActive: true },
   ]);
@@ -1165,6 +1174,7 @@ function App() {
             student_id: student.id,
             status: lessonMarks[student.id],
             note: attendanceNotes[selectedLesson.id]?.[student.id]?.trim() || null,
+            consume_lesson: lessonMarks[student.id] === "absent" ? (attendanceConsume[selectedLesson.id]?.[student.id] ?? false) : null,
           })),
         }, session);
         await syncWorkspace(session);
@@ -1327,6 +1337,7 @@ function App() {
         await apiPost("/billing/charges", {
           student_id: paymentStudentId,
           plan_id: paymentPlanId,
+          group_id: studentGroup(paymentStudentId)?.id ?? null,
           starts_on: localDateInput(new Date()),
           due_date: paymentDueDate || null,
           discount_minor: 0,
@@ -1752,7 +1763,8 @@ function App() {
   const dashboardPaymentTasks = canSeePayments ? payments
     .filter((payment) => payment.balanceAmount > 0 && payment.status !== "cancelled" && Boolean(payment.dueDate) && payment.dueDate <= todayKey)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || b.balanceAmount - a.balanceAmount) : [];
-  const dashboardTaskCount = dashboardLeadTasks.length + dashboardPaymentTasks.length;
+  const renewalSubscriptionTasks = canSeePayments ? subscriptions.filter((item) => item.status === "active" && item.needs_renewal) : [];
+  const dashboardTaskCount = dashboardLeadTasks.length + dashboardPaymentTasks.length + renewalSubscriptionTasks.length;
   const searchTerm = searchQuery.trim().toLocaleLowerCase("uk-UA");
   const searchLeads = searchTerm ? leads.filter((item) =>
     [item.child, item.parent, item.phone, item.source].some((value) => value.toLocaleLowerCase("uk-UA").includes(searchTerm))
@@ -1869,6 +1881,15 @@ function App() {
                 return <button className="todayActionRow" key={"lead-" + lead.id} onClick={() => openLead(lead.id)}>
                   <span className="todayActionType lead">Заявка</span>
                   <span className="todayActionText"><b>{lead.child}</b><small>{kind} · {detail}</small></span>
+                  <span className="todayActionArrow">→</span>
+                </button>;
+              })}
+              {renewalSubscriptionTasks.map((subscription) => {
+                const student = leads.find((lead) => lead.id === subscription.student_id);
+                const plan = plans.find((item) => item.id === subscription.plan_id);
+                return <button className="todayActionRow" key={"renewal-" + subscription.id} onClick={() => { setSelectedStudentId(subscription.student_id); setActive("Учні"); }}>
+                  <span className="todayActionType payment">Абонемент</span>
+                  <span className="todayActionText"><b>{student?.child ?? "Учень"} · залишилось 1 заняття</b><small>{plan?.name ?? "Абонемент"} · скоро продовження</small></span>
                   <span className="todayActionArrow">→</span>
                 </button>;
               })}
@@ -2965,6 +2986,10 @@ function applyOperations(
     name: item.name,
     price: item.price_minor / 100,
     lessons: item.lessons_included,
+    usageMode: item.usage_mode,
+    absentRule: item.absent_rule,
+    excusedRule: item.excused_rule,
+    endRule: item.end_rule,
   })));
 
   const today = new Date().toISOString().slice(0, 10);

@@ -241,6 +241,15 @@ export type ApiSubscriptionPlan = {
   price_minor: number;
   period_days: number;
   lessons_included: number | null;
+  usage_mode: "attendance" | "scheduled" | "period";
+  absent_rule: "consume" | "dont_consume" | "choice";
+  excused_rule: "consume" | "dont_consume" | "makeup";
+  late_rule: "consume" | "dont_consume";
+  end_rule: "lessons" | "date" | "whichever_first";
+  renewal_trigger: "last_lesson" | "date" | "manual";
+  allow_debt: boolean;
+  max_lates: number | null;
+  makeup_expiry_days: number | null;
   is_active: boolean;
 };
 
@@ -268,6 +277,7 @@ export type ApiStudentSubscription = {
   organization_id: string;
   student_id: string;
   plan_id: string;
+  group_id: string | null;
   status: "active" | "paused" | "expired" | "cancelled";
   starts_on: string;
   ends_on: string;
@@ -276,6 +286,9 @@ export type ApiStudentSubscription = {
   discount_label: string | null;
   auto_renew: boolean;
   renewal_of_id: string | null;
+  used_lessons: number;
+  remaining_lessons: number | null;
+  needs_renewal: boolean;
 };
 
 export type OperationsBundle = {

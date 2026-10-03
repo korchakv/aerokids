@@ -264,3 +264,6 @@ input,select,textarea{min-width:0;max-width:100%}textarea{resize:vertical}
   .attendanceButtons{grid-template-columns:1fr 1fr}
   .attendanceReasonInput{grid-column:1}
 }
+
+.attendanceReasonWrap{grid-column:2;display:grid;gap:6px;width:100%;justify-self:end}.attendanceReasonWrap .attendanceReasonInput{grid-column:auto}.attendanceChargeChoice{display:flex!important;align-items:center;justify-content:flex-end;gap:7px;color:var(--ak-muted)!important;font-size:12px!important;text-transform:none!important;letter-spacing:0!important}.attendanceChargeChoice input{width:15px!important;height:15px!important;margin:0}.policyFields{margin-top:10px}.policyFields label{min-width:0}.policyFields select{width:100%}
+@media(max-width:760px){.attendanceReasonWrap{grid-column:1}.attendanceChargeChoice{justify-content:flex-start}.policyFields{grid-template-columns:1fr}}
