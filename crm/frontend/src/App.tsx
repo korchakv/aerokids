@@ -1738,14 +1738,27 @@ function App() {
 
         {active === "Розклад" && <section className="scheduleLayout">
           <article className="panel schedulePanel">
-            <div className="panelHead"><div><p className="eyebrow">Тиждень</p><h2>Розклад груп</h2></div><span className="counter">{groups.length}</span></div>
+            <div className="panelHead"><div><p className="eyebrow">Тиждень</p><h2>Заняття та регулярні слоти</h2></div><span className="counter">{lessons.filter((lesson) => lesson.status !== "cancelled").length}</span></div>
+            <p className="scheduleHint">Конкретне заняття відкриває власний журнал відвідування. Регулярний слот — це лише шаблон графіка групи й не веде в картку групи.</p>
             <div className="weekGrid">
-              {["Пн","Вт","Ср","Чт","Пт","Сб"].map((day) => <div className="dayColumn" key={day}>
+              {["Пн","Вт","Ср","Чт","Пт","Сб","Нд"].map((day) => <div className="dayColumn" key={day}>
                 <b>{day}</b>
-                {groups.flatMap((group) => scheduleSlots(group).filter((slot) => slot.day === day).map((slot) =>
-                  <button className="scheduleCard" key={group.id + day} onClick={() => { setActive("Групи"); openGroup(group.id); }}>
-                    <time>{slot.time}</time><strong>{group.name}</strong><span>{group.location}</span><small>{group.members.length}/{group.capacity} учнів</small>
-                  </button>
+                {lessons
+                  .filter((lesson) => lesson.status !== "cancelled" && lessonWeekdayLabel(lesson.startsAt) === day)
+                  .sort((a, b) => dateValue(a.startsAt) - dateValue(b.startsAt))
+                  .map((lesson) => {
+                    const group = groups.find((item) => item.id === lesson.groupId);
+                    return <button className="scheduleCard concreteLessonCard" key={lesson.id} onClick={() => { setSelectedLessonId(lesson.id); setActive("Відвідування"); }}>
+                      <time>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
+                      <strong>{group?.name ?? "Група"}</strong>
+                      <span>{lesson.topic || "Заняття"}</span>
+                      <small>{new Date(lesson.startsAt).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · {lesson.duration} хв · відкрити журнал →</small>
+                    </button>;
+                  })}
+                {groups.flatMap((group) => scheduleSlots(group).filter((slot) => slot.day === day).map((slot, index) =>
+                  <div className="scheduleCard recurringScheduleCard" key={"slot-" + group.id + "-" + day + "-" + slot.time + "-" + index}>
+                    <time>{slot.time}</time><strong>{group.name}</strong><span>{group.location}</span><small>Регулярний слот · {group.members.length}/{group.capacity} учнів</small>
+                  </div>
                 ))}
               </div>)}
             </div>
@@ -1797,10 +1810,10 @@ function App() {
                   return <div className={"attendanceRow " + (!value ? "unmarked" : "")} key={student.id}>
                     <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років{student.parent ? " · " + student.parent : ""}</small></b>{!value && <em className="unmarkedBadge">Не відмічено</em>}</span>
                     <div className="attendanceButtons">
-                      <button className={value === "present" ? "active present" : ""} onClick={() => markAttendance(student.id, "present")}>✓ Був</button>
+                      <button className={value === "present" ? "active present" : ""} onClick={() => markAttendance(student.id, "present")}>✓ Є</button>
+                      <button className={value === "absent" ? "active absent" : ""} onClick={() => markAttendance(student.id, "absent")}>Нема</button>
+                      <button className={value === "excused" ? "active excused" : ""} onClick={() => markAttendance(student.id, "excused")}>Поважна причина</button>
                       <button className={value === "late" ? "active late" : ""} onClick={() => markAttendance(student.id, "late")}>Запізнився</button>
-                      <button className={value === "absent" ? "active absent" : ""} onClick={() => markAttendance(student.id, "absent")}>Відсутній</button>
-                      <button className={value === "excused" ? "active excused" : ""} onClick={() => markAttendance(student.id, "excused")}>Поважна</button>
                     </div>
                   </div>;
                 })}
@@ -2753,6 +2766,12 @@ function dateValue(value?: string, fallback = 0) {
   if (!value) return fallback;
   const timestamp = new Date(value).getTime();
   return Number.isFinite(timestamp) ? timestamp : fallback;
+}
+
+function lessonWeekdayLabel(value: string) {
+  const names = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : names[date.getDay()];
 }
 
 function leadActionPriority(lead: Lead) {
