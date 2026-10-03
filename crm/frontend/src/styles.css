@@ -304,3 +304,5 @@ aside{display:flex!important;flex-direction:column!important}.asideFooter{margin
 
 /* Simplified funnel controls */
 .kanbanSummarySimple{display:flex!important;align-items:center;gap:8px;flex-wrap:wrap}.kanbanSummaryStat{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ak-border);border-radius:999px;background:var(--ak-surface-2);color:var(--ak-text-soft);font-size:11px}.kanbanSummaryStat strong{display:grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:var(--ak-surface);color:var(--ak-text);font-size:11px}.kanbanSummaryStat.attention{border-color:rgba(226,116,126,.28)}.kanbanSummaryStat.attention strong{background:rgba(226,116,126,.14);color:#d96c75}.kanbanSummarySimple .kanbanHint{margin-left:2px}.leadsHead{align-items:flex-start!important}.leadControls{align-items:flex-end!important}
+
+.singleLocationField{display:flex;align-items:center;min-height:42px;padding:10px 12px;border:1px solid var(--ak-border);border-radius:10px;background:var(--ak-surface-2);color:var(--ak-text);font-size:13px;font-weight:650}

@@ -451,8 +451,16 @@ function App() {
           ? current
           : (operations.plans.find((plan) => plan.price_minor > 0)?.id ?? operations.plans[0]?.id ?? "")
       );
-      if (!trialLocationId && operations.locations[0]) setTrialLocationId(operations.locations[0].id);
-      if (!groupLocationId && operations.locations[0]) setGroupLocationId(operations.locations[0].id);
+      const activeOpsLocations = operations.locations.filter((location) => location.is_active);
+      if (activeOpsLocations.length === 1) {
+        setTrialLocationId(activeOpsLocations[0].id);
+        setTrialLocation(activeOpsLocations[0].name);
+        setGroupLocationId((current) => current || activeOpsLocations[0].id);
+        setPreferenceLocationId((current) => current || activeOpsLocations[0].id);
+      } else {
+        if (!trialLocationId && activeOpsLocations[0]) setTrialLocationId(activeOpsLocations[0].id);
+        if (!groupLocationId && activeOpsLocations[0]) setGroupLocationId(activeOpsLocations[0].id);
+      }
       applyTeaching(teaching, setLessons, setGroups);
       setOverviewReport(report);
       setPaymentReminders(reminders);
@@ -483,6 +491,16 @@ function App() {
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedStudent = leads.find((lead) => lead.id === selectedStudentId) ?? null;
   const activeStudents = leads.filter((lead) => lead.status === "Зарахований");
+  const activeLocations = useMemo(() => locations.filter((location) => location.isActive), [locations]);
+
+  useEffect(() => {
+    if (activeLocations.length !== 1) return;
+    const only = activeLocations[0];
+    setTrialLocationId(only.id);
+    setTrialLocation(only.name);
+    setGroupLocationId((current) => current || only.id);
+    setPreferenceLocationId((current) => current || only.id);
+  }, [activeLocations]);
 
   useEffect(() => {
     const entityId = selected?.id ?? selectedStudent?.id;
@@ -2932,10 +2950,12 @@ function App() {
           {preferenceMode && <div className="workflowBox">
             <div className="workflowHead"><h3>Побажання щодо графіка</h3><button onClick={() => setPreferenceMode(false)}>×</button></div>
             <p className="softPreferenceHint">Це орієнтовні побажання сім’ї. Фінальний графік узгоджується під час формування групи.</p>
-            <label>Бажана локація<select value={preferenceLocationId} onChange={(e) => setPreferenceLocationId(e.target.value)}>
-              <option value="">Не має значення</option>
-              {locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
-            </select></label>
+            {activeLocations.length === 1
+              ? <label>Бажана локація<div className="singleLocationField">{activeLocations[0].name}</div></label>
+              : <label>Бажана локація<select value={preferenceLocationId} onChange={(e) => setPreferenceLocationId(e.target.value)}>
+                  <option value="">Не має значення</option>
+                  {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+                </select></label>}
             <AvailabilityWindowEditor value={availabilityWindows} onChange={setAvailabilityWindows} />
             <button className="primary full" disabled={preferenceSaving || availabilityWindows.some((x) => x.end_time <= x.start_time)} onClick={saveStudentPreferences}>{preferenceSaving ? "Зберігаємо…" : "Зберегти побажання"}</button>
           </div>}
@@ -2945,16 +2965,18 @@ function App() {
           {trialMode === "schedule" && <div className="workflowBox">
             <div className="workflowHead"><h3>Запис на пробне</h3><button onClick={() => setTrialMode(null)}>×</button></div>
             <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
-            <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
-              <option value="">Без локації</option>
-              {locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
-            </select></label>
+            {activeLocations.length === 1
+              ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label>
+              : <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
+                  <option value="">Без локації</option>
+                  {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+                </select></label>}
             <button className="primary full" onClick={scheduleTrial}>Підтвердити пробне</button>
           </div>}
 
           {trialMode === "complete" && <div className="workflowBox">
             <div className="workflowHead"><h3>{leadProcedureTarget === "no_show" ? "Зафіксувати пропущене пробне" : "Результат пробного"}</h3><button onClick={() => { setTrialMode(null); setLeadProcedureTarget(null); }}>×</button></div>
-            {!selected.trialId && <><DateTimeEditor label="Коли було пробне" value={trialAt} onChange={setTrialAt} /><label>Локація<select value={trialLocationId} onChange={(e) => setTrialLocationId(e.target.value)}><option value="">Без локації</option>{locations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label></>}
+            {!selected.trialId && <><DateTimeEditor label="Коли було пробне" value={trialAt} onChange={setTrialAt} />{activeLocations.length === 1 ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label> : <label>Локація<select value={trialLocationId} onChange={(e) => setTrialLocationId(e.target.value)}><option value="">Без локації</option>{activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label>}</>}
             <label>Рекомендований рівень<select value={recommendedLevel} onChange={(e) => setRecommendedLevel(e.target.value)}><option>Початковий</option><option>Середній</option><option>Просунутий</option></select></label>
             <label>Коментар викладача<textarea value={teacherNotes} onChange={(e) => setTeacherNotes(e.target.value)} placeholder="Що сподобалось, як дитина справилась, що рекомендуємо" /></label>
             <div className="resultActions">{leadProcedureTarget !== "no_show" && <button className="primary" onClick={() => completeTrial("completed")}>Пробне пройдено</button>}<button className={leadProcedureTarget === "no_show" ? "primary" : "search"} onClick={() => completeTrial("no_show")}>Не прийшов</button>{leadProcedureTarget !== "no_show" && <button className="search" onClick={() => completeTrial("cancelled")}>Скасували</button>}</div>
