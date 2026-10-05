@@ -1,0 +1,33 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+
+# Coverage / logs / OS
+.coverage
+htmlcov/
+coverage/
+*.log
+.DS_Store
+Thumbs.db
