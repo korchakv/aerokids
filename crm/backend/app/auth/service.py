@@ -9,11 +9,56 @@ from sqlalchemy.orm import Session
 
 from app.auth.schemas import AuthMembershipInfo, AuthUserInfo, BootstrapOwnerCreate
 from app.core.security import create_access_token, hash_password, verify_password
-from app.models.core import Organization, OrganizationInvitation, OrganizationMembership, PasswordResetToken, Staff, StaffRole, User
+from app.models.core import AuthLoginThrottle, Organization, OrganizationInvitation, OrganizationMembership, PasswordResetToken, Staff, StaffRole, User
 
 
 def normalize_email(email: str) -> str:
     return email.strip().lower()
+
+
+def enforce_login_rate_limit(
+    db: Session,
+    scope: str,
+    fingerprint: str,
+    limit: int,
+    window_minutes: int,
+) -> None:
+    now = datetime.now(timezone.utc)
+    digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
+    row = db.scalar(
+        select(AuthLoginThrottle)
+        .where(
+            AuthLoginThrottle.scope == scope,
+            AuthLoginThrottle.fingerprint_hash == digest,
+        )
+        .with_for_update()
+    )
+
+    if row is None:
+        db.add(AuthLoginThrottle(
+            scope=scope,
+            fingerprint_hash=digest,
+            window_started_at=now,
+            request_count=1,
+            updated_at=now,
+        ))
+        db.commit()
+        return
+
+    window_started = row.window_started_at
+    if window_started.tzinfo is None:
+        window_started = window_started.replace(tzinfo=timezone.utc)
+
+    if now - window_started >= timedelta(minutes=window_minutes):
+        row.window_started_at = now
+        row.request_count = 1
+    else:
+        if row.request_count >= limit:
+            raise HTTPException(status_code=429, detail="Too many login attempts. Please try again later.")
+        row.request_count += 1
+
+    row.updated_at = now
+    db.commit()
 
 
 def bootstrap_owner(db: Session, data: BootstrapOwnerCreate) -> tuple[Organization, User, str]:
