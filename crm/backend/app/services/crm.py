@@ -833,7 +833,7 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
         )
         .order_by(Enrollment.started_at, Enrollment.id)
     ))
-    finance_visible = role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.ACCOUNTANT}
+    finance_visible = role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER, StaffRole.ACCOUNTANT}
     members = []
     today = date.today()
 
@@ -2828,7 +2828,7 @@ def list_group_overview(db: Session, org_id: UUID, user_id: UUID | None = None, 
 
 
 def assigned_group_ids_for_user(db: Session, org_id: UUID, user_id: UUID | None, role: StaffRole) -> set[UUID] | None:
-    if role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER}:
+    if role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER}:
         return None
     if role != StaffRole.TEACHER or user_id is None:
         return set()
