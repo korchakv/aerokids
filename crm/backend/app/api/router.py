@@ -50,7 +50,23 @@ def auth_bootstrap(
 
 
 @router.post("/auth/login", response_model=AuthTokenResponse)
-def auth_login(data: LoginCreate, db: Session = Depends(get_db)):
+def auth_login(data: LoginCreate, request: Request, db: Session = Depends(get_db)):
+    forwarded = request.headers.get("x-forwarded-for")
+    client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+    auth_service.enforce_login_rate_limit(
+        db,
+        "ip",
+        client_ip,
+        settings.auth_login_ip_limit,
+        settings.auth_login_window_minutes,
+    )
+    auth_service.enforce_login_rate_limit(
+        db,
+        "email",
+        auth_service.normalize_email(data.email),
+        settings.auth_login_email_limit,
+        settings.auth_login_window_minutes,
+    )
     token, user_info = auth_service.issue_login_token(db, data.email, data.password)
     return AuthTokenResponse(access_token=token, user=user_info)
 
