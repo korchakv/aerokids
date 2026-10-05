@@ -192,7 +192,7 @@ export async function loadWorkspace(session: Session): Promise<WorkspaceBundle> 
   const membership = session.user.memberships.find((item) => item.organization_id === session.organizationId);
   const role = membership?.role;
 
-  const leadsPromise = role === "owner" || role === "admin" || role === "manager"
+  const leadsPromise = ["owner", "admin", "manager", "teacher"].includes(role ?? "")
     ? apiGet<WorkspaceLead[]>("/workspace/leads", session)
     : Promise.resolve([]);
 
@@ -303,25 +303,29 @@ export async function loadOperations(session: Session): Promise<OperationsBundle
   const membership = session.user.memberships.find((item) => item.organization_id === session.organizationId);
   const role = membership?.role;
 
-  const locationsPromise = role === "owner" || role === "admin" || role === "manager"
+  const fullAccess = ["owner", "admin", "manager", "teacher"].includes(role ?? "");
+
+  const locationsPromise = fullAccess
     ? apiGet<ApiLocation[]>("/locations", session)
     : Promise.resolve([]);
 
-  const staffPromise = role === "owner" || role === "admin"
+  const staffPromise = fullAccess
     ? apiGet<ApiStaff[]>("/staff", session).then(async (items) => Promise.all(
         items.map((item) => apiGet<ApiStaffProfile>(`/staff/${item.id}/profile`, session))
       ))
     : Promise.resolve([]);
 
-  const plansPromise = role === "owner" || role === "admin" || role === "accountant"
+  const financeAccess = fullAccess || role === "accountant";
+
+  const plansPromise = financeAccess
     ? apiGet<ApiSubscriptionPlan[]>("/subscription-plans", session)
     : Promise.resolve([]);
 
-  const paymentsPromise = role === "owner" || role === "admin" || role === "accountant"
+  const paymentsPromise = financeAccess
     ? apiGet<ApiPayment[]>("/payments", session)
     : Promise.resolve([]);
 
-  const subscriptionsPromise = role === "owner" || role === "admin" || role === "accountant"
+  const subscriptionsPromise = financeAccess
     ? apiGet<ApiStudentSubscription[]>("/student-subscriptions", session)
     : Promise.resolve([]);
 
@@ -608,8 +612,6 @@ export type OverviewReport = {
 };
 
 export async function loadOverviewReport(session: Session): Promise<OverviewReport | null> {
-  const membership = session.user.memberships.find((item) => item.organization_id === session.organizationId);
-  if (membership?.role === "teacher") return null;
   return apiGet<OverviewReport>("/reports/overview", session);
 }
 

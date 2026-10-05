@@ -84,9 +84,19 @@ def get_org_id(access: OrgAccess = Depends(get_org_access)) -> UUID:
     return access.organization_id
 
 
+def role_is_allowed(actual_role: StaffRole, allowed_roles: tuple[StaffRole, ...]) -> bool:
+    if actual_role in allowed_roles:
+        return True
+    # AeroKids uses manager/teacher as full operational roles. They inherit
+    # admin-level permissions, but never OWNER-only permissions.
+    if actual_role in {StaffRole.MANAGER, StaffRole.TEACHER} and StaffRole.ADMIN in allowed_roles:
+        return True
+    return False
+
+
 def require_org_roles(*roles: StaffRole) -> Callable:
     def dependency(access: OrgAccess = Depends(get_org_access)) -> UUID:
-        if access.role not in roles:
+        if not role_is_allowed(access.role, roles):
             raise HTTPException(status_code=403, detail="Insufficient role for this action")
         return access.organization_id
 
@@ -95,7 +105,7 @@ def require_org_roles(*roles: StaffRole) -> Callable:
 
 def require_org_access_roles(*roles: StaffRole) -> Callable:
     def dependency(access: OrgAccess = Depends(get_org_access)) -> OrgAccess:
-        if access.role not in roles:
+        if not role_is_allowed(access.role, roles):
             raise HTTPException(status_code=403, detail="Insufficient role for this action")
         return access
 

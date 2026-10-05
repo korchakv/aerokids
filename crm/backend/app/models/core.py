@@ -504,6 +504,20 @@ class PasswordResetToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class AuthLoginThrottle(Base):
+    __tablename__ = "auth_login_throttles"
+    __table_args__ = (
+        UniqueConstraint("scope", "fingerprint_hash", name="uq_auth_login_throttle"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    scope: Mapped[str] = mapped_column(String(20), nullable=False)
+    fingerprint_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class PublicIntakeThrottle(Base):
     __tablename__ = "public_intake_throttles"
     __table_args__ = (

@@ -50,7 +50,23 @@ def auth_bootstrap(
 
 
 @router.post("/auth/login", response_model=AuthTokenResponse)
-def auth_login(data: LoginCreate, db: Session = Depends(get_db)):
+def auth_login(data: LoginCreate, request: Request, db: Session = Depends(get_db)):
+    forwarded = request.headers.get("x-forwarded-for")
+    client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+    auth_service.enforce_login_rate_limit(
+        db,
+        "ip",
+        client_ip,
+        settings.auth_login_ip_limit,
+        settings.auth_login_window_minutes,
+    )
+    auth_service.enforce_login_rate_limit(
+        db,
+        "email",
+        auth_service.normalize_email(data.email),
+        settings.auth_login_email_limit,
+        settings.auth_login_window_minutes,
+    )
     token, user_info = auth_service.issue_login_token(db, data.email, data.password)
     return AuthTokenResponse(access_token=token, user=user_info)
 
@@ -63,11 +79,15 @@ def auth_me(user: User = Depends(get_current_user), db: Session = Depends(get_db
 @router.post("/organization-invitations", response_model=OrganizationInvitationResult, status_code=201)
 def create_organization_invitation(
     data: OrganizationInvitationCreate,
-    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)),
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN)),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    invitation, raw_token = auth_service.create_invitation(db, org_id, user.id, data.email, data.role)
+    if data.role == StaffRole.OWNER and access.role != StaffRole.OWNER:
+        raise HTTPException(status_code=403, detail="Only an owner can invite another owner")
+    invitation, raw_token = auth_service.create_invitation(
+        db, access.organization_id, user.id, data.email, data.role
+    )
     return OrganizationInvitationResult(
         invitation_id=invitation.id,
         email=invitation.email,

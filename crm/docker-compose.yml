@@ -20,7 +20,7 @@ services:
       context: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://schoolcrm:schoolcrm@db:5432/schoolcrm
-      ENVIRONMENT: production
+      ENVIRONMENT: development
       AUTH_REQUIRED: "true"
       JWT_SECRET: local-dev-secret-change-before-public-deploy
       BOOTSTRAP_SECRET: local-bootstrap-secret-change-before-public-deploy

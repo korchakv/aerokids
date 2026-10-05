@@ -470,7 +470,7 @@ function App() {
     setWorkspaceError("");
     try {
       const membership = currentSession.user.memberships.find((item) => item.organization_id === currentSession.organizationId);
-      if (["owner", "admin", "accountant"].includes(membership?.role ?? "")) {
+      if (["owner", "admin", "manager", "teacher", "accountant"].includes(membership?.role ?? "")) {
         await runBillingRenewals(currentSession).catch(() => undefined);
       }
       const [bundle, operations, teaching, report, reminders] = await Promise.all([
@@ -550,7 +550,7 @@ function App() {
       return;
     }
     const role = session.user.memberships.find((item) => item.organization_id === session.organizationId)?.role;
-    if (!["owner", "admin", "manager"].includes(role ?? "")) {
+    if (!["owner", "admin", "manager", "teacher"].includes(role ?? "")) {
       setEntityEvents([]);
       return;
     }
@@ -2085,11 +2085,12 @@ function App() {
     ? `${currentMembership?.organization_name ?? "AeroKids CRM"} · ${locations[0].name}`
     : currentMembership?.organization_name ?? "AeroKids CRM";
   const navigation = visibleNavigation(currentMembership?.role);
-  const canManageRecurringSchedule = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
-  const canManageLeads = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
-  const canManageStudents = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
-  const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
-  const canManageStaff = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
+  const fullAccessRole = ["owner", "admin", "manager", "teacher"].includes(currentMembership?.role ?? "");
+  const canManageRecurringSchedule = !apiEnabled || fullAccessRole;
+  const canManageLeads = !apiEnabled || fullAccessRole;
+  const canManageStudents = !apiEnabled || fullAccessRole;
+  const canManageLocations = !apiEnabled || fullAccessRole;
+  const canManageStaff = !apiEnabled || fullAccessRole;
   const todayKey = localDateInput(new Date());
   const scheduleWeekStart = startOfLocalWeek(addLocalDays(new Date(), scheduleWeekOffset * 7));
   const scheduleWeekDays = Array.from({ length: 7 }, (_, index) => addLocalDays(scheduleWeekStart, index));
@@ -4141,8 +4142,8 @@ function visibleNavigation(role?: string) {
   const byRole: Record<string, string[]> = {
     owner: allNav,
     admin: allNav,
-    manager: ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Локації", "Звіти"],
-    teacher: ["Дашборд", "Учні", "Групи", "Розклад", "Відвідування"],
+    manager: allNav,
+    teacher: allNav,
     accountant: ["Дашборд", "Оплати", "Звіти"],
   };
   return byRole[role] ?? ["Дашборд"];
