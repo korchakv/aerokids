@@ -1087,7 +1087,7 @@ def test_owner_can_invite_teacher_and_teacher_can_accept(client):
     assert me.json()["email"] == "teacher-invite@example.com"
 
 
-def test_teacher_cannot_use_owner_admin_staff_endpoint(client):
+def test_teacher_has_admin_level_operational_access(client):
     bootstrap = client.post(
         "/auth/bootstrap",
         json={
@@ -1120,12 +1120,25 @@ def test_teacher_cannot_use_owner_admin_staff_endpoint(client):
         "Authorization": f"Bearer {accepted['access_token']}",
         "X-Organization-Id": bootstrap.json()["organization_id"],
     }
-    denied = client.post(
+    created = client.post(
         "/staff",
         headers=teacher_headers,
-        json={"full_name": "Should Fail", "role": "teacher"},
+        json={"full_name": "Second Teacher", "role": "teacher"},
     )
-    assert denied.status_code == 403
+    assert created.status_code == 201, created.text
+
+    plans = client.get("/subscription-plans", headers=teacher_headers)
+    assert plans.status_code == 200, plans.text
+
+    report = client.get("/reports/overview", headers=teacher_headers)
+    assert report.status_code == 200, report.text
+
+    owner_invite = client.post(
+        "/organization-invitations",
+        headers=teacher_headers,
+        json={"email": "escalation@example.com", "role": "owner"},
+    )
+    assert owner_invite.status_code == 403
 
 
 def test_invitation_is_single_use(client):
@@ -1203,7 +1216,7 @@ def test_workspace_overviews_return_real_tenant_data(client):
     assert groups.json()[0]["capacity"] == 8
 
 
-def test_teacher_workspace_and_lessons_are_limited_to_assigned_groups(client):
+def test_teacher_workspace_and_lessons_have_full_operational_access(client):
     bootstrap = client.post(
         "/auth/bootstrap",
         json={
@@ -1279,15 +1292,15 @@ def test_teacher_workspace_and_lessons_are_limited_to_assigned_groups(client):
 
     groups = client.get("/workspace/groups", headers=teacher_headers)
     assert groups.status_code == 200, groups.text
-    assert [item["name"] for item in groups.json()] == ["Teacher Group"]
+    assert {item["name"] for item in groups.json()} == {"Teacher Group", "Other Group"}
 
     workspace_students = client.get("/workspace/students", headers=teacher_headers)
     assert workspace_students.status_code == 200, workspace_students.text
-    assert [item["first_name"] for item in workspace_students.json()] == ["Assigned Child"]
+    assert {item["first_name"] for item in workspace_students.json()} == {"Assigned Child", "Foreign Child"}
 
-    assert client.get("/workspace/leads", headers=teacher_headers).status_code == 403
+    assert client.get("/workspace/leads", headers=teacher_headers).status_code == 200
     assert client.get(f"/groups/{group_a_id}/roster", headers=teacher_headers).status_code == 200
-    assert client.get(f"/groups/{group_b_id}/roster", headers=teacher_headers).status_code == 403
+    assert client.get(f"/groups/{group_b_id}/roster", headers=teacher_headers).status_code == 200
 
     allowed_session = client.post(
         "/lesson-sessions",
@@ -1296,12 +1309,12 @@ def test_teacher_workspace_and_lessons_are_limited_to_assigned_groups(client):
     )
     assert allowed_session.status_code == 201, allowed_session.text
 
-    denied_session = client.post(
+    second_session = client.post(
         "/lesson-sessions",
         headers=teacher_headers,
         json={"group_id": group_b_id, "starts_at": "2026-10-10T18:00:00+03:00"},
     )
-    assert denied_session.status_code == 403
+    assert second_session.status_code == 201, second_session.text
 
 
 def test_audit_events_follow_student_workflow_and_are_tenant_scoped(client):
