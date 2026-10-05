@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     public_intake_window_minutes: int = 10
     public_intake_ip_limit: int = 20
     public_intake_phone_limit: int = 5
+    auth_login_window_minutes: int = 15
+    auth_login_ip_limit: int = 30
+    auth_login_email_limit: int = 10
 
     model_config = SettingsConfigDict(
         env_file=".env",
