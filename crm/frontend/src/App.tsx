@@ -435,6 +435,8 @@ function App() {
   const [groupCapacity, setGroupCapacity] = useState(8);
   const [groupLocationId, setGroupLocationId] = useState<EntityId | "">("");
   const [showGroupForm, setShowGroupForm] = useState(false);
+  const [groupCreateError, setGroupCreateError] = useState("");
+  const [locationReturnToGroup, setLocationReturnToGroup] = useState(false);
   const [groupCreateContext, setGroupCreateContext] = useState<"groups" | "candidates" | "lead">("groups");
   const [newGroupTeacherId, setNewGroupTeacherId] = useState<EntityId | "">("");
   const [newLessonGroupId, setNewLessonGroupId] = useState<EntityId>("1");
@@ -1214,18 +1216,54 @@ function App() {
     setGroupCapacity(8);
     setNewGroupTeacherId("");
     setGroupSchedule([{ weekday: 0, start_time: "17:00", duration_minutes: 60 }]);
-    if (activeLocations.length === 1) setGroupLocationId(activeLocations[0].id);
+    setGroupCreateError("");
     setWorkspaceError("");
+
+    if (activeLocations.length === 0) {
+      setGroupLocationId("");
+      setLocationName("");
+      setLocationAddress("");
+      setLocationReturnToGroup(true);
+      setShowGroupForm(false);
+      setShowLocationForm(true);
+      return;
+    }
+
+    if (activeLocations.length === 1) {
+      setGroupLocationId(activeLocations[0].id);
+    } else if (!activeLocations.some((location) => location.id === groupLocationId)) {
+      setGroupLocationId("");
+    }
     setShowGroupForm(true);
   };
 
+  const createLocationFromGroup = () => {
+    setGroupCreateError("");
+    setLocationName("");
+    setLocationAddress("");
+    setLocationReturnToGroup(true);
+    setShowGroupForm(false);
+    setShowLocationForm(true);
+  };
+
   const createGroupFromCandidates = async () => {
-    if (!groupName.trim() || hasDuplicateSlots(groupSchedule) || selectedCandidates.length > groupCapacity) return;
+    const normalizedGroupName = groupName.trim();
+    if (!normalizedGroupName || hasDuplicateSlots(groupSchedule) || selectedCandidates.length > groupCapacity) return;
+    if (!groupLocationId) {
+      setGroupCreateError("Спочатку оберіть або створіть локацію.");
+      return;
+    }
+    const duplicateName = groups.find((group) => group.name.trim().toLocaleLowerCase("uk-UA") === normalizedGroupName.toLocaleLowerCase("uk-UA"));
+    if (duplicateName) {
+      setGroupCreateError("Група з такою назвою вже існує. Відкрийте її або виберіть іншу назву.");
+      return;
+    }
+    setGroupCreateError("");
     if (apiEnabled && session) {
       try {
         setWorkspaceError("");
         const created = await apiPost<{ group: { id: EntityId }; enrolled_student_ids: EntityId[] }>("/groups/form", {
-          name: groupName.trim(),
+          name: normalizedGroupName,
           capacity: groupCapacity,
           location_id: groupLocationId || null,
           min_age: null,
@@ -1245,14 +1283,14 @@ function App() {
         setShowGroupForm(false);
         return;
       } catch (error) {
-        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити групу.");
+        setGroupCreateError(error instanceof Error ? error.message : "Не вдалося створити групу.");
         return;
       }
     }
     const nextId = crypto.randomUUID();
     setGroups((items) => [...items, {
       id: nextId,
-      name: groupName.trim(),
+      name: normalizedGroupName,
       ages: "—",
       schedule: scheduleDraftLabel(groupSchedule),
       location: locations.find((location) => location.id === groupLocationId)?.name ?? "Локацію не вказано",
@@ -2068,7 +2106,8 @@ function App() {
     if (!locationName.trim()) return;
     if (apiEnabled && session) {
       try {
-        await apiPost("/locations", {
+        setWorkspaceError("");
+        const created = await apiPost<{ id: EntityId; name: string }>("/locations", {
           name: locationName.trim(),
           address: locationAddress.trim() || null,
         }, session);
@@ -2076,8 +2115,14 @@ function App() {
         setLocationName("");
         setLocationAddress("");
         setShowLocationForm(false);
+        if (locationReturnToGroup) {
+          setGroupLocationId(created.id);
+          setLocationReturnToGroup(false);
+          setShowGroupForm(true);
+        }
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити локацію.");
         return;
       }
     }
@@ -2091,6 +2136,11 @@ function App() {
     setLocationName("");
     setLocationAddress("");
     setShowLocationForm(false);
+    if (locationReturnToGroup) {
+      setGroupLocationId(nextId);
+      setLocationReturnToGroup(false);
+      setShowGroupForm(true);
+    }
   };
 
   const toggleStaffLocation = async (staffId: EntityId, locationId: EntityId) => {
@@ -3041,8 +3091,9 @@ function App() {
 
       {showLocationForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setShowLocationForm(false)}>×</button>
+          <button className="drawerClose" onClick={() => { setShowLocationForm(false); if (locationReturnToGroup) { setLocationReturnToGroup(false); setShowGroupForm(true); } }}>×</button>
           <p className="eyebrow">Мережа</p><h2>Нова локація</h2>
+          {locationReturnToGroup && <p className="modalIntro">Спочатку створіть локацію. Після збереження повернемо вас до створення групи й виберемо її автоматично.</p>}
           <label>Назва<input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="AeroKids Центр" /></label>
           <label>Адреса<input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="Івано-Франківськ" /></label>
           <button className="primary full" disabled={!locationName.trim()} onClick={createLocationDemo}>Створити локацію</button>
@@ -3297,12 +3348,18 @@ function App() {
           <label>Назва групи<input autoFocus value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Наприклад: FPV Start 8–10" /></label>
           <div className="formTwo">
             <label>Місткість<input type="number" min={1} max={100} value={groupCapacity} onChange={(e) => setGroupCapacity(Number(e.target.value))} /></label>
-            {activeLocations.length === 1
-              ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label>
-              : <label>Локація<select value={groupLocationId} onChange={(e) => setGroupLocationId(e.target.value)}>
-                  <option value="">Без локації</option>
-                  {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
-                </select></label>}
+            {activeLocations.length === 0
+              ? <div className="groupLocationRequired">
+                  <b>Потрібна локація</b>
+                  <small>Група має бути прив’язана до місця проведення занять.</small>
+                  <button className="search" type="button" onClick={createLocationFromGroup}>+ Створити локацію</button>
+                </div>
+              : activeLocations.length === 1
+                ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label>
+                : <label>Локація<select value={groupLocationId} onChange={(e) => { setGroupLocationId(e.target.value); setGroupCreateError(""); }}>
+                    <option value="">Оберіть локацію</option>
+                    {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+                  </select></label>}
           </div>
           {canManageStaff && <label>Викладач <small>(необов’язково)</small><select value={newGroupTeacherId} onChange={(e) => setNewGroupTeacherId(e.target.value)}>
             <option value="">Призначити пізніше</option>
@@ -3316,8 +3373,9 @@ function App() {
               <b>{x.child} · {x.age}</b><small>{compatibility.icon} {compatibility.label}</small><small>{compatibility.detail}</small>
             </span>;
           })}</div>}
-          <button className="primary full" disabled={!groupName.trim() || selectedCandidates.length > groupCapacity || hasDuplicateSlots(groupSchedule)} onClick={createGroupFromCandidates}>
-            {!groupName.trim() ? "Вкажіть назву групи" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
+          {groupCreateError && <div className="groupCreateError">{groupCreateError}</div>}
+          <button className="primary full" disabled={!groupName.trim() || !groupLocationId || selectedCandidates.length > groupCapacity || hasDuplicateSlots(groupSchedule)} onClick={createGroupFromCandidates}>
+            {!groupName.trim() ? "Вкажіть назву групи" : !groupLocationId ? "Оберіть або створіть локацію" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
           </button>
         </div>
       </div>}
