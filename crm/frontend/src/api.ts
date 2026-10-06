@@ -137,6 +137,31 @@ export type StudentAvailabilitySlot = {
   note: string | null;
 };
 
+export type IntakeDuplicateMatch = {
+  student_id: string;
+  first_name: string;
+  last_name: string | null;
+  age: number | null;
+  crm_status: WorkspaceLead["crm_status"];
+  student_status: "prospect" | "active" | "paused" | "archived";
+  student_phone: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  matched_phone: string;
+  matched_as: "student" | "contact" | "student_and_contact";
+  likely_same_student: boolean;
+};
+
+export function checkIntakeDuplicates(input: {
+  child_first_name: string;
+  child_age: number;
+  phone: string;
+  child_phone?: string | null;
+}, session: Session) {
+  return apiPost<{ matches: IntakeDuplicateMatch[] }>("/intake/duplicate-check", input, session);
+}
+
+
 export type WorkspaceLead = {
   student_id: string;
   created_at: string;
