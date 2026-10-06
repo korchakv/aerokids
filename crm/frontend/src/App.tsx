@@ -237,10 +237,12 @@ function searchMatches(query: string, value: string | null | undefined) {
   return queryDigits.length >= 3 && valueDigits.includes(queryDigits);
 }
 
-function weekOffsetForDate(value: string | Date) {
-  const current = startOfLocalWeek(new Date()).getTime();
-  const target = startOfLocalWeek(typeof value === "string" ? new Date(value) : value).getTime();
-  return Math.round((target - current) / (7 * 24 * 60 * 60 * 1000));
+function dayOffsetForDate(value: string | Date) {
+  const current = new Date();
+  current.setHours(0, 0, 0, 0);
+  const target = typeof value === "string" ? new Date(value) : new Date(value);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - current.getTime()) / (24 * 60 * 60 * 1000));
 }
 
 function weekdayLong(value: string) {
@@ -2036,7 +2038,7 @@ function App() {
 
   const goToLesson = (lessonId: EntityId) => {
     const target = lessons.find((lesson) => lesson.id === lessonId);
-    if (target) setAttendanceWeekOffset(weekOffsetForDate(target.startsAt));
+    if (target) setAttendanceDayOffset(dayOffsetForDate(target.startsAt));
     setSelectedLessonId(lessonId);
     setFocusedAttendanceStudentId(null);
     setFocusedAttendanceGroupId(null);
