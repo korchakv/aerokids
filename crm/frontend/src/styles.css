@@ -2042,3 +2042,118 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
     padding-top:2px;
   }
 }
+
+
+/* Multi-day availability windows */
+.availabilityWindowRow{
+  grid-template-columns:minmax(260px,1.7fr) minmax(210px,1fr) minmax(150px,.8fr) auto;
+  align-items:end;
+}
+.availabilityWeekdays{
+  display:grid;
+  gap:6px;
+  align-self:stretch;
+}
+.availabilityWeekdays>span{
+  color:var(--ak-muted);
+  font-size:11px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+}
+.availabilityDayChecks{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.availabilityDayCheck{
+  position:relative;
+  display:block!important;
+  margin:0!important;
+  cursor:pointer;
+}
+.availabilityDayCheck input{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+.availabilityDayCheck span{
+  display:grid;
+  place-items:center;
+  min-width:38px;
+  min-height:38px;
+  padding:7px 9px;
+  border:1px solid var(--ak-border);
+  border-radius:9px;
+  background:var(--ak-bg);
+  color:var(--ak-muted);
+  font-size:11px;
+  font-weight:800;
+  text-transform:none;
+  letter-spacing:0;
+  transition:border-color .15s,background .15s,color .15s;
+}
+.availabilityDayCheck input:focus-visible+span{
+  outline:2px solid var(--ak-accent-strong);
+  outline-offset:2px;
+}
+.availabilityDayCheck.checked span{
+  border-color:var(--ak-accent-strong);
+  background:var(--ak-surface);
+  color:var(--ak-accent-text);
+}
+.availabilityDayError{
+  color:#d28d58;
+  font-size:10px;
+}
+.availabilityTimes{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.availabilityWindowRow .windowNote{
+  grid-column:1/-2;
+}
+.availabilityDeleteWindow{
+  min-height:42px;
+  align-self:end;
+}
+.availabilityAddWindow{
+  justify-self:start;
+}
+@media(max-width:900px){
+  .availabilityWindowRow{
+    grid-template-columns:1fr 1fr;
+  }
+  .availabilityWeekdays{
+    grid-column:1/-1;
+  }
+  .availabilityWindowRow .windowNote{
+    grid-column:1/-1;
+  }
+  .availabilityDeleteWindow{
+    grid-column:1/-1;
+    justify-self:start;
+    min-height:34px!important;
+  }
+}
+@media(max-width:560px){
+  .availabilityWindowRow{
+    grid-template-columns:1fr;
+  }
+  .availabilityWeekdays,
+  .availabilityTimes,
+  .availabilityWindowRow>label,
+  .availabilityWindowRow .windowNote,
+  .availabilityDeleteWindow{
+    grid-column:1;
+  }
+  .availabilityDayChecks{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+  }
+  .availabilityDayCheck span{
+    min-width:0;
+    min-height:42px;
+  }
+}
