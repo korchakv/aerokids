@@ -1809,3 +1809,158 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
     justify-self:start;
   }
 }
+
+
+/* Lead detail editing */
+.leadDrawerIdentity{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.leadDrawerIdentity h2{
+  min-width:0;
+  margin:0;
+}
+.leadEditIcon{
+  display:grid;
+  place-items:center;
+  flex:0 0 28px;
+  width:28px;
+  height:28px;
+  padding:0;
+  border:1px solid transparent;
+  border-radius:8px;
+  background:transparent;
+  color:var(--ak-muted);
+  opacity:.68;
+  cursor:pointer;
+}
+.leadEditIcon:hover{
+  border-color:var(--ak-border);
+  background:var(--ak-surface);
+  color:var(--ak-accent-text);
+  opacity:1;
+}
+.leadEditPanel{
+  display:grid;
+  gap:10px;
+  margin:2px 0 14px;
+  padding:14px;
+  border:1px solid var(--ak-border);
+  border-radius:13px;
+  background:var(--ak-surface-2);
+}
+.leadEditPanelHead{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+}
+.leadEditPanelHead>div{
+  display:grid;
+  gap:2px;
+}
+.leadEditPanelHead b{
+  color:var(--ak-text);
+  font-size:14px;
+}
+.leadEditPanelHead small{
+  color:var(--ak-muted);
+  font-size:10.5px;
+  line-height:1.4;
+}
+.leadEditPanelHead>button{
+  display:grid;
+  place-items:center;
+  flex:0 0 28px;
+  width:28px;
+  height:28px;
+  padding:0;
+  border:1px solid var(--ak-border);
+  border-radius:8px;
+  background:var(--ak-bg);
+  color:var(--ak-muted);
+  cursor:pointer;
+}
+.leadEditPanel>label,
+.leadEditPanel .formTwo>label{
+  display:grid;
+  gap:5px;
+  color:var(--ak-muted);
+  font-size:10px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.leadEditPanel label>small{
+  text-transform:none;
+  letter-spacing:0;
+  font-weight:500;
+}
+.leadEditPanel input,
+.leadEditPanel select,
+.leadEditPanel textarea{
+  width:100%;
+  min-width:0;
+  padding:9px 10px;
+  border:1px solid var(--ak-border);
+  border-radius:9px;
+  background:var(--ak-bg);
+  color:var(--ak-text);
+  font:inherit;
+  text-transform:none;
+  letter-spacing:normal;
+}
+.leadEditPanel textarea{
+  min-height:86px;
+  resize:vertical;
+}
+.leadEditActions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:2px;
+}
+.leadEditActions button{
+  min-width:120px;
+}
+.leadCommentBox{
+  position:relative;
+  padding-right:82px;
+}
+.leadCommentBox.empty p{
+  color:var(--ak-muted);
+  font-style:italic;
+}
+.inlineEditLink{
+  position:absolute;
+  right:12px;
+  top:12px;
+  border:0;
+  background:transparent;
+  padding:3px 4px;
+  color:var(--ak-muted);
+  font:inherit;
+  font-size:10.5px;
+  font-weight:700;
+  cursor:pointer;
+}
+.inlineEditLink:hover{
+  color:var(--ak-accent-text);
+}
+
+@media(max-width:720px){
+  .leadDrawerIdentity{align-items:flex-start}
+  .leadEditIcon{margin-top:1px}
+  .leadEditPanel{padding:12px}
+  .leadEditPanel .formTwo{grid-template-columns:1fr!important}
+  .leadEditPanel input,
+  .leadEditPanel select,
+  .leadEditPanel textarea{font-size:16px;min-height:44px}
+  .leadEditPanel textarea{min-height:96px}
+  .leadEditActions{display:grid;grid-template-columns:1fr 1fr}
+  .leadEditActions button{min-width:0;width:100%}
+  .leadCommentBox{padding-right:16px;padding-top:34px}
+  .inlineEditLink{top:10px;right:10px}
+}
