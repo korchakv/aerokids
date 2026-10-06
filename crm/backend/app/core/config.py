@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     auth_login_window_minutes: int = 15
     auth_login_ip_limit: int = 30
     auth_login_email_limit: int = 10
+    read_only_mode: bool = False
+    run_database_migration_on_start: bool = False
+    migration_target_database_url: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -41,6 +44,11 @@ class Settings(BaseSettings):
                 raise ValueError("Production CORS_ORIGINS must use HTTPS")
             if self.access_token_minutes > 720:
                 raise ValueError("Production access tokens must not live longer than 12 hours")
+            if self.run_database_migration_on_start:
+                if not self.read_only_mode:
+                    raise ValueError("Production database migration requires READ_ONLY_MODE=true")
+                if not self.migration_target_database_url or not self.migration_target_database_url.startswith("postgresql"):
+                    raise ValueError("Production migration target must be a PostgreSQL URL")
         return self
 
 
