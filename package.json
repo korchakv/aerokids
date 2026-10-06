@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "devDependencies": {
+    "@neon/config": "latest",
+    "@neon/env": "latest"
+  }
+}
