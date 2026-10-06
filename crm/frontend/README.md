@@ -1,11 +1,15 @@
-# CRM Frontend
+# AeroKids CRM Frontend
 
-React + TypeScript frontend буде доданий після стабілізації першого API slice.
+Production staff CRM for AeroKids.
 
-Перші екрани:
-1. Dashboard
-2. Заявки / діти зі CRM status
-3. Картка дитини
-4. Пробні заняття
-5. Очікують групу
-6. Групи
+## Canonical production
+
+- Staff URL: https://crm.aerokids.space
+- Render fallback: https://aerokids-crm.onrender.com
+- Production branch: `crm-v1`
+- API: https://aerokids-crm-api.onrender.com
+- Database: Neon production project `aerokids-crm-production`
+
+Use `crm.aerokids.space` in normal work and documentation. The `onrender.com` frontend URL is infrastructure fallback only.
+
+The public marketing/enrollment site is a separate deployment from the repository `main` branch at https://aerokids.space.
