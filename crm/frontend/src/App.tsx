@@ -1051,9 +1051,9 @@ function App() {
   const saveLeadDetails = async () => {
     if (!selected || leadEditSaving) return;
     const childNameError = personNameError(leadEditFirstName, "Ім’я дитини");
-    const childLastNameError = personNameError(leadEditLastName, "Прізвище дитини");
+    const childLastNameError = leadEditLastName.trim() ? personNameError(leadEditLastName, "Прізвище дитини") : "";
     const childPhoneError = uaPhoneError(leadEditChildPhone, false);
-    const contactNameError = fullNameError(leadEditContactName, "Відповідальна особа");
+    const contactNameError = personNameError(leadEditContactName, "Відповідальна особа");
     const phoneError = uaPhoneError(leadEditPhone);
     if (childNameError || childLastNameError || childPhoneError || contactNameError || phoneError) {
       setWorkspaceError(childNameError || childLastNameError || childPhoneError || contactNameError || phoneError);
