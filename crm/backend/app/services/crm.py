@@ -1979,7 +1979,7 @@ def _sync_payment_state(db: Session, org_id: UUID, payment: Payment) -> dict:
     if payment.status != PaymentStatus.CANCELLED:
         if finance["adjusted_amount_minor"] == 0 and finance["net_paid_minor"] == 0 and finance["refunded_minor"] > 0:
             payment.status = PaymentStatus.REFUNDED
-        elif finance["balance_minor"] == 0 and finance["adjusted_amount_minor"] > 0:
+        elif finance["balance_minor"] == 0 and (finance["adjusted_amount_minor"] > 0 or finance["net_paid_minor"] > 0):
             payment.status = PaymentStatus.PAID
         else:
             payment.status = PaymentStatus.PENDING
@@ -2598,6 +2598,141 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
     payment.plan_id = plan.id
     _attach_payment_financials(db, org_id, payment)
     return subscription, payment
+
+def change_subscription_plan_now(
+    db: Session,
+    org_id: UUID,
+    subscription_id: UUID,
+    new_plan_id: UUID,
+    reason: str,
+    actor_user_id: UUID | None = None,
+) -> dict:
+    subscription = scoped_get(db, StudentSubscription, org_id, subscription_id)
+    if subscription.status == SubscriptionStatus.CANCELLED:
+        raise HTTPException(status_code=409, detail="Скасований абонемент не можна змінити")
+    old_plan = scoped_get(db, SubscriptionPlan, org_id, subscription.plan_id)
+    new_plan = scoped_get(db, SubscriptionPlan, org_id, new_plan_id)
+    if not new_plan.is_active:
+        raise HTTPException(status_code=409, detail="Оберіть активний тариф")
+    if old_plan.id == new_plan.id:
+        raise HTTPException(status_code=409, detail="Цей тариф уже призначений учню")
+
+    payment = db.scalar(select(Payment).where(
+        Payment.organization_id == org_id,
+        Payment.subscription_id == subscription.id,
+        Payment.status != PaymentStatus.CANCELLED,
+    ).order_by(Payment.created_at.desc()))
+    if payment is None:
+        raise HTTPException(status_code=409, detail="Для цього абонемента немає нарахування, яке можна перерахувати")
+
+    _materialize_legacy_settlement(db, org_id, payment)
+    finance_before = payment_financials(db, org_id, payment)
+    summary = subscription_usage_summary(db, org_id, subscription)
+    used_lessons = summary["used_lessons"]
+    current_lessons = subscription.lessons_included
+    if current_lessons is None and subscription.period_days is None:
+        current_lessons = old_plan.lessons_included
+
+    old_unit = subscription.lesson_unit_price_minor
+    if old_unit is None and current_lessons:
+        old_unit = _lesson_unit_price(finance_before["adjusted_amount_minor"], current_lessons)
+
+    if used_lessons > 0:
+        if current_lessons is None or new_plan.lessons_included is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Після початку періоду тариф можна змінити одразу лише коли обидва тарифи мають кількість занять.",
+            )
+        if new_plan.lessons_included != current_lessons:
+            raise HTTPException(
+                status_code=409,
+                detail="Посеред періоду кількість занять не змінюємо. Нову кількість застосуйте з наступного періоду.",
+            )
+        remaining_lessons = max(0, current_lessons - used_lessons)
+        old_unit = old_unit or 0
+        new_unit = _lesson_unit_price(new_plan.price_minor, new_plan.lessons_included) or 0
+        current_future_value = old_unit * remaining_lessons
+        new_future_value = new_unit * remaining_lessons
+        current_period_charge = max(
+            0,
+            finance_before["adjusted_amount_minor"] - current_future_value + new_future_value,
+        )
+    else:
+        remaining_lessons = new_plan.lessons_included
+        new_unit = _lesson_unit_price(new_plan.price_minor, new_plan.lessons_included)
+        current_period_charge = new_plan.price_minor
+        subscription.period_days = new_plan.period_days
+        subscription.lessons_included = new_plan.lessons_included
+        subscription.ends_on = _subscription_end_date(subscription.starts_on, new_plan.period_days)
+
+    difference = current_period_charge - finance_before["adjusted_amount_minor"]
+    if difference:
+        db.add(PaymentTransaction(
+            organization_id=org_id,
+            payment_id=payment.id,
+            student_id=payment.student_id,
+            kind="adjustment_increase" if difference > 0 else "adjustment_decrease",
+            amount_minor=abs(difference),
+            note=f"Зміна тарифу зараз: {reason}",
+            actor_user_id=actor_user_id,
+        ))
+        db.flush()
+
+    subscription.plan_id = new_plan.id
+    subscription.price_minor = current_period_charge
+    subscription.lesson_unit_price_minor = new_unit
+    subscription.discount_minor = 0
+    subscription.discount_label = None
+
+    finance_after = _sync_payment_state(db, org_id, payment)
+    subscription.credit_minor = finance_after["credit_minor"]
+    if payment.status != PaymentStatus.PAID:
+        payment.paid_at = None
+
+    record_audit(
+        db,
+        org_id,
+        "student",
+        subscription.student_id,
+        "subscription.plan_changed_now",
+        {
+            "subscription_id": str(subscription.id),
+            "payment_id": str(payment.id),
+            "old_plan_id": str(old_plan.id),
+            "old_plan_name": old_plan.name,
+            "new_plan_id": str(new_plan.id),
+            "new_plan_name": new_plan.name,
+            "used_lessons": used_lessons,
+            "remaining_lessons": remaining_lessons,
+            "old_unit_price_minor": old_unit,
+            "new_unit_price_minor": new_unit,
+            "previous_charge_minor": finance_before["adjusted_amount_minor"],
+            "current_period_charge_minor": current_period_charge,
+            "credit_minor": finance_after["credit_minor"],
+            "debt_minor": finance_after["balance_minor"],
+            "reason": reason,
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(subscription)
+    db.refresh(payment)
+    payment.plan_id = new_plan.id
+    _attach_subscription_usage(db, org_id, subscription)
+    _attach_payment_financials(db, org_id, payment)
+    return {
+        "subscription": subscription,
+        "payment": payment,
+        "used_lessons": used_lessons,
+        "old_plan_id": old_plan.id,
+        "new_plan_id": new_plan.id,
+        "old_unit_price_minor": old_unit,
+        "new_unit_price_minor": new_unit,
+        "current_period_charge_minor": current_period_charge,
+        "credit_minor": payment.credit_minor,
+        "debt_minor": payment.balance_minor,
+    }
+
 
 def create_payment(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> Payment:
     organization = require_organization(db, org_id)
