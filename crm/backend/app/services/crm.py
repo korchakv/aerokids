@@ -2085,18 +2085,24 @@ def list_subscription_plans(db: Session, org_id: UUID) -> list[SubscriptionPlan]
 def create_student_subscription(db: Session, org_id: UUID, data) -> StudentSubscription:
     student = scoped_get(db, Student, org_id, data.student_id)
     plan = scoped_get(db, SubscriptionPlan, org_id, data.plan_id)
+    if not plan.is_active:
+        raise HTTPException(status_code=409, detail="Неактивний тариф не можна призначити новому абонементу")
     price_minor = data.price_minor if data.price_minor is not None else plan.price_minor
     if data.discount_minor > price_minor:
-        raise HTTPException(status_code=422, detail="Discount cannot exceed subscription price")
-    ends_on = data.starts_on + timedelta(days=plan.period_days - 1)
+        raise HTTPException(status_code=422, detail="Знижка не може бути більшою за вартість тарифу")
+    group_id = getattr(data, "group_id", None)
+    starts_on = _first_planned_lesson_date(db, org_id, group_id, data.starts_on)
     item = StudentSubscription(
         organization_id=org_id,
         student_id=student.id,
         plan_id=plan.id,
-        group_id=getattr(data, "group_id", None),
-        starts_on=data.starts_on,
-        ends_on=ends_on,
+        group_id=group_id,
+        starts_on=starts_on,
+        ends_on=_subscription_end_date(starts_on, plan.period_days),
         price_minor=price_minor,
+        period_days=plan.period_days,
+        lessons_included=plan.lessons_included,
+        credit_minor=0,
         discount_minor=data.discount_minor,
         discount_label=data.discount_label,
         auto_renew=getattr(data, "auto_renew", False),
@@ -2109,11 +2115,15 @@ def create_student_subscription(db: Session, org_id: UUID, data) -> StudentSubsc
 
 def subscription_usage_summary(db: Session, org_id: UUID, subscription: StudentSubscription) -> dict:
     plan = scoped_get(db, SubscriptionPlan, org_id, subscription.plan_id)
+    included = subscription.lessons_included
+    if included is None and subscription.period_days is None:
+        # Legacy row created before tariff snapshots existed.
+        included = plan.lessons_included
     used = db.scalar(select(func.coalesce(func.sum(SubscriptionUsage.units), 0)).where(
         SubscriptionUsage.organization_id == org_id,
         SubscriptionUsage.subscription_id == subscription.id,
     )) or 0
-    remaining = max(0, plan.lessons_included - int(used)) if plan.lessons_included is not None else None
+    remaining = max(0, included - int(used)) if included is not None else None
     return {"used_lessons": int(used), "remaining_lessons": remaining, "needs_renewal": remaining == 1 if remaining is not None else False}
 
 
@@ -2171,8 +2181,8 @@ def pause_subscription(
     subscription = scoped_get(db, StudentSubscription, org_id, subscription_id)
     if subscription.status in {SubscriptionStatus.CANCELLED, SubscriptionStatus.EXPIRED}:
         raise HTTPException(status_code=409, detail="Subscription cannot be paused")
-    if starts_on < subscription.starts_on or starts_on > subscription.ends_on:
-        raise HTTPException(status_code=422, detail="Pause must start inside the subscription period")
+    if starts_on < subscription.starts_on or (subscription.ends_on is not None and starts_on > subscription.ends_on):
+        raise HTTPException(status_code=422, detail="Пауза має починатися в межах поточного абонемента")
 
     existing = db.scalar(select(SubscriptionPause).where(
         SubscriptionPause.organization_id == org_id,
@@ -2232,8 +2242,11 @@ def _finish_subscription_pause(
     pause.ends_on = pause_end
     pause.resumed_at = datetime.now(timezone.utc)
     paused_days = (pause_end - pause.starts_on).days + 1
-    subscription.ends_on = subscription.ends_on + timedelta(days=paused_days)
-    subscription.status = SubscriptionStatus.ACTIVE if subscription.ends_on >= resumes_on else SubscriptionStatus.EXPIRED
+    if subscription.ends_on is not None:
+        subscription.ends_on = subscription.ends_on + timedelta(days=paused_days)
+        subscription.status = SubscriptionStatus.ACTIVE if subscription.ends_on >= resumes_on else SubscriptionStatus.EXPIRED
+    else:
+        subscription.status = SubscriptionStatus.ACTIVE
     record_audit(
         db,
         org_id,
