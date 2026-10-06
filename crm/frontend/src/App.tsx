@@ -96,7 +96,9 @@ type PlanDemo = {
   id: EntityId;
   name: string;
   price: number;
+  days: number | null;
   lessons: number | null;
+  isActive: boolean;
   usageMode?: "attendance" | "scheduled" | "period";
   absentRule?: "consume" | "dont_consume" | "choice";
   excusedRule?: "consume" | "dont_consume" | "makeup";
@@ -113,6 +115,7 @@ type PaymentDemo = {
   paidAmount: number;
   refundedAmount: number;
   balanceAmount: number;
+  creditAmount: number;
   dueDate: string;
   status: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
   method?: "Картка" | "Готівка" | "Переказ";
@@ -367,12 +370,12 @@ function App() {
   const [lessonDetailsSaving, setLessonDetailsSaving] = useState(false);
   const [lessonEditing, setLessonEditing] = useState(true);
   const [plans, setPlans] = useState<PlanDemo[]>(apiEnabled ? [] : [
-    { id: "1", name: "8 занять / 30 днів", price: 1800, lessons: 8 },
-    { id: "2", name: "Індивідуальний", price: 0, lessons: null },
+    { id: "1", name: "8 занять / 30 днів", price: 1800, days: 30, lessons: 8, isActive: true },
+    { id: "2", name: "Індивідуальний", price: 0, days: 30, lessons: null, isActive: true },
   ]);
   const [payments, setPayments] = useState<PaymentDemo[]>(apiEnabled ? [] : [
-    { id: "1", studentId: "8", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 0, refundedAmount: 0, balanceAmount: 1800, dueDate: "2026-10-05", status: "pending" },
-    { id: "2", studentId: "9", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 1800, refundedAmount: 0, balanceAmount: 0, dueDate: "2026-09-28", status: "paid", method: "Картка" },
+    { id: "1", studentId: "8", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 0, refundedAmount: 0, balanceAmount: 1800, creditAmount: 0, dueDate: "2026-10-05", status: "pending" },
+    { id: "2", studentId: "9", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 1800, refundedAmount: 0, balanceAmount: 0, creditAmount: 0, dueDate: "2026-09-28", status: "paid", method: "Картка" },
   ]);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentStudentId, setPaymentStudentId] = useState<EntityId>("8");
@@ -394,9 +397,22 @@ function App() {
   const [pauseResumeOn, setPauseResumeOn] = useState("");
   const [pauseNote, setPauseNote] = useState("");
   const [showPlanForm, setShowPlanForm] = useState(false);
+  const [planEditId, setPlanEditId] = useState<EntityId | null>(null);
   const [planName, setPlanName] = useState("8 занять / 30 днів");
   const [planPrice, setPlanPrice] = useState("");
+  const [planDays, setPlanDays] = useState("30");
   const [planLessons, setPlanLessons] = useState("8");
+  const [planActive, setPlanActive] = useState(true);
+  const [planSaving, setPlanSaving] = useState(false);
+  const [showInactivePlans, setShowInactivePlans] = useState(false);
+  const [planHistory, setPlanHistory] = useState<ApiAuditEvent[]>([]);
+  const [planHistoryLoading, setPlanHistoryLoading] = useState(false);
+  const [planHistoryOpen, setPlanHistoryOpen] = useState(false);
+  const [planChangeSubscriptionId, setPlanChangeSubscriptionId] = useState<EntityId | null>(null);
+  const [planChangePlanId, setPlanChangePlanId] = useState<EntityId | "">("");
+  const [planChangeReason, setPlanChangeReason] = useState("");
+  const [planChangeSaving, setPlanChangeSaving] = useState(false);
+  const [planChangeResult, setPlanChangeResult] = useState("");
   const [planUsageMode, setPlanUsageMode] = useState<"attendance" | "scheduled" | "period">("attendance");
   const [planAbsentRule, setPlanAbsentRule] = useState<"consume" | "dont_consume" | "choice">("choice");
   const [planExcusedRule, setPlanExcusedRule] = useState<"consume" | "dont_consume" | "makeup">("makeup");
@@ -2123,6 +2139,7 @@ function App() {
       paidAmount: 0,
       refundedAmount: 0,
       balanceAmount: plan.price,
+      creditAmount: 0,
       dueDate: paymentDueDate,
       status: "pending",
     }]);
@@ -4283,7 +4300,9 @@ function applyOperations(
     id: item.id,
     name: item.name,
     price: item.price_minor / 100,
+    days: item.period_days,
     lessons: item.lessons_included,
+    isActive: item.is_active,
     usageMode: item.usage_mode,
     absentRule: item.absent_rule,
     excusedRule: item.excused_rule,
@@ -4301,6 +4320,7 @@ function applyOperations(
     paidAmount: item.paid_minor / 100,
     refundedAmount: item.refunded_minor / 100,
     balanceAmount: item.balance_minor / 100,
+    creditAmount: item.credit_minor / 100,
     dueDate: item.due_date ?? "",
     status: item.status === "pending" && item.due_date && item.due_date < today ? "overdue" : item.status,
     method: paymentMethodLabel(item.method),
