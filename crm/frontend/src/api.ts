@@ -26,38 +26,254 @@ const STORAGE_KEY = "school-crm-session";
 
 export const apiEnabled = Boolean(API_URL);
 
-function humanizeApiDetail(detail: unknown, fallback: string): string {
-  if (typeof detail === "string" && detail.trim()) return detail;
+const API_FIELD_LABELS: Record<string, string> = {
+  items: "дані",
+  email: "email",
+  password: "пароль",
+  full_name: "ім’я та прізвище",
+  first_name: "ім’я",
+  last_name: "прізвище",
+  child_first_name: "ім’я дитини",
+  child_last_name: "прізвище дитини",
+  child_age: "вік дитини",
+  contact_name: "ім’я відповідального",
+  phone: "телефон",
+  child_phone: "телефон дитини",
+  name: "назва",
+  capacity: "місткість",
+  location_id: "локація",
+  group_id: "група",
+  student_id: "учень",
+  staff_id: "працівник",
+  plan_id: "тариф",
+  starts_at: "дата і час",
+  start_time: "час початку",
+  end_time: "час завершення",
+  duration_minutes: "тривалість",
+  schedule_slots: "розклад",
+  amount_minor: "сума",
+  due_date: "дата оплати",
+  topic: "тема заняття",
+  notes: "примітки",
+  note: "коментар",
+  source: "джерело",
+  role: "роль",
+};
+
+const KNOWN_API_MESSAGES: Record<string, string> = {
+  "Invalid bootstrap secret": "Невірний службовий ключ початкового налаштування.",
+  "Only an owner can invite another owner": "Лише власник може запросити іншого власника.",
+  "Direct organization creation is disabled when authentication is required": "Створення нової організації напряму зараз недоступне.",
+  "Use /auth/me to list your organizations": "Не вдалося отримати список організацій. Оновіть сторінку та спробуйте ще раз.",
+  "Organization not found": "Організацію не знайдено. Оновіть сторінку або виберіть іншу організацію.",
+  "Invalid form submission": "Форму не вдалося прийняти. Перевірте введені дані та спробуйте ще раз.",
+  "Group has no available seats": "У цій групі немає вільних місць. Збільште місткість або оберіть іншу групу.",
+  "Too many form submissions. Please try again later.": "Забагато заявок за короткий час. Зачекайте кілька хвилин і спробуйте ще раз.",
+  "Organization slug already exists": "Організація з такою адресою вже існує. Виберіть іншу адресу.",
+  "Organization currency cannot be changed after payments have been created": "Валюту організації не можна змінити після створення оплат.",
+  "Not found": "Запис не знайдено. Можливо, його вже видалили або у вас немає до нього доступу.",
+  "min_age cannot be greater than max_age": "Мінімальний вік не може бути більшим за максимальний.",
+  "Student is already enrolled in this group": "Учень уже зарахований до цієї групи.",
+  "Duplicate students are not allowed": "У списку є той самий учень кілька разів. Приберіть дубль.",
+  "Selected students exceed group capacity": "Обрано більше учнів, ніж дозволяє місткість групи. Збільште місткість або приберіть зайвих учнів.",
+  "Duplicate group schedule slots are not allowed": "У розкладі повторюється однаковий день і час. Приберіть дубль.",
+  "Could not form group; check name and enrollments": "Не вдалося створити групу. Перевірте назву, місткість і вибраних учнів.",
+  "Student is already enrolled in a group": "Учень уже зарахований до групи. Спочатку перевірте його поточну групу.",
+  "This group already has the same schedule slot": "У цієї групи вже є заняття в такий день і час.",
+  "Duplicate students in attendance payload": "Один і той самий учень доданий у відвідування кілька разів. Оновіть сторінку та спробуйте ще раз.",
+  "Subscription plan name already exists": "Тариф із такою назвою вже існує. Виберіть іншу назву.",
+  "Discount cannot exceed subscription price": "Знижка не може бути більшою за вартість абонемента.",
+  "Cancelled subscription cannot be renewed": "Скасований абонемент не можна продовжити.",
+  "Subscription cannot be paused": "Цей абонемент зараз не можна поставити на паузу.",
+  "Pause must start inside the subscription period": "Дата початку паузи має бути в межах дії абонемента.",
+  "Subscription already has an active or scheduled pause": "Для цього абонемента вже є активна або запланована пауза.",
+  "Resume date must be after pause start": "Дата відновлення має бути пізнішою за дату початку паузи.",
+  "Subscription has no active pause": "У цього абонемента немає активної паузи.",
+  "through_date cannot be in the past": "Дата не може бути в минулому.",
+  "Charge amount must be greater than zero": "Сума нарахування має бути більшою за нуль.",
+  "This subscription period has already been charged": "За цей період абонемента нарахування вже створено.",
+  "Subscription belongs to another student": "Цей абонемент належить іншому учню.",
+  "This charge cannot accept payments": "Для цього нарахування зараз не можна прийняти оплату.",
+  "Payment amount exceeds outstanding balance": "Сума оплати більша за залишок до сплати.",
+  "This charge cannot be marked as paid": "Це нарахування не можна позначити як сплачене.",
+  "Payment is already fully settled": "Це нарахування вже повністю сплачене.",
+  "Cancelled charge cannot be adjusted": "Скасоване нарахування не можна коригувати.",
+  "Adjustment exceeds charge amount": "Сума коригування більша за суму нарахування.",
+  "Refund the overpaid amount before decreasing the charge": "Спочатку поверніть переплату, а потім зменшуйте нарахування.",
+  "Cancelled charge cannot be refunded": "За скасованим нарахуванням не можна зробити повернення.",
+  "Refund exceeds net amount received": "Сума повернення більша за фактично отриману оплату.",
+  "Only unpaid pending charges can be cancelled": "Скасувати можна лише несплачене нарахування, яке ще очікує оплати.",
+  "Payment no longer needs a reminder": "Для цієї оплати нагадування вже не потрібне.",
+  "Reminder stage is no longer current": "Це нагадування вже неактуальне. Оновіть дані.",
+  "This reminder stage was already recorded": "Цей етап нагадування вже зафіксовано.",
+  "Staff email already exists in this organization": "Працівник із таким email уже є в цій організації.",
+  "Remove this staff member from teaching groups before disabling teaching": "Спочатку приберіть працівника з груп, де він викладає, а потім вимикайте можливість викладати.",
+  "Inactive staff member cannot be assigned": "Неактивного працівника не можна призначити.",
+  "Staff member is not marked as able to teach": "Цього працівника не позначено як такого, що може викладати.",
+  "Location name already exists": "Локація з такою назвою вже існує.",
+  "Duplicate availability slots are not allowed": "У побажаннях щодо часу є однакові проміжки. Приберіть дубль.",
+  "No access to this group": "У вас немає доступу до цієї групи.",
+  "Too many login attempts. Please try again later.": "Забагато спроб входу. Зачекайте кілька хвилин і спробуйте ще раз.",
+  "Bootstrap is only available for an empty CRM database": "Початкове налаштування доступне лише для порожньої CRM.",
+  "Incorrect email or password": "Невірний email або пароль.",
+  "User is inactive or unavailable": "Цей користувач неактивний або недоступний.",
+  "Invitation is invalid": "Запрошення недійсне. Попросіть створити нове.",
+  "This invitation has already been accepted": "Це запрошення вже використано.",
+  "Invitation has expired": "Термін дії запрошення закінчився. Попросіть створити нове.",
+  "This email already has an account; use its existing password": "Для цього email уже є обліковий запис. Увійдіть із чинним паролем.",
+  "User not found": "Користувача не знайдено.",
+  "User is not a member of this organization": "Цей користувач не має доступу до вибраної організації.",
+  "Only an owner can reset another owner": "Лише власник може скинути пароль іншому власнику.",
+  "Reset link is invalid or already used": "Посилання для скидання пароля недійсне або вже використане.",
+  "Reset link is invalid or expired": "Посилання для скидання пароля недійсне або прострочене.",
+  "Invalid X-Organization-Id": "Не вдалося визначити організацію. Оновіть сторінку та спробуйте ще раз.",
+  "Authentication required": "Потрібно увійти в CRM.",
+  "No access to this organization": "У вас немає доступу до цієї організації.",
+  "Insufficient role for this action": "У вас немає прав для цієї дії.",
+};
+
+function hasUkrainianText(value: string): boolean {
+  return /[А-Яа-яІіЇїЄєҐґ]/.test(value);
+}
+
+function requestAction(path: string, method = "GET"): string {
+  if (path.includes("/attendance")) return method === "GET" ? "завантажити відвідування" : "зберегти відвідування";
+  if (path.includes("/lesson-sessions")) return method === "GET" ? "завантажити заняття" : "зберегти заняття";
+  if (path.includes("/groups")) return method === "GET" ? "завантажити групи" : "зберегти групу";
+  if (path.includes("/intake")) return "зберегти заявку";
+  if (path.includes("/trial-lessons")) return "зберегти пробне заняття";
+  if (path.includes("/students")) return method === "GET" ? "завантажити дані учня" : "зберегти дані учня";
+  if (path.includes("/staff") || path.includes("/organization-invitations")) return "зберегти дані працівника";
+  if (path.includes("/locations")) return "зберегти локацію";
+  if (path.includes("/payments") || path.includes("/billing/") || path.includes("/student-subscriptions")) return "виконати операцію з оплатою";
+  if (path.includes("/auth/login")) return "увійти в CRM";
+  if (path.includes("/preferences")) return "зберегти побажання";
+  return method === "GET" ? "завантажити дані" : "виконати дію";
+}
+
+function actionFallback(path: string, method = "GET"): string {
+  return `Не вдалося ${requestAction(path, method)}. Спробуйте ще раз.`;
+}
+
+function translateKnownMessage(message: string): string | null {
+  const clean = message.trim().replace(/^Value error,\s*/i, "");
+  if (!clean) return null;
+  if (KNOWN_API_MESSAGES[clean]) return KNOWN_API_MESSAGES[clean];
+  if (/^Student .+ is not waiting for a group$/i.test(clean)) {
+    return "Цей учень ще не переведений у статус «Очікує групу». Спочатку змініть його статус.";
+  }
+  if (/^Місткість групи не може бути меншою/i.test(clean)) return clean;
+  if (hasUkrainianText(clean)) return clean;
+  return null;
+}
+
+function validationField(loc: unknown[]): string {
+  const parts = loc
+    .filter((part) => part !== "body")
+    .map((part) => {
+      if (typeof part === "number") return `запис ${part + 1}`;
+      const key = String(part);
+      return API_FIELD_LABELS[key] ?? key.replaceAll("_", " ");
+    });
+  return parts.join(" → ");
+}
+
+function validationIssueMessage(item: unknown, path: string): string | null {
+  if (!item || typeof item !== "object") return null;
+  const row = item as { msg?: unknown; loc?: unknown[]; type?: unknown; ctx?: Record<string, unknown> };
+  const loc = Array.isArray(row.loc) ? row.loc : [];
+  const field = validationField(loc);
+  const fieldKey = String(loc.at(-1) ?? "");
+  const type = typeof row.type === "string" ? row.type : "";
+  const raw = typeof row.msg === "string" ? row.msg : "";
+  const ctx = row.ctx ?? {};
+
+  if (path.includes("/attendance") && fieldKey === "items" && (type.includes("too_short") || /at least 1 item/i.test(raw))) {
+    return "Немає учнів для збереження відвідування. Додайте учнів до групи або відкрийте інше заняття.";
+  }
+  if (type === "missing" || /Field required/i.test(raw)) {
+    return field ? `Заповніть поле «${field}».` : "Заповніть усі обов’язкові поля.";
+  }
+  if (type.includes("list_type")) {
+    return field ? `Перевірте список «${field}».` : "Перевірте список даних.";
+  }
+  if (type.includes("too_short") || /at least 1 item/i.test(raw)) {
+    return field ? `Додайте хоча б один запис у «${field}».` : "Додайте хоча б один запис.";
+  }
+  if (type.includes("string_too_short")) {
+    const min = typeof ctx.min_length === "number" ? ` щонайменше ${ctx.min_length} символи` : "";
+    return field ? `Поле «${field}» має містити${min || " більше символів"}.` : "Введене значення закоротке.";
+  }
+  if (type.includes("string_too_long")) {
+    const max = typeof ctx.max_length === "number" ? ` не більше ${ctx.max_length} символів` : "";
+    return field ? `Поле «${field}» має містити${max || " менше символів"}.` : "Введене значення задовге.";
+  }
+  if (type.includes("greater_than_equal")) {
+    const min = ctx.ge ?? ctx.limit_value;
+    return field ? `Поле «${field}» має бути не менше ${String(min ?? "мінімального значення")}.` : "Значення замале.";
+  }
+  if (type.includes("less_than_equal")) {
+    const max = ctx.le ?? ctx.limit_value;
+    return field ? `Поле «${field}» має бути не більше ${String(max ?? "максимального значення")}.` : "Значення завелике.";
+  }
+  if (type.includes("int_") || type.includes("float_") || /valid (integer|number)/i.test(raw)) {
+    return field ? `У полі «${field}» потрібно вказати число.` : "Вкажіть коректне число.";
+  }
+  if (type.includes("date") || type.includes("time") || type.includes("datetime")) {
+    return field ? `Перевірте дату або час у полі «${field}».` : "Перевірте дату та час.";
+  }
+  if (type.includes("uuid")) {
+    return field ? `Оберіть коректне значення для поля «${field}».` : "Оберіть коректний запис.";
+  }
+
+  const translated = translateKnownMessage(raw);
+  if (translated) return field ? `${field}: ${translated}` : translated;
+  return field ? `Перевірте поле «${field}».` : null;
+}
+
+function statusFallback(status: number, path: string, method = "GET"): string {
+  if (status === 401) return "Сесія завершилась або дані входу некоректні. Увійдіть у CRM ще раз.";
+  if (status === 403) return "У вас немає прав для цієї дії.";
+  if (status === 404) return "Запис не знайдено. Оновіть сторінку та спробуйте ще раз.";
+  if (status === 409) return "Не вдалося зберегти зміни через конфлікт даних. Оновіть сторінку та перевірте, чи такий запис уже не існує.";
+  if (status === 422) return `${actionFallback(path, method)} Перевірте заповнені поля.`;
+  if (status === 429) return "Забагато спроб за короткий час. Зачекайте кілька хвилин і спробуйте ще раз.";
+  if (status >= 500) return "Сталася помилка на сервері. Спробуйте ще раз трохи пізніше. Якщо помилка повторюється — повідомте адміністратору.";
+  return actionFallback(path, method);
+}
+
+function humanizeApiDetail(detail: unknown, fallback: string, path: string): string {
+  if (typeof detail === "string" && detail.trim()) {
+    return translateKnownMessage(detail) ?? fallback;
+  }
   if (Array.isArray(detail)) {
-    const messages = detail.map((item) => {
-      if (!item || typeof item !== "object") return String(item);
-      const row = item as { msg?: unknown; loc?: unknown[] };
-      const field = Array.isArray(row.loc) ? row.loc.filter((part) => part !== "body").join(" → ") : "";
-      const msg = typeof row.msg === "string" ? row.msg : JSON.stringify(item);
-      return field ? `${field}: ${msg}` : msg;
-    }).filter(Boolean);
-    return messages.length ? messages.join("; ") : fallback;
+    const messages = detail.map((item) => validationIssueMessage(item, path)).filter((item): item is string => Boolean(item));
+    return messages.length ? Array.from(new Set(messages)).join(" ") : fallback;
   }
   if (detail && typeof detail === "object") {
     const row = detail as { message?: unknown; code?: unknown };
-    if (typeof row.message === "string" && row.message.trim()) return row.message;
-    if (typeof row.code === "string" && row.code.trim()) return row.code;
-    try { return JSON.stringify(detail); } catch { return fallback; }
+    if (typeof row.message === "string" && row.message.trim()) {
+      return translateKnownMessage(row.message) ?? fallback;
+    }
+    if (typeof row.code === "string" && row.code.trim()) {
+      return translateKnownMessage(row.code) ?? fallback;
+    }
   }
   return fallback;
 }
 
-async function responseError(response: Response, fallback = "Не вдалося виконати дію"): Promise<Error> {
+async function responseError(response: Response, path: string, method = "GET"): Promise<Error> {
+  const fallback = statusFallback(response.status, path, method);
   try {
     const body = await response.json();
-    return new Error(humanizeApiDetail(body?.detail, fallback));
+    return new Error(humanizeApiDetail(body?.detail, fallback, path));
   } catch {
     return new Error(fallback);
   }
 }
 
 async function request<T>(path: string, init: RequestInit = {}, session?: Session): Promise<T> {
-  if (!API_URL) throw new Error("API URL не налаштовано");
+  if (!API_URL) throw new Error("CRM не підключена до сервера. Перевірте налаштування API.");
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (session) {
@@ -65,8 +281,14 @@ async function request<T>(path: string, init: RequestInit = {}, session?: Sessio
     headers.set("X-Organization-Id", session.organizationId);
   }
 
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers });
-  if (!response.ok) throw await responseError(response);
+  const method = init.method ?? "GET";
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  } catch {
+    throw new Error("Не вдалося з’єднатися із сервером CRM. Перевірте інтернет-з’єднання та спробуйте ще раз.");
+  }
+  if (!response.ok) throw await responseError(response, path, method);
   return response.json() as Promise<T>;
 }
 
@@ -399,15 +621,20 @@ export function apiPut<T>(path: string, body: unknown, session: Session) {
 }
 
 export async function apiDelete(path: string, session: Session): Promise<void> {
-  if (!API_URL) throw new Error("API URL is not configured");
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${session.accessToken}`,
-      "X-Organization-Id": session.organizationId,
-    },
-  });
-  if (!response.ok) throw await responseError(response);
+  if (!API_URL) throw new Error("CRM не підключена до сервера. Перевірте налаштування API.");
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Organization-Id": session.organizationId,
+      },
+    });
+  } catch {
+    throw new Error("Не вдалося з’єднатися із сервером CRM. Перевірте інтернет-з’єднання та спробуйте ще раз.");
+  }
+  if (!response.ok) throw await responseError(response, path, "DELETE");
 }
 
 
