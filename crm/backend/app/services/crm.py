@@ -2500,6 +2500,7 @@ def create_staff(db: Session, org_id: UUID, data) -> Staff:
         email=data.email,
         phone=data.phone,
         role=data.role,
+        can_teach=data.can_teach or data.role == StaffRole.TEACHER,
         notes=data.notes,
     )
     db.add(item)
@@ -2533,6 +2534,18 @@ def update_staff(db: Session, org_id: UUID, staff_id: UUID, data) -> Staff:
         ))
         if duplicate:
             raise HTTPException(status_code=409, detail="Staff email already exists in this organization")
+    next_role = payload.get("role", item.role)
+    next_can_teach = payload.get("can_teach", item.can_teach)
+    if next_role == StaffRole.TEACHER:
+        next_can_teach = True
+        payload["can_teach"] = True
+    if item.can_teach and not next_can_teach:
+        assigned_group = db.scalar(select(GroupStaff.id).where(
+            GroupStaff.organization_id == org_id,
+            GroupStaff.staff_id == staff_id,
+        ).limit(1))
+        if assigned_group is not None:
+            raise HTTPException(status_code=409, detail="Remove this staff member from teaching groups before disabling teaching")
     for key, value in payload.items():
         setattr(item, key, value)
     db.commit()
@@ -2567,6 +2580,8 @@ def assign_staff_to_group(db: Session, org_id: UUID, staff_id: UUID, group_id: U
     staff = scoped_get(db, Staff, org_id, staff_id)
     if not staff.is_active:
         raise HTTPException(status_code=409, detail="Inactive staff member cannot be assigned")
+    if not staff.can_teach:
+        raise HTTPException(status_code=409, detail="Staff member is not marked as able to teach")
     scoped_get(db, Group, org_id, group_id)
 
     existing = db.scalar(select(GroupStaff).where(
