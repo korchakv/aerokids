@@ -645,8 +645,12 @@ function App() {
       workspaceAutoRefreshBusy.current = true;
       setWorkspaceRefreshing(true);
       try {
-        const bundle = await loadWorkspace(session);
+        const [bundle, teaching] = await Promise.all([
+          loadWorkspace(session),
+          loadTeaching(session),
+        ]);
         applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
+        applyTeaching(teaching, setLessons, setGroups);
       } catch {
         // Keep the current UI stable on a transient background refresh failure.
       } finally {
@@ -1743,12 +1747,11 @@ function App() {
       }
     }
 
-    const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
     setGroups((items) => items.map((group) => group.id === scheduleGroupId ? {
       ...group,
       schedule: group.schedule === "Розклад не задано"
-        ? `${dayNames[scheduleWeekday]} · ${scheduleTime}`
-        : `${group.schedule}; ${dayNames[scheduleWeekday]} · ${scheduleTime}`,
+        ? `${SCHEDULE_DAY_NAMES[scheduleWeekday]} · ${scheduleTime}`
+        : `${group.schedule}; ${SCHEDULE_DAY_NAMES[scheduleWeekday]} · ${scheduleTime}`,
     } : group));
   };
 
@@ -4439,16 +4442,10 @@ function applyTeaching(
 }
 
 function scheduleLabel(items: TeachingBundle["schedules"]) {
-  const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
-  const ordered = [...items].sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
-  const grouped = new Map<string, string[]>();
-  ordered.forEach((item) => {
-    const time = item.start_time.slice(0, 5);
-    const days = grouped.get(time) ?? [];
-    days.push(dayNames[item.weekday] ?? "?");
-    grouped.set(time, days);
-  });
-  return [...grouped.entries()].map(([time, days]) => `${days.join(" / ")} · ${time}`).join("; ");
+  return [...items]
+    .sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time))
+    .map((item) => `${SCHEDULE_DAY_NAMES[item.weekday] ?? "Невідомий день"} · ${item.start_time.slice(0, 5)}`)
+    .join("; ");
 }
 
 function applyOperations(
@@ -5232,6 +5229,7 @@ function availabilityLabel(slots: AvailabilitySlot[]) {
 }
 
 const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+const SCHEDULE_DAY_NAMES = ["Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя"];
 const TIME_OPTIONS = Array.from({ length: 56 }, (_, index) => `${String(8 + Math.floor(index / 4)).padStart(2, "0")}:${String((index % 4) * 15).padStart(2, "0")}`);
 
 function TimeSelect({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
@@ -5303,7 +5301,7 @@ function DateTimeEditor({ label, value, onChange }: { label: string; value: stri
   return <div className="dateTimeEditor"><label>Дата<input type="date" aria-label={label + ": дата"} value={date} onChange={(e) => onChange(`${e.target.value}T${clock}`)} /></label><TimeSelect label="Час" value={clock} onChange={(time) => onChange(`${date}T${time}`)} /></div>;
 }
 
-function scheduleDraftLabel(slots: DraftScheduleSlot[]) { return slots.map((slot) => `${DAY_NAMES[slot.weekday]} · ${slot.start_time}`).join("; "); }
+function scheduleDraftLabel(slots: DraftScheduleSlot[]) { return slots.map((slot) => `${SCHEDULE_DAY_NAMES[slot.weekday] ?? "Невідомий день"} · ${slot.start_time.slice(0, 5)}`).join("; "); }
 function hasDuplicateSlots(slots: DraftScheduleSlot[]) { return new Set(slots.map((slot) => `${slot.weekday}:${slot.start_time}`)).size !== slots.length; }
 
 function scheduleSlots(group: GroupItem) {
