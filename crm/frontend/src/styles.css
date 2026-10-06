@@ -2157,3 +2157,31 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
     min-height:42px;
   }
 }
+
+
+/* New lead form alignment */
+.leadCreateModal .leadCreatePair{
+  align-items:start;
+}
+.leadCreateModal .leadCreatePair>label{
+  min-width:0;
+}
+.leadCreateModal .leadFormHint{
+  display:block;
+  margin-top:5px;
+  color:var(--ak-muted-2);
+  font-size:10px;
+  font-weight:500;
+  line-height:1.35;
+  text-transform:none;
+  letter-spacing:0;
+}
+.leadCreateModal .fieldError{
+  display:block;
+  margin-top:5px;
+}
+@media(max-width:650px){
+  .leadCreateModal .leadCreatePair{
+    gap:0;
+  }
+}
