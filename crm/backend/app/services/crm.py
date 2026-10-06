@@ -2515,31 +2515,39 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
     organization = require_organization(db, org_id)
     student = scoped_get(db, Student, org_id, data.student_id)
     plan = scoped_get(db, SubscriptionPlan, org_id, data.plan_id)
+    if not plan.is_active:
+        raise HTTPException(status_code=409, detail="Неактивний тариф не можна призначити новому абонементу")
     if data.discount_minor > plan.price_minor:
-        raise HTTPException(status_code=422, detail="Discount cannot exceed subscription price")
+        raise HTTPException(status_code=422, detail="Знижка не може бути більшою за вартість тарифу")
 
     amount_minor = plan.price_minor - data.discount_minor
     if amount_minor <= 0:
-        raise HTTPException(status_code=422, detail="Charge amount must be greater than zero")
+        raise HTTPException(status_code=422, detail="Сума нарахування має бути більшою за нуль")
+
+    group_id = getattr(data, "group_id", None)
+    starts_on = _first_planned_lesson_date(db, org_id, group_id, data.starts_on)
 
     duplicate_subscription = db.scalar(select(StudentSubscription).where(
         StudentSubscription.organization_id == org_id,
         StudentSubscription.student_id == student.id,
         StudentSubscription.plan_id == plan.id,
-        StudentSubscription.starts_on == data.starts_on,
+        StudentSubscription.starts_on == starts_on,
         StudentSubscription.status != SubscriptionStatus.CANCELLED,
     ))
     if duplicate_subscription is not None:
-        raise HTTPException(status_code=409, detail="This subscription period has already been charged")
+        raise HTTPException(status_code=409, detail="На цей період уже є абонемент")
 
     subscription = StudentSubscription(
         organization_id=org_id,
         student_id=student.id,
         plan_id=plan.id,
-        group_id=getattr(data, "group_id", None),
-        starts_on=data.starts_on,
-        ends_on=data.starts_on + timedelta(days=plan.period_days - 1),
+        group_id=group_id,
+        starts_on=starts_on,
+        ends_on=_subscription_end_date(starts_on, plan.period_days),
         price_minor=plan.price_minor,
+        period_days=plan.period_days,
+        lessons_included=plan.lessons_included,
+        credit_minor=0,
         discount_minor=data.discount_minor,
         discount_label=data.discount_label,
         auto_renew=getattr(data, "auto_renew", False),
@@ -2553,7 +2561,7 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
         subscription_id=subscription.id,
         amount_minor=amount_minor,
         currency=organization.currency,
-        due_date=data.due_date or data.starts_on,
+        due_date=data.due_date or starts_on,
         note=data.note or plan.name,
     )
     db.add(payment)
@@ -2569,6 +2577,7 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
             "subscription_id": str(subscription.id),
             "plan_id": str(plan.id),
             "amount_minor": amount_minor,
+            "starts_on": starts_on.isoformat(),
             "due_date": payment.due_date.isoformat() if payment.due_date else None,
         },
         actor_user_id=actor_user_id,
@@ -2579,7 +2588,6 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
     payment.plan_id = plan.id
     _attach_payment_financials(db, org_id, payment)
     return subscription, payment
-
 
 def create_payment(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> Payment:
     organization = require_organization(db, org_id)
