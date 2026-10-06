@@ -785,12 +785,14 @@ def test_attendance_consumes_subscription_and_creates_makeup(client):
     lesson2 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-07T17:00:00+03:00"}).json()
     assert client.put(f"/lesson-sessions/{lesson2['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "late"}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
-    assert subs[0]["used_lessons"] == 1
+    # The next attendance uses the pending makeup first, so it does not spend
+    # a new subscription lesson.
+    assert subs[0]["used_lessons"] == 0 and subs[0]["remaining_lessons"] == 4
 
     lesson3 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-09T17:00:00+03:00"}).json()
     assert client.put(f"/lesson-sessions/{lesson3['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "absent", "consume_lesson": True}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
-    assert subs[0]["used_lessons"] == 2 and subs[0]["remaining_lessons"] == 2
+    assert subs[0]["used_lessons"] == 1 and subs[0]["remaining_lessons"] == 3
 
 
 def test_student_attendance_history_endpoint(client):
@@ -817,6 +819,326 @@ def test_student_attendance_history_endpoint(client):
     assert rows[0]["topic"] == "FPV basics"
     assert rows[0]["status"] == "late"
     assert rows[0]["note"] == "10 хв"
+
+
+def test_tariff_requires_days_or_visits_and_can_be_archived(client):
+    org = create_org(client, "Tariff Rules", "tariff-rules")
+    headers = {"X-Organization-Id": org["id"]}
+
+    invalid = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Empty limits", "price_minor": 100000, "period_days": None, "lessons_included": None},
+    )
+    assert invalid.status_code == 422, invalid.text
+
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "8 / 30", "price_minor": 200000, "period_days": 30, "lessons_included": 8},
+    )
+    assert plan.status_code == 201, plan.text
+
+    updated = client.put(
+        f"/subscription-plans/{plan.json()['id']}",
+        headers=headers,
+        json={"name": "8 / 30", "price_minor": 220000, "period_days": 30, "lessons_included": 8, "is_active": False},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["price_minor"] == 220000
+    assert updated.json()["is_active"] is False
+
+    plans = client.get("/subscription-plans", headers=headers)
+    assert plans.status_code == 200, plans.text
+    archived = next(item for item in plans.json() if item["id"] == plan.json()["id"])
+    assert archived["is_active"] is False
+
+    events = client.get(
+        "/audit-events",
+        headers=headers,
+        params={"entity_type": "subscription_plan", "entity_id": plan.json()["id"]},
+    )
+    assert events.status_code == 200, events.text
+    changed = next(item for item in events.json() if item["event_type"] == "subscription_plan.updated")
+    assert set(changed["payload"]["changed_fields"]) >= {"price_minor", "is_active"}
+
+
+def test_existing_subscription_keeps_tariff_snapshot_after_template_edit(client):
+    org = create_org(client, "Tariff Snapshot", "tariff-snapshot")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Марко"}).json()
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Standard", "price_minor": 200000, "period_days": 30, "lessons_included": 8},
+    ).json()
+
+    charge = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={"student_id": student["id"], "plan_id": plan["id"], "starts_on": date.today().isoformat()},
+    )
+    assert charge.status_code == 201, charge.text
+    current = charge.json()["subscription"]
+    assert current["price_minor"] == 200000
+    assert current["period_days"] == 30
+    assert current["lessons_included"] == 8
+    assert current["lesson_unit_price_minor"] == 25000
+
+    edited = client.put(
+        f"/subscription-plans/{plan['id']}",
+        headers=headers,
+        json={"name": "Standard", "price_minor": 220000, "period_days": 31, "lessons_included": 10, "is_active": True},
+    )
+    assert edited.status_code == 200, edited.text
+
+    refreshed = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers)
+    assert refreshed.status_code == 200, refreshed.text
+    row = refreshed.json()[0]
+    assert row["price_minor"] == 200000
+    assert row["period_days"] == 30
+    assert row["lessons_included"] == 8
+    assert row["lesson_unit_price_minor"] == 25000
+
+
+def test_subscription_starts_from_first_planned_lesson(client):
+    org = create_org(client, "First Lesson Start", "first-lesson-start")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Іван"}).json()
+    client.patch(f"/students/{student['id']}/crm-status", headers=headers, json={"crm_status": "waiting_for_group"})
+    group = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Start Group", "capacity": 8, "student_ids": [student["id"]]},
+    ).json()["group"]
+    first_date = date.today() + timedelta(days=3)
+    lesson = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={"group_id": group["id"], "starts_at": first_date.isoformat() + "T17:00:00+03:00"},
+    )
+    assert lesson.status_code == 201, lesson.text
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "Monthly", "price_minor": 200000, "period_days": 30, "lessons_included": 8},
+    ).json()
+
+    charge = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "plan_id": plan["id"],
+            "group_id": group["id"],
+            "starts_on": date.today().isoformat(),
+        },
+    )
+    assert charge.status_code == 201, charge.text
+    assert charge.json()["subscription"]["starts_on"] == first_date.isoformat()
+    assert charge.json()["subscription"]["ends_on"] == (first_date + timedelta(days=29)).isoformat()
+
+
+def test_change_tariff_now_keeps_used_lesson_price_and_creates_credit(client):
+    org = create_org(client, "Immediate Tariff Credit", "immediate-tariff-credit")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Матвій"}).json()
+    client.patch(f"/students/{student['id']}/crm-status", headers=headers, json={"crm_status": "waiting_for_group"})
+    group_id = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Tariff Group", "capacity": 8, "student_ids": [student["id"]]},
+    ).json()["group"]["id"]
+    old_plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "2400", "price_minor": 240000, "period_days": 30, "lessons_included": 8},
+    ).json()
+    new_plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "2000", "price_minor": 200000, "period_days": 30, "lessons_included": 8},
+    ).json()
+
+    charge = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "plan_id": old_plan["id"],
+            "group_id": group_id,
+            "starts_on": "2026-10-01",
+            "auto_renew": True,
+        },
+    )
+    assert charge.status_code == 201, charge.text
+    subscription_id = charge.json()["subscription"]["id"]
+    payment_id = charge.json()["payment"]["id"]
+
+    paid = client.patch(f"/payments/{payment_id}/paid", headers=headers, json={"method": "card"})
+    assert paid.status_code == 200, paid.text
+
+    first = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={"group_id": group_id, "starts_at": "2026-10-05T17:00:00+03:00"},
+    ).json()
+    marked = client.put(
+        f"/lesson-sessions/{first['id']}/attendance",
+        headers=headers,
+        json={"items": [{"student_id": student["id"], "status": "present"}]},
+    )
+    assert marked.status_code == 200, marked.text
+
+    changed = client.post(
+        f"/student-subscriptions/{subscription_id}/change-plan",
+        headers=headers,
+        json={"plan_id": new_plan["id"], "reason": "Зміна умов поточного періоду"},
+    )
+    assert changed.status_code == 200, changed.text
+    body = changed.json()
+    assert body["used_lessons"] == 1
+    assert body["old_unit_price_minor"] == 30000
+    assert body["new_unit_price_minor"] == 25000
+    assert body["current_period_charge_minor"] == 205000
+    assert body["credit_minor"] == 35000
+    assert body["debt_minor"] == 0
+    assert body["subscription"]["plan_id"] == new_plan["id"]
+    assert body["payment"]["adjusted_amount_minor"] == 205000
+    assert body["payment"]["paid_minor"] == 240000
+    assert body["payment"]["credit_minor"] == 35000
+
+    # Seven remaining lessons are charged at the new unit price. On the last
+    # one, auto-renewal applies the 350 UAH credit to the next 2000 UAH period.
+    for day in [7, 9, 11, 13, 15, 17, 19]:
+        lesson = client.post(
+            "/lesson-sessions",
+            headers=headers,
+            json={"group_id": group_id, "starts_at": f"2026-10-{day:02d}T17:00:00+03:00"},
+        ).json()
+        response = client.put(
+            f"/lesson-sessions/{lesson['id']}/attendance",
+            headers=headers,
+            json={"items": [{"student_id": student["id"], "status": "present"}]},
+        )
+        assert response.status_code == 200, response.text
+
+    subscriptions = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    assert len(subscriptions) == 2
+    next_subscription = subscriptions[0]
+    assert next_subscription["renewal_of_id"] == subscription_id
+    assert next_subscription["price_minor"] == 200000
+
+    payments = client.get(f"/payments?student_id={student['id']}", headers=headers).json()
+    next_payment = next(item for item in payments if item["subscription_id"] == next_subscription["id"])
+    assert next_payment["amount_minor"] == 165000
+    assert next_payment["balance_minor"] == 165000
+
+
+def test_change_tariff_now_can_create_debt(client):
+    org = create_org(client, "Immediate Tariff Debt", "immediate-tariff-debt")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Олег"}).json()
+    client.patch(f"/students/{student['id']}/crm-status", headers=headers, json={"crm_status": "waiting_for_group"})
+    group_id = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Debt Group", "capacity": 8, "student_ids": [student["id"]]},
+    ).json()["group"]["id"]
+    old_plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "2000 Debt", "price_minor": 200000, "period_days": 30, "lessons_included": 8},
+    ).json()
+    new_plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={"name": "2400 Debt", "price_minor": 240000, "period_days": 30, "lessons_included": 8},
+    ).json()
+    charge = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={"student_id": student["id"], "plan_id": old_plan["id"], "group_id": group_id, "starts_on": "2026-10-01"},
+    ).json()
+    client.patch(f"/payments/{charge['payment']['id']}/paid", headers=headers, json={"method": "card"})
+    lesson = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={"group_id": group_id, "starts_at": "2026-10-05T17:00:00+03:00"},
+    ).json()
+    client.put(
+        f"/lesson-sessions/{lesson['id']}/attendance",
+        headers=headers,
+        json={"items": [{"student_id": student["id"], "status": "present"}]},
+    )
+
+    changed = client.post(
+        f"/student-subscriptions/{charge['subscription']['id']}/change-plan",
+        headers=headers,
+        json={"plan_id": new_plan["id"], "reason": "Зміна вартості"},
+    )
+    assert changed.status_code == 200, changed.text
+    body = changed.json()
+    assert body["current_period_charge_minor"] == 235000
+    assert body["credit_minor"] == 0
+    assert body["debt_minor"] == 35000
+    assert body["payment"]["balance_minor"] == 35000
+
+
+def test_excused_makeup_can_be_used_after_subscription_end(client):
+    org = create_org(client, "Makeup After End", "makeup-after-end")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Софія"}).json()
+    client.patch(f"/students/{student['id']}/crm-status", headers=headers, json={"crm_status": "waiting_for_group"})
+    group_id = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Makeup Group", "capacity": 8, "student_ids": [student["id"]]},
+    ).json()["group"]["id"]
+    start = date.today()
+    first = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={"group_id": group_id, "starts_at": start.isoformat() + "T17:00:00+03:00"},
+    ).json()
+    second_date = start + timedelta(days=1)
+    second = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={"group_id": group_id, "starts_at": second_date.isoformat() + "T17:00:00+03:00"},
+    ).json()
+    plan = client.post(
+        "/subscription-plans",
+        headers=headers,
+        json={
+            "name": "1 day makeup", "price_minor": 100000, "period_days": 1, "lessons_included": 2,
+            "excused_rule": "makeup",
+        },
+    ).json()
+    charge = client.post(
+        "/billing/charges",
+        headers=headers,
+        json={"student_id": student["id"], "plan_id": plan["id"], "group_id": group_id, "starts_on": start.isoformat()},
+    )
+    assert charge.status_code == 201, charge.text
+
+    excused = client.put(
+        f"/lesson-sessions/{first['id']}/attendance",
+        headers=headers,
+        json={"items": [{"student_id": student["id"], "status": "excused"}]},
+    )
+    assert excused.status_code == 200, excused.text
+
+    makeup = client.put(
+        f"/lesson-sessions/{second['id']}/attendance",
+        headers=headers,
+        json={"items": [{"student_id": student["id"], "status": "present"}]},
+    )
+    assert makeup.status_code == 200, makeup.text
+
+    subscription = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()[0]
+    assert subscription["used_lessons"] == 0
+    assert subscription["remaining_lessons"] == 2
 
 
 def test_subscription_and_payment_flow(client):

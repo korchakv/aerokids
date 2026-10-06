@@ -96,7 +96,9 @@ type PlanDemo = {
   id: EntityId;
   name: string;
   price: number;
+  days: number | null;
   lessons: number | null;
+  isActive: boolean;
   usageMode?: "attendance" | "scheduled" | "period";
   absentRule?: "consume" | "dont_consume" | "choice";
   excusedRule?: "consume" | "dont_consume" | "makeup";
@@ -113,6 +115,7 @@ type PaymentDemo = {
   paidAmount: number;
   refundedAmount: number;
   balanceAmount: number;
+  creditAmount: number;
   dueDate: string;
   status: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
   method?: "Картка" | "Готівка" | "Переказ";
@@ -250,6 +253,39 @@ function weekdayLong(value: string) {
   return text ? text.charAt(0).toLocaleUpperCase("uk-UA") + text.slice(1) : "";
 }
 
+function tariffHistoryDetail(event: ApiAuditEvent) {
+  const payload = event.payload ?? {};
+  const before = (payload.before && typeof payload.before === "object" ? payload.before : {}) as Record<string, unknown>;
+  const after = (payload.after && typeof payload.after === "object" ? payload.after : {}) as Record<string, unknown>;
+  const changed = Array.isArray(payload.changed_fields) ? payload.changed_fields.filter((field): field is string => typeof field === "string") : [];
+
+  const formatValue = (field: string, value: unknown) => {
+    if (value === null || value === undefined || value === "") return "—";
+    if (field === "price_minor" && typeof value === "number") return (value / 100).toLocaleString("uk-UA") + " грн";
+    if (field === "period_days") return String(value) + " дн.";
+    if (field === "lessons_included") return String(value) + " відв.";
+    if (field === "is_active") return value ? "Активний" : "Неактивний";
+    return String(value);
+  };
+  const labels: Record<string, string> = {
+    name: "Назва",
+    price_minor: "Ціна",
+    period_days: "Дні",
+    lessons_included: "Відвідування",
+    is_active: "Статус",
+  };
+
+  if (event.event_type === "subscription_plan.created") {
+    const parts = [
+      typeof payload.price_minor === "number" ? formatValue("price_minor", payload.price_minor) : "",
+      payload.period_days ? formatValue("period_days", payload.period_days) : "",
+      payload.lessons_included ? formatValue("lessons_included", payload.lessons_included) : "",
+    ].filter(Boolean);
+    return parts.join(" · ") || "Тариф створено";
+  }
+  return changed.map((field) => `${labels[field] ?? field}: ${formatValue(field, before[field])} → ${formatValue(field, after[field])}`).join(" · ") || "Змінено";
+}
+
 function attendanceStatusLabel(value: AttendanceValue | undefined) {
   const labels: Record<AttendanceValue, string> = {
     present: "Був",
@@ -367,12 +403,12 @@ function App() {
   const [lessonDetailsSaving, setLessonDetailsSaving] = useState(false);
   const [lessonEditing, setLessonEditing] = useState(true);
   const [plans, setPlans] = useState<PlanDemo[]>(apiEnabled ? [] : [
-    { id: "1", name: "8 занять / 30 днів", price: 1800, lessons: 8 },
-    { id: "2", name: "Індивідуальний", price: 0, lessons: null },
+    { id: "1", name: "8 занять / 30 днів", price: 1800, days: 30, lessons: 8, isActive: true },
+    { id: "2", name: "Індивідуальний", price: 0, days: 30, lessons: null, isActive: true },
   ]);
   const [payments, setPayments] = useState<PaymentDemo[]>(apiEnabled ? [] : [
-    { id: "1", studentId: "8", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 0, refundedAmount: 0, balanceAmount: 1800, dueDate: "2026-10-05", status: "pending" },
-    { id: "2", studentId: "9", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 1800, refundedAmount: 0, balanceAmount: 0, dueDate: "2026-09-28", status: "paid", method: "Картка" },
+    { id: "1", studentId: "8", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 0, refundedAmount: 0, balanceAmount: 1800, creditAmount: 0, dueDate: "2026-10-05", status: "pending" },
+    { id: "2", studentId: "9", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 1800, refundedAmount: 0, balanceAmount: 0, creditAmount: 0, dueDate: "2026-09-28", status: "paid", method: "Картка" },
   ]);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentStudentId, setPaymentStudentId] = useState<EntityId>("8");
@@ -394,9 +430,22 @@ function App() {
   const [pauseResumeOn, setPauseResumeOn] = useState("");
   const [pauseNote, setPauseNote] = useState("");
   const [showPlanForm, setShowPlanForm] = useState(false);
+  const [planEditId, setPlanEditId] = useState<EntityId | null>(null);
   const [planName, setPlanName] = useState("8 занять / 30 днів");
   const [planPrice, setPlanPrice] = useState("");
+  const [planDays, setPlanDays] = useState("30");
   const [planLessons, setPlanLessons] = useState("8");
+  const [planActive, setPlanActive] = useState(true);
+  const [planSaving, setPlanSaving] = useState(false);
+  const [showInactivePlans, setShowInactivePlans] = useState(false);
+  const [planHistory, setPlanHistory] = useState<ApiAuditEvent[]>([]);
+  const [planHistoryLoading, setPlanHistoryLoading] = useState(false);
+  const [planHistoryOpen, setPlanHistoryOpen] = useState(false);
+  const [planChangeSubscriptionId, setPlanChangeSubscriptionId] = useState<EntityId | null>(null);
+  const [planChangePlanId, setPlanChangePlanId] = useState<EntityId | "">("");
+  const [planChangeReason, setPlanChangeReason] = useState("");
+  const [planChangeSaving, setPlanChangeSaving] = useState(false);
+  const [planChangeResult, setPlanChangeResult] = useState("");
   const [planUsageMode, setPlanUsageMode] = useState<"attendance" | "scheduled" | "period">("attendance");
   const [planAbsentRule, setPlanAbsentRule] = useState<"consume" | "dont_consume" | "choice">("choice");
   const [planExcusedRule, setPlanExcusedRule] = useState<"consume" | "dont_consume" | "makeup">("makeup");
@@ -2017,9 +2066,9 @@ function App() {
     const nextStudentId = activeStudents.some((student) => student.id === paymentStudentId)
       ? paymentStudentId
       : (activeStudents[0]?.id ?? "");
-    const nextPlanId = plans.some((plan) => plan.id === paymentPlanId && plan.price > 0)
+    const nextPlanId = plans.some((plan) => plan.id === paymentPlanId && plan.isActive && plan.price > 0)
       ? paymentPlanId
-      : (plans.find((plan) => plan.price > 0)?.id ?? "");
+      : (plans.find((plan) => plan.isActive && plan.price > 0)?.id ?? "");
 
     setPaymentStudentId(nextStudentId);
     setPaymentPlanId(nextPlanId);
@@ -2084,8 +2133,8 @@ function App() {
       return;
     }
     const plan = plans.find((item) => item.id === paymentPlanId);
-    if (!plan || plan.price <= 0) {
-      setWorkspaceError("Для нарахування оберіть абонемент із заданою ціною.");
+    if (!plan || !plan.isActive || plan.price <= 0) {
+      setWorkspaceError("Для нарахування оберіть активний тариф із заданою ціною.");
       return;
     }
     if (apiEnabled && session) {
@@ -2123,6 +2172,7 @@ function App() {
       paidAmount: 0,
       refundedAmount: 0,
       balanceAmount: plan.price,
+      creditAmount: 0,
       dueDate: paymentDueDate,
       status: "pending",
     }]);
@@ -2224,43 +2274,153 @@ function App() {
     }
   };
 
-  const createPlan = async () => {
+  const openPlanCreate = () => {
+    setPlanEditId(null);
+    setPlanName("");
+    setPlanPrice("");
+    setPlanDays("30");
+    setPlanLessons("8");
+    setPlanActive(true);
+    setPlanHistory([]);
+    setPlanHistoryOpen(false);
+    setWorkspaceError("");
+    setShowPlanForm(true);
+  };
+
+  const openPlanEdit = async (plan: PlanDemo) => {
+    setPlanEditId(plan.id);
+    setPlanName(plan.name);
+    setPlanPrice(String(plan.price));
+    setPlanDays(plan.days ? String(plan.days) : "");
+    setPlanLessons(plan.lessons ? String(plan.lessons) : "");
+    setPlanActive(plan.isActive);
+    setPlanHistory([]);
+    setPlanHistoryOpen(false);
+    setWorkspaceError("");
+    setShowPlanForm(true);
+  };
+
+  const loadPlanHistory = async () => {
+    if (!session || !planEditId || planHistoryLoading) return;
+    setPlanHistoryLoading(true);
+    try {
+      setPlanHistory(await loadAuditEvents("subscription_plan", planEditId, session));
+      setPlanHistoryOpen(true);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити історію тарифу.");
+    } finally {
+      setPlanHistoryLoading(false);
+    }
+  };
+
+  const savePlan = async () => {
     const parsedPrice = planPrice === "" ? Number.NaN : Number(planPrice);
+    const parsedDays = planDays === "" ? null : Number(planDays);
     const parsedLessons = planLessons === "" ? null : Number(planLessons);
     if (!planName.trim() || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
       setWorkspaceError("Вкажіть назву та коректну ціну тарифу.");
       return;
     }
-    if (parsedLessons !== null && (!Number.isInteger(parsedLessons) || parsedLessons < 0)) {
-      setWorkspaceError("Кількість занять має бути цілим числом.");
+    if (parsedDays !== null && (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 366)) {
+      setWorkspaceError("Кількість днів має бути цілим числом від 1 до 366.");
       return;
     }
-    if (apiEnabled && session) {
-      try {
-        setWorkspaceError("");
-        await apiPost("/subscription-plans", {
+    if (parsedLessons !== null && (!Number.isInteger(parsedLessons) || parsedLessons < 1 || parsedLessons > 365)) {
+      setWorkspaceError("Кількість відвідувань має бути цілим числом від 1 до 365.");
+      return;
+    }
+    if (parsedDays === null && parsedLessons === null) {
+      setWorkspaceError("Вкажіть дні, відвідування або обидва значення.");
+      return;
+    }
+    if (planSaving) return;
+    setPlanSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        const payload = {
           name: planName.trim(),
           price_minor: Math.round(parsedPrice * 100),
-          period_days: 30,
-          lessons_included: parsedLessons && parsedLessons > 0 ? parsedLessons : null,
-        }, session);
+          period_days: parsedDays,
+          lessons_included: parsedLessons,
+          ...(planEditId ? { is_active: planActive } : {}),
+        };
+        if (planEditId) {
+          await apiPut(`/subscription-plans/${planEditId}`, payload, session);
+        } else {
+          await apiPost("/subscription-plans", payload, session);
+        }
         await syncWorkspace(session);
-        setPlanPrice("");
-        setShowPlanForm(false);
-        return;
-      } catch (error) {
-        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити тариф.");
-        return;
+      } else if (planEditId) {
+        setPlans((items) => items.map((item) => item.id === planEditId ? {
+          ...item,
+          name: planName.trim(),
+          price: parsedPrice,
+          days: parsedDays,
+          lessons: parsedLessons,
+          isActive: planActive,
+        } : item));
+      } else {
+        setPlans((items) => [...items, {
+          id: crypto.randomUUID(),
+          name: planName.trim(),
+          price: parsedPrice,
+          days: parsedDays,
+          lessons: parsedLessons,
+          isActive: true,
+        }]);
       }
+      setShowPlanForm(false);
+      setPlanEditId(null);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти тариф.");
+    } finally {
+      setPlanSaving(false);
     }
-    setPlans((items) => [...items, {
-      id: crypto.randomUUID(),
-      name: planName.trim(),
-      price: parsedPrice,
-      lessons: parsedLessons && parsedLessons > 0 ? parsedLessons : null,
-    }]);
-    setPlanPrice("");
-    setShowPlanForm(false);
+  };
+
+  const openPlanChange = (subscriptionId: EntityId) => {
+    const subscription = subscriptions.find((item) => item.id === subscriptionId);
+    if (!subscription) return;
+    const nextPlan = plans.find((plan) => plan.isActive && plan.id !== subscription.plan_id);
+    if (!nextPlan) {
+      setWorkspaceError("Немає іншого активного тарифу для переходу.");
+      return;
+    }
+    setPlanChangeSubscriptionId(subscriptionId);
+    setPlanChangePlanId(nextPlan.id);
+    setPlanChangeReason("");
+    setPlanChangeResult("");
+  };
+
+  const submitPlanChange = async () => {
+    if (!session || !planChangeSubscriptionId || !planChangePlanId || !planChangeReason.trim() || planChangeSaving) return;
+    setPlanChangeSaving(true);
+    setWorkspaceError("");
+    try {
+      const result = await apiPost<{
+        current_period_charge_minor: number;
+        credit_minor: number;
+        debt_minor: number;
+        used_lessons: number;
+        old_unit_price_minor: number | null;
+        new_unit_price_minor: number | null;
+      }>(`/student-subscriptions/${planChangeSubscriptionId}/change-plan`, {
+        plan_id: planChangePlanId,
+        reason: planChangeReason.trim(),
+      }, session);
+      await syncWorkspace(session);
+      const details = result.credit_minor > 0
+        ? `Кредит на балансі: ${money(result.credit_minor / 100)}. Він автоматично піде в наступний період.`
+        : result.debt_minor > 0
+          ? `До доплати: ${money(result.debt_minor / 100)}.`
+          : "Баланс закритий без переплати чи боргу.";
+      setPlanChangeResult(`Тариф змінено. Поточний період: ${money(result.current_period_charge_minor / 100)}. ${details}`);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося змінити тариф.");
+    } finally {
+      setPlanChangeSaving(false);
+    }
   };
 
   const paymentTotals = {
@@ -2591,6 +2751,7 @@ function App() {
   const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
   const canManageStaff = !apiEnabled || fullAccessRole;
   const canEditGroups = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
+  const canManagePlans = !apiEnabled || ["owner", "admin", "accountant"].includes(currentMembership?.role ?? "");
   const todayKey = localDateInput(new Date());
   const scheduleWeekStart = startOfLocalWeek(addLocalDays(new Date(), scheduleWeekOffset * 7));
   const scheduleWeekDays = Array.from({ length: 7 }, (_, index) => addLocalDays(scheduleWeekStart, index));
@@ -3193,8 +3354,8 @@ function App() {
                   const statusLabel = payment.status === "paid" ? "Сплачено" : payment.status === "overdue" ? "Прострочено" : payment.status === "refunded" ? "Повернено" : payment.status === "cancelled" ? "Скасовано" : "Очікується";
                   return <div id={"payment-" + payment.id} className={"paymentRow " + (focusedPaymentId === payment.id ? "paymentFocused" : "")} key={payment.id}>
                     <span className="paymentIdentity"><b>{student?.child ?? "Учень"}</b><small>Дитина{student?.childPhone ? " · " + formatUaPhone(student.childPhone) : ""}</small><small><strong>Відповідальний:</strong> {student?.parent ?? "Не вказано"}{student?.phone ? " · " + formatUaPhone(student.phone) : ""}</small></span>
-                    <span className="paymentPlanCell"><b>{plan?.name ?? "—"}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}</span>
-                    <span className="paymentAmountCell"><b>{money(payment.adjustedAmount)}</b><small>{payment.balanceAmount > 0 ? <>Залишок: {money(payment.balanceAmount)}</> : <>Внесено: {money(Math.max(0, payment.paidAmount - payment.refundedAmount))}</>}{payment.refundedAmount > 0 ? " · повернено " + money(payment.refundedAmount) : ""}</small></span>
+                    <span className="paymentPlanCell"><b>{plan?.name ?? "—"}{plan && !plan.isActive ? <em className="inactivePlanInline">Неактивний</em> : null}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}</span>
+                    <span className="paymentAmountCell"><b>{money(payment.adjustedAmount)}</b><small>{payment.balanceAmount > 0 ? <>Залишок: {money(payment.balanceAmount)}</> : payment.creditAmount > 0 ? <>Кредит: {money(payment.creditAmount)}</> : <>Внесено: {money(Math.max(0, payment.paidAmount - payment.refundedAmount))}</>}{payment.refundedAmount > 0 ? " · повернено " + money(payment.refundedAmount) : ""}</small>{payment.creditAmount > 0 && <em className="paymentCreditHint">Буде враховано в наступному періоді</em>}</span>
                     <span>{payment.dueDate ? new Date(payment.dueDate + "T00:00:00").toLocaleDateString("uk-UA") : "—"}</span>
                     <span className={"paymentStatus " + payment.status}>{statusLabel}</span>
                     <span className="paymentActions">
@@ -3203,6 +3364,7 @@ function App() {
                       {payment.paidAmount - payment.refundedAmount > 0 && payment.status !== "cancelled" && <button className="link" onClick={() => openPaymentAction(payment, "refund")}>Повернення</button>}
                       {payment.status !== "cancelled" && <button className="link" onClick={() => openPaymentAction(payment, "adjustment")}>Коригувати</button>}
                       {subscription && subscription.status !== "cancelled" && <button className="link" onClick={() => toggleAutoRenew(subscription.id, !subscription.auto_renew)}>{subscription.auto_renew ? "Вимкнути авто" : "Увімкнути авто"}</button>}
+                      {subscription && ["active","paused"].includes(subscription.status) && plans.some((item) => item.isActive && item.id !== subscription.plan_id) && <button className="link" onClick={() => openPlanChange(subscription.id)}>Змінити тариф зараз</button>}
                       {subscription?.status === "paused" ? <button className="link" onClick={() => resumeSubscriptionNow(subscription.id)}>Відновити</button> : subscription && subscription.status === "active" ? <button className="link" onClick={() => openPauseSubscription(subscription.id)}>Пауза</button> : null}
                     </span>
                   </div>;
@@ -3211,9 +3373,22 @@ function App() {
             </article>
           </div>
           <aside className="paymentsSide">
-            <article className="panel">
-              <div className="panelHead"><div><p className="eyebrow">Тарифи</p><h2>Абонементи</h2></div><div className="miniActions"><span className="counter">{plans.length}</span><button className="link" onClick={() => setShowPlanForm(true)}>+ Тариф</button></div></div>
-              <div className="planCards">{plans.map((plan) => <div className="planCard" key={plan.id}><div><b>{plan.name}</b><span>{plan.lessons ? plan.lessons + " занять" : "Гнучкі умови"}</span></div><strong>{plan.price ? money(plan.price) : "Індивідуально"}</strong></div>)}</div>
+            <article className="panel tariffPanel">
+              <div className="panelHead"><div><p className="eyebrow">Тарифи</p><h2>Абонементи</h2></div><div className="miniActions"><span className="counter">{plans.filter((plan) => plan.isActive).length}</span>{canManagePlans && <button className="link" onClick={openPlanCreate}>+ Тариф</button>}</div></div>
+              <div className="planCards">
+                {plans.filter((plan) => plan.isActive).map((plan) => <div className="planCard tariffCard" key={plan.id}>
+                  <div><b>{plan.name}</b><span>{[plan.days ? plan.days + " днів" : "", plan.lessons ? plan.lessons + " відвідувань" : ""].filter(Boolean).join(" · ")}</span></div>
+                  <div className="tariffCardRight"><strong>{plan.price ? money(plan.price) : "Індивідуально"}</strong>{canManagePlans && <button className="tariffEditButton" type="button" title="Редагувати тариф" aria-label={"Редагувати " + plan.name} onClick={() => void openPlanEdit(plan)}><UiIcon name="edit" size={13} /></button>}</div>
+                </div>)}
+                {plans.filter((plan) => plan.isActive).length === 0 && <div className="emptyState compactEmpty">Активних тарифів немає.</div>}
+              </div>
+              {plans.some((plan) => !plan.isActive) && <div className="inactiveTariffs">
+                <button className="inactiveTariffsToggle" type="button" onClick={() => setShowInactivePlans((value) => !value)}><span>Неактивні</span><small>{plans.filter((plan) => !plan.isActive).length}</small><i>{showInactivePlans ? "↑" : "↓"}</i></button>
+                {showInactivePlans && <div className="planCards inactivePlanCards">{plans.filter((plan) => !plan.isActive).map((plan) => <div className="planCard tariffCard inactive" key={plan.id}>
+                  <div><b>{plan.name}<em>Неактивний</em></b><span>{[plan.days ? plan.days + " днів" : "", plan.lessons ? plan.lessons + " відвідувань" : ""].filter(Boolean).join(" · ")}</span></div>
+                  <div className="tariffCardRight"><strong>{plan.price ? money(plan.price) : "Індивідуально"}</strong>{canManagePlans && <button className="tariffEditButton" type="button" title="Редагувати тариф" aria-label={"Редагувати " + plan.name} onClick={() => void openPlanEdit(plan)}><UiIcon name="edit" size={13} /></button>}</div>
+                </div>)}</div>}
+              </div>}
             </article>
             <article className="panel financeHint"><p className="eyebrow">MVP</p><h2>Що вже враховано</h2><p>Оплата зберігається окремо від абонемента. Це дозволить пізніше підключити LiqPay, WayForPay чи інший еквайринг без зміни ядра.</p></article>
           </aside>
@@ -3685,15 +3860,26 @@ function App() {
       </div>}
 
             {showPlanForm && <div className="modalBackdrop">
-        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setShowPlanForm(false)}>×</button>
-          <p className="eyebrow">Абонементи</p><h2>Новий тариф</h2>
-          <label>Назва<input value={planName} onChange={(e) => setPlanName(e.target.value)} /></label>
+        <div className="groupModal tariffEditModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => { setShowPlanForm(false); setPlanEditId(null); }}>×</button>
+          <p className="eyebrow">Тарифи</p><h2>{planEditId ? "Редагувати тариф" : "Новий тариф"}</h2>
+          <p className="modalIntro">Тариф — шаблон для нових і наступних періодів. Уже створені абонементи зберігають свої умови до завершення.</p>
+          <label>Назва<input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="8 занять / 30 днів" /></label>
           <div className="formTwo">
-            <label>Ціна, грн<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="2500" value={planPrice} onChange={(e) => setPlanPrice(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /></label>
-            <label>Занять<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="8" value={planLessons} onChange={(e) => setPlanLessons(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /></label>
+            <label>Ціна, грн<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="2000" value={planPrice} onChange={(e) => setPlanPrice(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /></label>
+            <label>Днів<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="30" value={planDays} onChange={(e) => setPlanDays(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /><small className="fieldHint">Можна залишити порожнім, якщо обмеження тільки за відвідуваннями.</small></label>
           </div>
-          <button className="primary full" disabled={!planName.trim() || planPrice === ""} onClick={createPlan}>Створити тариф</button>
+          <label>Відвідувань<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="8" value={planLessons} onChange={(e) => setPlanLessons(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /><small className="fieldHint">Можна залишити порожнім для необмежених відвідувань у межах днів.</small></label>
+          <div className="formNotice tariffRuleNotice">Потрібно заповнити хоча б одне: <b>дні</b> або <b>відвідування</b>. Якщо заповнені обидва — період завершується за правилом, що настане раніше.</div>
+          {planEditId && <label className="toggleRow"><input type="checkbox" checked={planActive} onChange={(e) => setPlanActive(e.target.checked)} /><span><b>Активний тариф</b><small>Неактивний тариф не можна призначити новому учню, але чинні абонементи залишаються в історії та довикористовуються.</small></span></label>}
+          <button className="primary full" disabled={planSaving || !planName.trim() || planPrice === "" || (!planDays && !planLessons)} onClick={savePlan}>{planSaving ? "Зберігаємо…" : planEditId ? "Зберегти зміни" : "Створити тариф"}</button>
+          {planEditId && <div className="tariffHistoryWrap">
+            <button className="subtleHistoryAction" type="button" disabled={planHistoryLoading} onClick={() => planHistoryOpen ? setPlanHistoryOpen(false) : void loadPlanHistory()}>{planHistoryLoading ? "Завантажуємо…" : planHistoryOpen ? "Сховати історію змін" : "Історія змін тарифу"}</button>
+            {planHistoryOpen && <div className="tariffHistoryList">
+              {planHistory.length === 0 && <small>Змін цього тарифу ще не було.</small>}
+              {planHistory.map((event) => <div key={event.id}><span>{new Date(event.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}</span><b>{event.event_type === "subscription_plan.created" ? "Створено" : "Змінено"}</b><small>{tariffHistoryDetail(event)}</small></div>)}
+            </div>}
+          </div>}
         </div>
       </div>}
 
@@ -3702,12 +3888,12 @@ function App() {
           <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
           <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
           <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(e.target.value)}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · відповідальний: {student.parent}</option>)}</select></label>
-          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.filter((plan) => plan.price > 0).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {money(plan.price)}</option>)}</select></label>
+          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.filter((plan) => plan.isActive && plan.price > 0).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {money(plan.price)}</option>)}</select></label>
           <label>Оплатити до<input type="date" value={paymentDueDate} min={localDateInput(new Date())} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
           <label className="toggleRow"><input type="checkbox" checked={paymentAutoRenew} onChange={(e) => setPaymentAutoRenew(e.target.checked)} /><span><b>Автопродовження</b><small>Наступне нарахування створиться автоматично перед завершенням цього періоду.</small></span></label>
           {activeStudents.length === 0 && <div className="formNotice">Спочатку зарахуйте хоча б одного учня.</div>}
-          {!plans.some((plan) => plan.price > 0) && <div className="formNotice">Створіть тариф із ціною, щоб зробити нарахування.</div>}
-          <button className="primary full" disabled={paymentSaving || !paymentStudentId || !paymentPlanId || !plans.some((plan) => plan.id === paymentPlanId && plan.price > 0)} onClick={createPayment}>{paymentSaving ? "Створюємо…" : "Створити нарахування"}</button>
+          {!plans.some((plan) => plan.isActive && plan.price > 0) && <div className="formNotice">Створіть або активуйте тариф із ціною, щоб зробити нарахування.</div>}
+          <button className="primary full" disabled={paymentSaving || !paymentStudentId || !paymentPlanId || !plans.some((plan) => plan.id === paymentPlanId && plan.isActive && plan.price > 0)} onClick={createPayment}>{paymentSaving ? "Створюємо…" : "Створити нарахування"}</button>
         </div>
       </div>}
 
@@ -3722,6 +3908,19 @@ function App() {
           <label>{paymentActionType === "refund" ? "Причина повернення" : paymentActionType === "adjustment" ? "Причина коригування" : "Коментар"}<textarea value={paymentActionReason} onChange={(e) => setPaymentActionReason(e.target.value)} placeholder={paymentActionType === "refund" ? "Наприклад: перерахунок за невикористані заняття" : "Необов’язково"} /></label>
           {paymentActionType === "refund" && <div className="formNotice">Повернення одночасно зменшує суму нарахування на цю ж величину, тому після коректного повернення новий борг автоматично не виникає.</div>}
           <button className="primary full" disabled={paymentActionSaving || !paymentActionAmount} onClick={submitPaymentAction}>{paymentActionSaving ? "Зберігаємо…" : "Підтвердити"}</button>
+        </div>
+      </div>}
+
+      {planChangeSubscriptionId && <div className="modalBackdrop">
+        <div className="groupModal tariffChangeModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={() => { setPlanChangeSubscriptionId(null); setPlanChangeResult(""); }}>×</button>
+          <p className="eyebrow">Абонемент</p><h2>Змінити тариф зараз</h2>
+          {!planChangeResult ? <>
+            <div className="formNotice">Вже використані заняття залишаться за старою ціною. Лише невикористані заняття поточного періоду перерахуються за новою ціною. Різниця стане кредитом або боргом.</div>
+            <label>Новий тариф<select value={planChangePlanId} onChange={(e) => setPlanChangePlanId(e.target.value)}>{plans.filter((plan) => plan.isActive && plan.id !== subscriptions.find((item) => item.id === planChangeSubscriptionId)?.plan_id).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {money(plan.price)} · {[plan.days ? plan.days + " днів" : "", plan.lessons ? plan.lessons + " відв." : ""].filter(Boolean).join(" / ")}</option>)}</select></label>
+            <label>Причина зміни<textarea value={planChangeReason} onChange={(e) => setPlanChangeReason(e.target.value)} maxLength={300} placeholder="Коротко: чому тариф змінюється з поточного періоду" /></label>
+            <button className="primary full" disabled={planChangeSaving || !planChangePlanId || !planChangeReason.trim()} onClick={submitPlanChange}>{planChangeSaving ? "Перераховуємо…" : "Змінити і перерахувати"}</button>
+          </> : <div className="tariffChangeSuccess"><b>✓ Перераховано</b><p>{planChangeResult}</p><button className="primary full" onClick={() => { setPlanChangeSubscriptionId(null); setPlanChangeResult(""); }}>Закрити</button></div>}
         </div>
       </div>}
 
@@ -4283,7 +4482,9 @@ function applyOperations(
     id: item.id,
     name: item.name,
     price: item.price_minor / 100,
+    days: item.period_days,
     lessons: item.lessons_included,
+    isActive: item.is_active,
     usageMode: item.usage_mode,
     absentRule: item.absent_rule,
     excusedRule: item.excused_rule,
@@ -4301,6 +4502,7 @@ function applyOperations(
     paidAmount: item.paid_minor / 100,
     refundedAmount: item.refunded_minor / 100,
     balanceAmount: item.balance_minor / 100,
+    creditAmount: item.credit_minor / 100,
     dueDate: item.due_date ?? "",
     status: item.status === "pending" && item.due_date && item.due_date < today ? "overdue" : item.status,
     method: paymentMethodLabel(item.method),

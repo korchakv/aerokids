@@ -1394,7 +1394,7 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
                 billing_status = "due"
             elif pending:
                 billing_status = "upcoming"
-            elif latest_subscription and latest_subscription.status == SubscriptionStatus.ACTIVE and latest_subscription.ends_on >= today:
+            elif latest_subscription and latest_subscription.status == SubscriptionStatus.ACTIVE and (latest_subscription.ends_on is None or latest_subscription.ends_on >= today):
                 billing_status = "current"
             else:
                 billing_status = "no_plan"
@@ -1403,7 +1403,7 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
                 "status": billing_status,
                 "plan_name": plan.name if plan else None,
                 "lessons_used": lessons_used,
-                "lessons_included": plan.lessons_included if plan else None,
+                "lessons_included": latest_subscription.lessons_included if latest_subscription else (plan.lessons_included if plan else None),
                 "lessons_remaining": lessons_remaining,
                 "amount_due_minor": sum(item.balance_minor for item in pending),
                 "next_due_date": next_due_date,
@@ -1670,11 +1670,16 @@ def _eligible_subscription_for_session(db: Session, org_id: UUID, student_id: UU
     for subscription in rows:
         if subscription.group_id is not None and subscription.group_id != session.group_id:
             continue
+        if lesson_date < subscription.starts_on:
+            continue
         plan = scoped_get(db, SubscriptionPlan, org_id, subscription.plan_id)
         summary = subscription_usage_summary(db, org_id, subscription)
-        if plan.end_rule in {"date", "whichever_first"} and lesson_date > subscription.ends_on:
+        if subscription.ends_on is not None and plan.end_rule in {"date", "whichever_first"} and lesson_date > subscription.ends_on:
             continue
-        if plan.lessons_included is not None and summary["remaining_lessons"] == 0:
+        included = subscription.lessons_included
+        if included is None and subscription.period_days is None:
+            included = plan.lessons_included
+        if included is not None and summary["remaining_lessons"] == 0:
             continue
         return subscription, plan
     return None
@@ -1716,23 +1721,32 @@ def _sync_makeup_credit(db: Session, org_id: UUID, session: LessonSession, stude
         existing.status = "cancelled"
 
 
-def _complete_oldest_makeup(db: Session, org_id: UUID, student_id: UUID, target_session_id: UUID) -> None:
-    credit = db.scalar(select(MakeupCredit).where(
+def _complete_oldest_makeup(db: Session, org_id: UUID, student_id: UUID, target_session_id: UUID) -> bool:
+    today = date.today()
+    credits = list(db.scalars(select(MakeupCredit).where(
         MakeupCredit.organization_id == org_id,
         MakeupCredit.student_id == student_id,
         MakeupCredit.status == "pending",
         MakeupCredit.original_session_id != target_session_id,
-    ).order_by(MakeupCredit.created_at))
-    if credit is not None:
-        credit.status = "completed"
-        credit.target_session_id = target_session_id
-        credit.completed_at = datetime.now(timezone.utc)
+    ).order_by(MakeupCredit.created_at)))
+    credit = next((item for item in credits if item.expires_on is None or item.expires_on >= today), None)
+    if credit is None:
+        return False
+    credit.status = "completed"
+    credit.target_session_id = target_session_id
+    credit.completed_at = datetime.now(timezone.utc)
+    return True
 
 
 def _renew_after_last_lesson(db: Session, org_id: UUID, subscription: StudentSubscription, plan: SubscriptionPlan, session: LessonSession, actor_user_id: UUID | None) -> None:
-    if not subscription.auto_renew or plan.renewal_trigger != "last_lesson" or plan.lessons_included is None:
+    included = subscription.lessons_included
+    if included is None and subscription.period_days is None:
+        included = plan.lessons_included
+    if not subscription.auto_renew or plan.renewal_trigger != "last_lesson" or included is None:
         return
     if subscription_usage_summary(db, org_id, subscription)["remaining_lessons"] != 0:
+        return
+    if not plan.is_active:
         return
     existing = db.scalar(select(StudentSubscription).where(
         StudentSubscription.organization_id == org_id,
@@ -1742,24 +1756,36 @@ def _renew_after_last_lesson(db: Session, org_id: UUID, subscription: StudentSub
     if existing is not None:
         return
     organization = require_organization(db, org_id)
-    next_start = _comparable_dt(session.starts_at, organization.timezone).date() + timedelta(days=1)
+    after_date = _comparable_dt(session.starts_at, organization.timezone).date() + timedelta(days=1)
+    next_start = _first_planned_lesson_date(db, org_id, subscription.group_id, after_date)
+    available_credit = max(0, subscription.credit_minor)
+    applied_credit = min(available_credit, plan.price_minor)
+    carry_credit = max(0, available_credit - applied_credit)
+    amount_due = max(0, plan.price_minor - applied_credit)
     next_subscription = StudentSubscription(
         organization_id=org_id, student_id=subscription.student_id, plan_id=plan.id, group_id=subscription.group_id,
-        status=SubscriptionStatus.ACTIVE, starts_on=next_start, ends_on=next_start + timedelta(days=plan.period_days - 1),
-        price_minor=plan.price_minor, discount_minor=0, discount_label=None, auto_renew=True, renewal_of_id=subscription.id,
+        status=SubscriptionStatus.ACTIVE, starts_on=next_start, ends_on=_subscription_end_date(next_start, plan.period_days),
+        price_minor=plan.price_minor, period_days=plan.period_days, lessons_included=plan.lessons_included,
+        lesson_unit_price_minor=_lesson_unit_price(plan.price_minor, plan.lessons_included),
+        credit_minor=carry_credit, discount_minor=0, discount_label=None, auto_renew=True, renewal_of_id=subscription.id,
     )
     db.add(next_subscription)
     db.flush()
     payment = Payment(
         organization_id=org_id, student_id=subscription.student_id, subscription_id=next_subscription.id,
-        amount_minor=plan.price_minor, currency=organization.currency, due_date=next_start,
+        amount_minor=amount_due, currency=organization.currency, due_date=next_start,
         note=f"{plan.name} · продовження після останнього заняття",
+        status=PaymentStatus.PAID if amount_due == 0 else PaymentStatus.PENDING,
+        paid_at=datetime.now(timezone.utc) if amount_due == 0 else None,
     )
     db.add(payment)
+    subscription.credit_minor = 0
     subscription.status = SubscriptionStatus.EXPIRED
     record_audit(db, org_id, "student", subscription.student_id, "subscription.renewed_after_last_lesson", {
         "previous_subscription_id": str(subscription.id), "subscription_id": str(next_subscription.id),
         "payment_id": str(payment.id), "session_id": str(session.id),
+        "tariff_price_minor": plan.price_minor, "credit_applied_minor": applied_credit,
+        "amount_due_minor": amount_due, "credit_carried_minor": carry_credit,
     }, actor_user_id=actor_user_id)
 
 
@@ -1772,7 +1798,14 @@ def _sync_attendance_usage(db: Session, org_id: UUID, session: LessonSession, at
     eligible = _eligible_subscription_for_session(db, org_id, attendance.student_id, session)
     plan = eligible[1] if eligible else None
     _sync_makeup_credit(db, org_id, session, attendance.student_id, plan, attendance.status)
-    should_consume = bool(plan and _attendance_should_consume(plan, attendance.status, explicit_consume))
+
+    # A pending excused absence is used before a new subscription lesson. This
+    # lets a child work it off even after the original 30-day period ended.
+    used_makeup = False
+    if attendance.status in {AttendanceStatus.PRESENT, AttendanceStatus.LATE}:
+        used_makeup = _complete_oldest_makeup(db, org_id, attendance.student_id, session.id)
+
+    should_consume = bool(plan and not used_makeup and _attendance_should_consume(plan, attendance.status, explicit_consume))
     if should_consume and eligible is not None:
         subscription, plan = eligible
         if current is None:
@@ -1786,8 +1819,6 @@ def _sync_attendance_usage(db: Session, org_id: UUID, session: LessonSession, at
             current.subscription_id = subscription.id
             current.attendance_id = attendance.id
             current.source_status = attendance.status.value
-        if attendance.status in {AttendanceStatus.PRESENT, AttendanceStatus.LATE}:
-            _complete_oldest_makeup(db, org_id, attendance.student_id, session.id)
         db.flush()
         _renew_after_last_lesson(db, org_id, subscription, plan, session, actor_user_id)
     elif current is not None:
@@ -1931,12 +1962,14 @@ def payment_financials(db: Session, org_id: UUID, payment: Payment) -> dict:
 
     net_paid = max(0, paid_minor - refunded_minor)
     balance = max(0, adjusted_amount - net_paid)
+    credit = max(0, net_paid - adjusted_amount)
     return {
         "adjusted_amount_minor": adjusted_amount,
         "paid_minor": paid_minor,
         "refunded_minor": refunded_minor,
         "net_paid_minor": net_paid,
         "balance_minor": balance,
+        "credit_minor": credit,
         "transactions": transactions,
     }
 
@@ -1946,7 +1979,7 @@ def _sync_payment_state(db: Session, org_id: UUID, payment: Payment) -> dict:
     if payment.status != PaymentStatus.CANCELLED:
         if finance["adjusted_amount_minor"] == 0 and finance["net_paid_minor"] == 0 and finance["refunded_minor"] > 0:
             payment.status = PaymentStatus.REFUNDED
-        elif finance["balance_minor"] == 0 and finance["adjusted_amount_minor"] > 0:
+        elif finance["balance_minor"] == 0 and (finance["adjusted_amount_minor"] > 0 or finance["net_paid_minor"] > 0):
             payment.status = PaymentStatus.PAID
         else:
             payment.status = PaymentStatus.PENDING
@@ -1954,6 +1987,7 @@ def _sync_payment_state(db: Session, org_id: UUID, payment: Payment) -> dict:
     payment.paid_minor = finance["paid_minor"]
     payment.refunded_minor = finance["refunded_minor"]
     payment.balance_minor = finance["balance_minor"]
+    payment.credit_minor = finance["credit_minor"]
     return finance
 
 
@@ -1963,45 +1997,154 @@ def _attach_payment_financials(db: Session, org_id: UUID, payment: Payment) -> P
     payment.paid_minor = finance["paid_minor"]
     payment.refunded_minor = finance["refunded_minor"]
     payment.balance_minor = finance["balance_minor"]
+    payment.credit_minor = finance["credit_minor"]
     return payment
 
 
-def create_subscription_plan(db: Session, org_id: UUID, data) -> SubscriptionPlan:
+def _subscription_end_date(starts_on: date, period_days: int | None) -> date | None:
+    return starts_on + timedelta(days=period_days - 1) if period_days is not None else None
+
+
+def _lesson_unit_price(price_minor: int, lessons_included: int | None) -> int | None:
+    if lessons_included is None or lessons_included <= 0:
+        return None
+    return int(round(price_minor / lessons_included))
+
+
+def _first_planned_lesson_date(
+    db: Session,
+    org_id: UUID,
+    group_id: UUID | None,
+    not_before: date,
+) -> date:
+    if group_id is None:
+        return not_before
+    materialize_recurring_lesson_sessions(db, org_id)
+    organization = require_organization(db, org_id)
+    try:
+        tz = ZoneInfo(organization.timezone)
+    except Exception:
+        tz = timezone.utc
+    candidates = list(db.scalars(
+        select(LessonSession).where(
+            LessonSession.organization_id == org_id,
+            LessonSession.group_id == group_id,
+            LessonSession.status != LessonStatus.CANCELLED,
+        ).order_by(LessonSession.starts_at)
+    ))
+    for lesson in candidates:
+        local_date = _comparable_dt(lesson.starts_at, organization.timezone).date()
+        if local_date >= not_before:
+            return local_date
+    return not_before
+
+
+def create_subscription_plan(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> SubscriptionPlan:
     require_organization(db, org_id)
     item = SubscriptionPlan(organization_id=org_id, **data.model_dump())
     db.add(item)
+    db.flush()
+    record_audit(
+        db,
+        org_id,
+        "subscription_plan",
+        item.id,
+        "subscription_plan.created",
+        {
+            "name": item.name,
+            "price_minor": item.price_minor,
+            "period_days": item.period_days,
+            "lessons_included": item.lessons_included,
+            "is_active": item.is_active,
+        },
+        actor_user_id=actor_user_id,
+    )
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Subscription plan name already exists") from exc
+        raise HTTPException(status_code=409, detail="Тариф із такою назвою вже існує") from exc
     db.refresh(item)
     return item
+
+
+def update_subscription_plan(
+    db: Session,
+    org_id: UUID,
+    plan_id: UUID,
+    data,
+    actor_user_id: UUID | None = None,
+) -> SubscriptionPlan:
+    plan = scoped_get(db, SubscriptionPlan, org_id, plan_id)
+    before = {
+        "name": plan.name,
+        "price_minor": plan.price_minor,
+        "period_days": plan.period_days,
+        "lessons_included": plan.lessons_included,
+        "is_active": plan.is_active,
+    }
+    plan.name = data.name
+    plan.price_minor = data.price_minor
+    plan.period_days = data.period_days
+    plan.lessons_included = data.lessons_included
+    plan.is_active = data.is_active
+    after = {
+        "name": plan.name,
+        "price_minor": plan.price_minor,
+        "period_days": plan.period_days,
+        "lessons_included": plan.lessons_included,
+        "is_active": plan.is_active,
+    }
+    changed_fields = [key for key in after if before[key] != after[key]]
+    if changed_fields:
+        record_audit(
+            db,
+            org_id,
+            "subscription_plan",
+            plan.id,
+            "subscription_plan.updated",
+            {"before": before, "after": after, "changed_fields": changed_fields},
+            actor_user_id=actor_user_id,
+        )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Тариф із такою назвою вже існує") from exc
+    db.refresh(plan)
+    return plan
 
 
 def list_subscription_plans(db: Session, org_id: UUID) -> list[SubscriptionPlan]:
     return list(db.scalars(
         select(SubscriptionPlan)
-        .where(SubscriptionPlan.organization_id == org_id, SubscriptionPlan.is_active.is_(True))
-        .order_by(SubscriptionPlan.name)
+        .where(SubscriptionPlan.organization_id == org_id)
+        .order_by(SubscriptionPlan.is_active.desc(), SubscriptionPlan.name)
     ))
 
 
 def create_student_subscription(db: Session, org_id: UUID, data) -> StudentSubscription:
     student = scoped_get(db, Student, org_id, data.student_id)
     plan = scoped_get(db, SubscriptionPlan, org_id, data.plan_id)
+    if not plan.is_active:
+        raise HTTPException(status_code=409, detail="Неактивний тариф не можна призначити новому абонементу")
     price_minor = data.price_minor if data.price_minor is not None else plan.price_minor
     if data.discount_minor > price_minor:
-        raise HTTPException(status_code=422, detail="Discount cannot exceed subscription price")
-    ends_on = data.starts_on + timedelta(days=plan.period_days - 1)
+        raise HTTPException(status_code=422, detail="Знижка не може бути більшою за вартість тарифу")
+    group_id = getattr(data, "group_id", None)
+    starts_on = _first_planned_lesson_date(db, org_id, group_id, data.starts_on)
     item = StudentSubscription(
         organization_id=org_id,
         student_id=student.id,
         plan_id=plan.id,
-        group_id=getattr(data, "group_id", None),
-        starts_on=data.starts_on,
-        ends_on=ends_on,
+        group_id=group_id,
+        starts_on=starts_on,
+        ends_on=_subscription_end_date(starts_on, plan.period_days),
         price_minor=price_minor,
+        period_days=plan.period_days,
+        lessons_included=plan.lessons_included,
+        lesson_unit_price_minor=_lesson_unit_price(max(0, price_minor - data.discount_minor), plan.lessons_included),
+        credit_minor=0,
         discount_minor=data.discount_minor,
         discount_label=data.discount_label,
         auto_renew=getattr(data, "auto_renew", False),
@@ -2014,11 +2157,15 @@ def create_student_subscription(db: Session, org_id: UUID, data) -> StudentSubsc
 
 def subscription_usage_summary(db: Session, org_id: UUID, subscription: StudentSubscription) -> dict:
     plan = scoped_get(db, SubscriptionPlan, org_id, subscription.plan_id)
+    included = subscription.lessons_included
+    if included is None and subscription.period_days is None:
+        # Legacy row created before tariff snapshots existed.
+        included = plan.lessons_included
     used = db.scalar(select(func.coalesce(func.sum(SubscriptionUsage.units), 0)).where(
         SubscriptionUsage.organization_id == org_id,
         SubscriptionUsage.subscription_id == subscription.id,
     )) or 0
-    remaining = max(0, plan.lessons_included - int(used)) if plan.lessons_included is not None else None
+    remaining = max(0, included - int(used)) if included is not None else None
     return {"used_lessons": int(used), "remaining_lessons": remaining, "needs_renewal": remaining == 1 if remaining is not None else False}
 
 
@@ -2076,8 +2223,8 @@ def pause_subscription(
     subscription = scoped_get(db, StudentSubscription, org_id, subscription_id)
     if subscription.status in {SubscriptionStatus.CANCELLED, SubscriptionStatus.EXPIRED}:
         raise HTTPException(status_code=409, detail="Subscription cannot be paused")
-    if starts_on < subscription.starts_on or starts_on > subscription.ends_on:
-        raise HTTPException(status_code=422, detail="Pause must start inside the subscription period")
+    if starts_on < subscription.starts_on or (subscription.ends_on is not None and starts_on > subscription.ends_on):
+        raise HTTPException(status_code=422, detail="Пауза має починатися в межах поточного абонемента")
 
     existing = db.scalar(select(SubscriptionPause).where(
         SubscriptionPause.organization_id == org_id,
@@ -2137,8 +2284,11 @@ def _finish_subscription_pause(
     pause.ends_on = pause_end
     pause.resumed_at = datetime.now(timezone.utc)
     paused_days = (pause_end - pause.starts_on).days + 1
-    subscription.ends_on = subscription.ends_on + timedelta(days=paused_days)
-    subscription.status = SubscriptionStatus.ACTIVE if subscription.ends_on >= resumes_on else SubscriptionStatus.EXPIRED
+    if subscription.ends_on is not None:
+        subscription.ends_on = subscription.ends_on + timedelta(days=paused_days)
+        subscription.status = SubscriptionStatus.ACTIVE if subscription.ends_on >= resumes_on else SubscriptionStatus.EXPIRED
+    else:
+        subscription.status = SubscriptionStatus.ACTIVE
     record_audit(
         db,
         org_id,
@@ -2213,12 +2363,13 @@ def run_billing_renewals(
     today = date.today()
     horizon = through_date or (today + timedelta(days=7))
     if horizon < today:
-        raise HTTPException(status_code=422, detail="through_date cannot be in the past")
+        raise HTTPException(status_code=422, detail="Дата перевірки не може бути в минулому")
 
     resumed = _resume_due_pauses(db, org_id, today, actor_user_id)
     expired_rows = list(db.scalars(select(StudentSubscription).where(
         StudentSubscription.organization_id == org_id,
         StudentSubscription.status == SubscriptionStatus.ACTIVE,
+        StudentSubscription.ends_on.is_not(None),
         StudentSubscription.ends_on < today,
     )))
     for expired in expired_rows:
@@ -2240,12 +2391,18 @@ def run_billing_renewals(
         StudentSubscription.organization_id == org_id,
         StudentSubscription.auto_renew.is_(True),
         StudentSubscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED]),
+        StudentSubscription.ends_on.is_not(None),
         StudentSubscription.ends_on <= horizon,
     ).order_by(StudentSubscription.ends_on, StudentSubscription.created_at)))
 
     for original in candidates:
         current = original
-        while current.auto_renew and current.status in {SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED} and current.ends_on <= horizon:
+        while (
+            current.auto_renew
+            and current.status in {SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED}
+            and current.ends_on is not None
+            and current.ends_on <= horizon
+        ):
             open_pause = db.scalar(select(SubscriptionPause.id).where(
                 SubscriptionPause.organization_id == org_id,
                 SubscriptionPause.subscription_id == current.id,
@@ -2275,18 +2432,40 @@ def run_billing_renewals(
                 break
 
             plan = scoped_get(db, SubscriptionPlan, org_id, current.plan_id)
-            if current.ends_on < today - timedelta(days=plan.period_days):
+            # An inactive tariff remains valid for the already-paid/current
+            # period, but it must not be sold again automatically.
+            if not plan.is_active:
+                break
+
+            current_period_days = current.period_days or plan.period_days or 30
+            if current.ends_on < today - timedelta(days=current_period_days):
                 skipped_stale_subscriptions += 1
                 break
-            next_start = current.ends_on + timedelta(days=1)
+
+            next_start = _first_planned_lesson_date(
+                db,
+                org_id,
+                current.group_id,
+                current.ends_on + timedelta(days=1),
+            )
+            available_credit = max(0, current.credit_minor)
+            applied_credit = min(available_credit, plan.price_minor)
+            carry_credit = max(0, available_credit - applied_credit)
+            amount_due = max(0, plan.price_minor - applied_credit)
+
             next_subscription = StudentSubscription(
                 organization_id=org_id,
                 student_id=student.id,
                 plan_id=plan.id,
+                group_id=current.group_id,
                 status=SubscriptionStatus.ACTIVE,
                 starts_on=next_start,
-                ends_on=next_start + timedelta(days=plan.period_days - 1),
+                ends_on=_subscription_end_date(next_start, plan.period_days),
                 price_minor=plan.price_minor,
+                period_days=plan.period_days,
+                lessons_included=plan.lessons_included,
+                lesson_unit_price_minor=_lesson_unit_price(plan.price_minor, plan.lessons_included),
+                credit_minor=carry_credit,
                 discount_minor=0,
                 discount_label=None,
                 auto_renew=True,
@@ -2298,13 +2477,16 @@ def run_billing_renewals(
                 organization_id=org_id,
                 student_id=student.id,
                 subscription_id=next_subscription.id,
-                amount_minor=plan.price_minor,
+                amount_minor=amount_due,
                 currency=organization.currency,
                 due_date=next_start,
                 note=f"{plan.name} · автоматичне продовження",
+                status=PaymentStatus.PAID if amount_due == 0 else PaymentStatus.PENDING,
+                paid_at=datetime.now(timezone.utc) if amount_due == 0 else None,
             )
             db.add(payment)
             db.flush()
+            current.credit_minor = 0
             if current.ends_on < today:
                 current.status = SubscriptionStatus.EXPIRED
             record_audit(
@@ -2318,7 +2500,10 @@ def run_billing_renewals(
                     "subscription_id": str(next_subscription.id),
                     "payment_id": str(payment.id),
                     "starts_on": next_start.isoformat(),
-                    "amount_minor": plan.price_minor,
+                    "tariff_price_minor": plan.price_minor,
+                    "credit_applied_minor": applied_credit,
+                    "amount_due_minor": amount_due,
+                    "credit_carried_minor": carry_credit,
                 },
                 actor_user_id=actor_user_id,
             )
@@ -2326,7 +2511,7 @@ def run_billing_renewals(
             created_subscriptions += 1
             current = next_subscription
 
-    if created_subscriptions:
+    if created_subscriptions or expired_rows:
         db.commit()
     return {
         "resumed_subscriptions": resumed,
@@ -2335,36 +2520,44 @@ def run_billing_renewals(
         "created_payment_ids": created_payment_ids,
     }
 
-
 def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> tuple[StudentSubscription, Payment]:
     organization = require_organization(db, org_id)
     student = scoped_get(db, Student, org_id, data.student_id)
     plan = scoped_get(db, SubscriptionPlan, org_id, data.plan_id)
+    if not plan.is_active:
+        raise HTTPException(status_code=409, detail="Неактивний тариф не можна призначити новому абонементу")
     if data.discount_minor > plan.price_minor:
-        raise HTTPException(status_code=422, detail="Discount cannot exceed subscription price")
+        raise HTTPException(status_code=422, detail="Знижка не може бути більшою за вартість тарифу")
 
     amount_minor = plan.price_minor - data.discount_minor
     if amount_minor <= 0:
-        raise HTTPException(status_code=422, detail="Charge amount must be greater than zero")
+        raise HTTPException(status_code=422, detail="Сума нарахування має бути більшою за нуль")
+
+    group_id = getattr(data, "group_id", None)
+    starts_on = _first_planned_lesson_date(db, org_id, group_id, data.starts_on)
 
     duplicate_subscription = db.scalar(select(StudentSubscription).where(
         StudentSubscription.organization_id == org_id,
         StudentSubscription.student_id == student.id,
         StudentSubscription.plan_id == plan.id,
-        StudentSubscription.starts_on == data.starts_on,
+        StudentSubscription.starts_on == starts_on,
         StudentSubscription.status != SubscriptionStatus.CANCELLED,
     ))
     if duplicate_subscription is not None:
-        raise HTTPException(status_code=409, detail="This subscription period has already been charged")
+        raise HTTPException(status_code=409, detail="На цей період уже є абонемент")
 
     subscription = StudentSubscription(
         organization_id=org_id,
         student_id=student.id,
         plan_id=plan.id,
-        group_id=getattr(data, "group_id", None),
-        starts_on=data.starts_on,
-        ends_on=data.starts_on + timedelta(days=plan.period_days - 1),
+        group_id=group_id,
+        starts_on=starts_on,
+        ends_on=_subscription_end_date(starts_on, plan.period_days),
         price_minor=plan.price_minor,
+        period_days=plan.period_days,
+        lessons_included=plan.lessons_included,
+        lesson_unit_price_minor=_lesson_unit_price(amount_minor, plan.lessons_included),
+        credit_minor=0,
         discount_minor=data.discount_minor,
         discount_label=data.discount_label,
         auto_renew=getattr(data, "auto_renew", False),
@@ -2378,7 +2571,7 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
         subscription_id=subscription.id,
         amount_minor=amount_minor,
         currency=organization.currency,
-        due_date=data.due_date or data.starts_on,
+        due_date=data.due_date or starts_on,
         note=data.note or plan.name,
     )
     db.add(payment)
@@ -2394,6 +2587,7 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
             "subscription_id": str(subscription.id),
             "plan_id": str(plan.id),
             "amount_minor": amount_minor,
+            "starts_on": starts_on.isoformat(),
             "due_date": payment.due_date.isoformat() if payment.due_date else None,
         },
         actor_user_id=actor_user_id,
@@ -2404,6 +2598,140 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
     payment.plan_id = plan.id
     _attach_payment_financials(db, org_id, payment)
     return subscription, payment
+
+def change_subscription_plan_now(
+    db: Session,
+    org_id: UUID,
+    subscription_id: UUID,
+    new_plan_id: UUID,
+    reason: str,
+    actor_user_id: UUID | None = None,
+) -> dict:
+    subscription = scoped_get(db, StudentSubscription, org_id, subscription_id)
+    if subscription.status == SubscriptionStatus.CANCELLED:
+        raise HTTPException(status_code=409, detail="Скасований абонемент не можна змінити")
+    old_plan = scoped_get(db, SubscriptionPlan, org_id, subscription.plan_id)
+    new_plan = scoped_get(db, SubscriptionPlan, org_id, new_plan_id)
+    if not new_plan.is_active:
+        raise HTTPException(status_code=409, detail="Оберіть активний тариф")
+    if old_plan.id == new_plan.id:
+        raise HTTPException(status_code=409, detail="Цей тариф уже призначений учню")
+
+    payment = db.scalar(select(Payment).where(
+        Payment.organization_id == org_id,
+        Payment.subscription_id == subscription.id,
+        Payment.status != PaymentStatus.CANCELLED,
+    ).order_by(Payment.created_at.desc()))
+    if payment is None:
+        raise HTTPException(status_code=409, detail="Для цього абонемента немає нарахування, яке можна перерахувати")
+
+    _materialize_legacy_settlement(db, org_id, payment)
+    finance_before = payment_financials(db, org_id, payment)
+    summary = subscription_usage_summary(db, org_id, subscription)
+    used_lessons = summary["used_lessons"]
+    current_lessons = subscription.lessons_included
+    if current_lessons is None and subscription.period_days is None:
+        current_lessons = old_plan.lessons_included
+
+    old_unit = subscription.lesson_unit_price_minor
+    if old_unit is None and current_lessons:
+        old_unit = _lesson_unit_price(finance_before["adjusted_amount_minor"], current_lessons)
+
+    if used_lessons > 0:
+        if current_lessons is None or new_plan.lessons_included is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Після початку періоду тариф можна змінити одразу лише коли обидва тарифи мають кількість занять.",
+            )
+        if new_plan.lessons_included != current_lessons:
+            raise HTTPException(
+                status_code=409,
+                detail="Посеред періоду кількість занять не змінюємо. Нову кількість застосуйте з наступного періоду.",
+            )
+        remaining_lessons = max(0, current_lessons - used_lessons)
+        old_unit = old_unit or 0
+        new_unit = _lesson_unit_price(new_plan.price_minor, new_plan.lessons_included) or 0
+        current_future_value = old_unit * remaining_lessons
+        new_future_value = new_unit * remaining_lessons
+        current_period_charge = max(
+            0,
+            finance_before["adjusted_amount_minor"] - current_future_value + new_future_value,
+        )
+    else:
+        remaining_lessons = new_plan.lessons_included
+        new_unit = _lesson_unit_price(new_plan.price_minor, new_plan.lessons_included)
+        current_period_charge = new_plan.price_minor
+        subscription.period_days = new_plan.period_days
+        subscription.lessons_included = new_plan.lessons_included
+        subscription.ends_on = _subscription_end_date(subscription.starts_on, new_plan.period_days)
+
+    difference = current_period_charge - finance_before["adjusted_amount_minor"]
+    if difference:
+        db.add(PaymentTransaction(
+            organization_id=org_id,
+            payment_id=payment.id,
+            student_id=payment.student_id,
+            kind="adjustment_increase" if difference > 0 else "adjustment_decrease",
+            amount_minor=abs(difference),
+            note=f"Зміна тарифу зараз: {reason}",
+            actor_user_id=actor_user_id,
+        ))
+        db.flush()
+
+    subscription.plan_id = new_plan.id
+    subscription.price_minor = current_period_charge
+    subscription.lesson_unit_price_minor = new_unit
+    subscription.discount_minor = 0
+    subscription.discount_label = None
+
+    finance_after = _sync_payment_state(db, org_id, payment)
+    subscription.credit_minor = finance_after["credit_minor"]
+    if payment.status != PaymentStatus.PAID:
+        payment.paid_at = None
+
+    record_audit(
+        db,
+        org_id,
+        "student",
+        subscription.student_id,
+        "subscription.plan_changed_now",
+        {
+            "subscription_id": str(subscription.id),
+            "payment_id": str(payment.id),
+            "old_plan_id": str(old_plan.id),
+            "old_plan_name": old_plan.name,
+            "new_plan_id": str(new_plan.id),
+            "new_plan_name": new_plan.name,
+            "used_lessons": used_lessons,
+            "remaining_lessons": remaining_lessons,
+            "old_unit_price_minor": old_unit,
+            "new_unit_price_minor": new_unit,
+            "previous_charge_minor": finance_before["adjusted_amount_minor"],
+            "current_period_charge_minor": current_period_charge,
+            "credit_minor": finance_after["credit_minor"],
+            "debt_minor": finance_after["balance_minor"],
+            "reason": reason,
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(subscription)
+    db.refresh(payment)
+    payment.plan_id = new_plan.id
+    _attach_subscription_usage(db, org_id, subscription)
+    _attach_payment_financials(db, org_id, payment)
+    return {
+        "subscription": subscription,
+        "payment": payment,
+        "used_lessons": used_lessons,
+        "old_plan_id": old_plan.id,
+        "new_plan_id": new_plan.id,
+        "old_unit_price_minor": old_unit,
+        "new_unit_price_minor": new_unit,
+        "current_period_charge_minor": current_period_charge,
+        "credit_minor": payment.credit_minor,
+        "debt_minor": payment.balance_minor,
+    }
 
 
 def create_payment(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> Payment:

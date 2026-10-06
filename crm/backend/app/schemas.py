@@ -651,7 +651,7 @@ class GroupRosterStudent(BaseModel):
 class SubscriptionPlanCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     price_minor: int = Field(ge=0)
-    period_days: int = Field(default=30, ge=1, le=366)
+    period_days: int | None = Field(default=30, ge=1, le=366)
     lessons_included: int | None = Field(default=None, ge=1, le=365)
     usage_mode: Literal["attendance", "scheduled", "period"] = "attendance"
     absent_rule: Literal["consume", "dont_consume", "choice"] = "choice"
@@ -665,13 +665,35 @@ class SubscriptionPlanCreate(BaseModel):
 
     _name = field_validator("name")(normalize_required_text)
 
+    @model_validator(mode="after")
+    def validate_limits(self):
+        if self.period_days is None and self.lessons_included is None:
+            raise ValueError("Вкажіть кількість днів, відвідувань або обидва значення")
+        return self
+
+
+class SubscriptionPlanUpdate(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    price_minor: int = Field(ge=0)
+    period_days: int | None = Field(default=None, ge=1, le=366)
+    lessons_included: int | None = Field(default=None, ge=1, le=365)
+    is_active: bool = True
+
+    _name = field_validator("name")(normalize_required_text)
+
+    @model_validator(mode="after")
+    def validate_limits(self):
+        if self.period_days is None and self.lessons_included is None:
+            raise ValueError("Вкажіть кількість днів, відвідувань або обидва значення")
+        return self
+
 
 class SubscriptionPlanRead(ORMModel):
     id: UUID
     organization_id: UUID
     name: str
     price_minor: int
-    period_days: int
+    period_days: int | None
     lessons_included: int | None
     usage_mode: str
     absent_rule: str
@@ -704,8 +726,12 @@ class StudentSubscriptionRead(ORMModel):
     group_id: UUID | None
     status: SubscriptionStatus
     starts_on: date
-    ends_on: date
+    ends_on: date | None
     price_minor: int
+    period_days: int | None
+    lessons_included: int | None
+    lesson_unit_price_minor: int | None = None
+    credit_minor: int = 0
     discount_minor: int
     discount_label: str | None
     auto_renew: bool
@@ -789,6 +815,25 @@ class PaymentRead(ORMModel):
     paid_minor: int = 0
     refunded_minor: int = 0
     balance_minor: int = 0
+    credit_minor: int = 0
+
+
+class SubscriptionPlanChangeCreate(BaseModel):
+    plan_id: UUID
+    reason: str = Field(min_length=2, max_length=300)
+
+
+class SubscriptionPlanChangeResult(BaseModel):
+    subscription: StudentSubscriptionRead
+    payment: PaymentRead
+    used_lessons: int
+    old_plan_id: UUID
+    new_plan_id: UUID
+    old_unit_price_minor: int | None = None
+    new_unit_price_minor: int | None = None
+    current_period_charge_minor: int
+    credit_minor: int
+    debt_minor: int
 
 
 class SubscriptionChargeResult(BaseModel):

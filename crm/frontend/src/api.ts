@@ -520,7 +520,7 @@ export type ApiSubscriptionPlan = {
   organization_id: string;
   name: string;
   price_minor: number;
-  period_days: number;
+  period_days: number | null;
   lessons_included: number | null;
   usage_mode: "attendance" | "scheduled" | "period";
   absent_rule: "consume" | "dont_consume" | "choice";
@@ -551,6 +551,7 @@ export type ApiPayment = {
   paid_minor: number;
   refunded_minor: number;
   balance_minor: number;
+  credit_minor: number;
 };
 
 export type ApiStudentSubscription = {
@@ -561,8 +562,12 @@ export type ApiStudentSubscription = {
   group_id: string | null;
   status: "active" | "paused" | "expired" | "cancelled";
   starts_on: string;
-  ends_on: string;
+  ends_on: string | null;
   price_minor: number;
+  period_days: number | null;
+  lessons_included: number | null;
+  lesson_unit_price_minor: number | null;
+  credit_minor: number;
   discount_minor: number;
   discount_label: string | null;
   auto_renew: boolean;
