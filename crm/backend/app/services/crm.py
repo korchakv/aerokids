@@ -395,7 +395,113 @@ def create_enrollment(
     return item
 
 
-def create_intake(db: Session, organization: Organization, data: IntakeCreate, actor_user_id: UUID | None = None) -> tuple[Student, Contact]:
+def find_intake_phone_duplicates(
+    db: Session,
+    org_id: UUID,
+    child_first_name: str,
+    child_age: int,
+    phone: str,
+    child_phone: str | None = None,
+) -> list[dict]:
+    parent_phone = normalize_phone(phone)
+    normalized_child_phone = normalize_phone(child_phone) if child_phone else None
+    normalized_name = child_first_name.strip().casefold()
+    matches: dict[UUID, dict] = {}
+
+    direct_numbers = {value for value in (parent_phone, normalized_child_phone) if value}
+    if direct_numbers:
+        direct_students = list(db.scalars(select(Student).where(
+            Student.organization_id == org_id,
+            Student.phone.in_(direct_numbers),
+        )))
+        for student in direct_students:
+            matched_phone = student.phone or parent_phone
+            matches[student.id] = {
+                "student": student,
+                "matched_phone": matched_phone,
+                "matched_as": "student",
+                "likely_same_student": True,
+            }
+
+    contact_rows = db.execute(
+        select(Student, Contact)
+        .join(StudentContact, StudentContact.student_id == Student.id)
+        .join(Contact, Contact.id == StudentContact.contact_id)
+        .where(
+            Student.organization_id == org_id,
+            StudentContact.organization_id == org_id,
+            Contact.organization_id == org_id,
+            Contact.phone.in_(direct_numbers),
+        )
+    ).all() if direct_numbers else []
+
+    for student, contact in contact_rows:
+        same_child = (
+            student.first_name.strip().casefold() == normalized_name
+            and student.age_at_inquiry == child_age
+        )
+        existing = matches.get(student.id)
+        if existing:
+            existing["matched_as"] = "student_and_contact"
+            existing["likely_same_student"] = existing["likely_same_student"] or same_child
+            existing["contact"] = contact
+        else:
+            matches[student.id] = {
+                "student": student,
+                "contact": contact,
+                "matched_phone": contact.phone,
+                "matched_as": "contact",
+                "likely_same_student": same_child,
+            }
+
+    result: list[dict] = []
+    for item in matches.values():
+        student = item["student"]
+        contact = item.get("contact")
+        if contact is None:
+            contact = db.scalar(
+                select(Contact)
+                .join(StudentContact, StudentContact.contact_id == Contact.id)
+                .where(
+                    StudentContact.organization_id == org_id,
+                    StudentContact.student_id == student.id,
+                    Contact.organization_id == org_id,
+                )
+                .order_by(StudentContact.is_primary.desc(), Contact.created_at)
+                .limit(1)
+            )
+        result.append({
+            "student_id": student.id,
+            "first_name": student.first_name,
+            "last_name": student.last_name,
+            "age": student.age_at_inquiry,
+            "crm_status": student.crm_status,
+            "student_status": student.student_status,
+            "student_phone": student.phone,
+            "contact_name": contact.full_name if contact else None,
+            "contact_phone": contact.phone if contact else None,
+            "matched_phone": item["matched_phone"],
+            "matched_as": item["matched_as"],
+            "likely_same_student": item["likely_same_student"],
+        })
+    return sorted(result, key=lambda item: (not item["likely_same_student"], item["first_name"].casefold()))
+
+
+def _append_repeat_intake_note(organization: Organization, student: Student, data: IntakeCreate) -> None:
+    try:
+        local_tz = ZoneInfo(organization.timezone)
+    except Exception:
+        local_tz = timezone.utc
+    local_now = datetime.now(timezone.utc).astimezone(local_tz)
+    source_label = "через сайт" if data.source == "website" else f"· {data.source}"
+    lines = [f"Повторне звернення {source_label} — {local_now.strftime('%d.%m.%Y %H:%M')}"]
+    if data.comment and data.comment.strip():
+        lines.append(f"Коментар: {data.comment.strip()}")
+    repeat_note = "\n".join(lines)
+    student.notes = f"{student.notes.rstrip()}\n\n{repeat_note}" if student.notes and student.notes.strip() else repeat_note
+
+
+def create_intake(db: Session, organization: Organization, data: IntakeCreate, actor_user_id: UUID | None = None, record_repeat: bool = False) -> tuple[Student, Contact]:
     phone = normalize_phone(data.phone)
     contact = db.scalar(select(Contact).where(Contact.organization_id == organization.id, Contact.phone == phone))
     if contact is None:
@@ -426,7 +532,9 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
             existing_student.last_name = data.child_last_name
         if data.child_phone and not existing_student.phone:
             existing_student.phone = data.child_phone
-        if data.comment and not existing_student.notes:
+        if record_repeat:
+            _append_repeat_intake_note(organization, existing_student, data)
+        elif data.comment and not existing_student.notes:
             existing_student.notes = data.comment
         if data.source and not existing_student.source:
             existing_student.source = data.source
@@ -436,7 +544,7 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
             "student",
             existing_student.id,
             "lead.duplicate_intake",
-            {"source": data.source, "contact_id": str(contact.id)},
+            {"source": data.source, "contact_id": str(contact.id), "repeat": record_repeat, "comment": data.comment},
             actor_user_id=actor_user_id,
         )
         db.commit()
