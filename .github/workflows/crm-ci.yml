@@ -5,10 +5,16 @@ on:
     branches: [crm-v1]
     paths:
       - "crm/**"
+      - "neon.ts"
+      - "package.json"
+      - ".gitignore"
       - ".github/workflows/crm-ci.yml"
   pull_request:
     paths:
       - "crm/**"
+      - "neon.ts"
+      - "package.json"
+      - ".gitignore"
       - ".github/workflows/crm-ci.yml"
 
 concurrency:
