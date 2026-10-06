@@ -414,6 +414,17 @@ export async function bootstrapOwner(input: {
 }
 
 
+export type InvitationStatus = "valid" | "accepted" | "expired" | "invalid";
+
+export async function getInvitationStatus(inviteToken: string): Promise<InvitationStatus> {
+  const result = await request<{ status: InvitationStatus }>("/auth/invite-status", {
+    method: "POST",
+    body: JSON.stringify({ invite_token: inviteToken }),
+  });
+  return result.status;
+}
+
+
 export async function acceptInvite(input: {
   invite_token: string;
   full_name: string;
