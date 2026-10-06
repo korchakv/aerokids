@@ -785,12 +785,14 @@ def test_attendance_consumes_subscription_and_creates_makeup(client):
     lesson2 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-07T17:00:00+03:00"}).json()
     assert client.put(f"/lesson-sessions/{lesson2['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "late"}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
-    assert subs[0]["used_lessons"] == 1
+    # The next attendance uses the pending makeup first, so it does not spend
+    # a new subscription lesson.
+    assert subs[0]["used_lessons"] == 0 and subs[0]["remaining_lessons"] == 4
 
     lesson3 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-09T17:00:00+03:00"}).json()
     assert client.put(f"/lesson-sessions/{lesson3['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "absent", "consume_lesson": True}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
-    assert subs[0]["used_lessons"] == 2 and subs[0]["remaining_lessons"] == 2
+    assert subs[0]["used_lessons"] == 1 and subs[0]["remaining_lessons"] == 3
 
 
 def test_student_attendance_history_endpoint(client):
