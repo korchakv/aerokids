@@ -1394,7 +1394,7 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
                 billing_status = "due"
             elif pending:
                 billing_status = "upcoming"
-            elif latest_subscription and latest_subscription.status == SubscriptionStatus.ACTIVE and latest_subscription.ends_on >= today:
+            elif latest_subscription and latest_subscription.status == SubscriptionStatus.ACTIVE and (latest_subscription.ends_on is None or latest_subscription.ends_on >= today):
                 billing_status = "current"
             else:
                 billing_status = "no_plan"
@@ -1403,7 +1403,7 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
                 "status": billing_status,
                 "plan_name": plan.name if plan else None,
                 "lessons_used": lessons_used,
-                "lessons_included": plan.lessons_included if plan else None,
+                "lessons_included": latest_subscription.lessons_included if latest_subscription else (plan.lessons_included if plan else None),
                 "lessons_remaining": lessons_remaining,
                 "amount_due_minor": sum(item.balance_minor for item in pending),
                 "next_due_date": next_due_date,
