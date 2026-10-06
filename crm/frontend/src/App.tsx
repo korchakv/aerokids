@@ -30,6 +30,8 @@ const leadKanbanColumns: Array<{ id: LeadKanbanColumnId; title: string; hint: st
 type Lead = {
   id: EntityId;
   createdAt?: string;
+  firstName?: string;
+  lastName?: string;
   child: string;
   age: number;
   parent: string;
@@ -313,6 +315,16 @@ function App() {
   const [leadPhone, setLeadPhone] = useState("");
   const [leadSource, setLeadSource] = useState("phone");
   const [leadComment, setLeadComment] = useState("");
+  const [leadEditing, setLeadEditing] = useState(false);
+  const [leadEditFirstName, setLeadEditFirstName] = useState("");
+  const [leadEditLastName, setLeadEditLastName] = useState("");
+  const [leadEditChildPhone, setLeadEditChildPhone] = useState("");
+  const [leadEditAge, setLeadEditAge] = useState(9);
+  const [leadEditContactName, setLeadEditContactName] = useState("");
+  const [leadEditPhone, setLeadEditPhone] = useState("");
+  const [leadEditSource, setLeadEditSource] = useState("phone");
+  const [leadEditComment, setLeadEditComment] = useState("");
+  const [leadEditSaving, setLeadEditSaving] = useState(false);
   const [leadDuplicateMatches, setLeadDuplicateMatches] = useState<IntakeDuplicateMatch[]>([]);
   const [leadDuplicateChecking, setLeadDuplicateChecking] = useState(false);
   const [leads, setLeads] = useState<Lead[]>(apiEnabled ? [] : initialLeads);
@@ -831,6 +843,8 @@ function App() {
     const nextId = crypto.randomUUID();
     setLeads((items) => [{
       id: nextId,
+      firstName: cleanSpaces(leadChildName),
+      lastName: leadChildLastName.trim() ? cleanSpaces(leadChildLastName) : undefined,
       child: [cleanSpaces(leadChildName), leadChildLastName.trim() ? cleanSpaces(leadChildLastName) : ""].filter(Boolean).join(" "),
       childPhone: normalizedChildPhone ? formatUaPhone(normalizedChildPhone) : undefined,
       age: leadAge,
@@ -997,6 +1011,7 @@ function App() {
 
   const openLead = (id: EntityId) => {
     setSelectedId(id);
+    setLeadEditing(false);
     setTrialMode(null);
     setPostTrialMode(null);
     setPreferenceMode(false);
@@ -1016,6 +1031,88 @@ function App() {
     setCloseNote(lead?.closeNote ?? "");
     setPreferenceLocationId(lead?.preferredLocationId ?? "");
     setAvailabilityWindows(lead?.availability ?? []);
+  };
+
+  const beginLeadEdit = () => {
+    if (!selected) return;
+    const fallbackParts = selected.child.trim().split(/\s+/);
+    setLeadEditFirstName(selected.firstName ?? fallbackParts[0] ?? "");
+    setLeadEditLastName(selected.lastName ?? fallbackParts.slice(1).join(" "));
+    setLeadEditChildPhone(selected.childPhone ?? "");
+    setLeadEditAge(selected.age || 9);
+    setLeadEditContactName(selected.parent === "Контакт не вказано" ? "" : selected.parent);
+    setLeadEditPhone(selected.phone ?? "");
+    setLeadEditSource(canonicalLeadSource(selected.source) || "phone");
+    setLeadEditComment(selected.comment ?? "");
+    setWorkspaceError("");
+    setLeadEditing(true);
+  };
+
+  const saveLeadDetails = async () => {
+    if (!selected || leadEditSaving) return;
+    const childNameError = personNameError(leadEditFirstName, "Ім’я дитини");
+    const childLastNameError = personNameError(leadEditLastName, "Прізвище дитини");
+    const childPhoneError = uaPhoneError(leadEditChildPhone, false);
+    const contactNameError = fullNameError(leadEditContactName, "Відповідальна особа");
+    const phoneError = uaPhoneError(leadEditPhone);
+    if (childNameError || childLastNameError || childPhoneError || contactNameError || phoneError) {
+      setWorkspaceError(childNameError || childLastNameError || childPhoneError || contactNameError || phoneError);
+      return;
+    }
+    if (leadEditAge < 3 || leadEditAge > 25) {
+      setWorkspaceError("Вік дитини має бути від 3 до 25 років.");
+      return;
+    }
+
+    const firstName = cleanSpaces(leadEditFirstName);
+    const lastName = leadEditLastName.trim() ? cleanSpaces(leadEditLastName) : "";
+    const childPhone = leadEditChildPhone.trim() ? normalizeUaPhone(leadEditChildPhone) : null;
+    const phone = normalizeUaPhone(leadEditPhone);
+    if (!phone) {
+      setWorkspaceError("Вкажіть коректний номер відповідальної особи.");
+      return;
+    }
+
+    setLeadEditSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiPatch(`/students/${selected.id}/lead-details`, {
+          child_first_name: firstName,
+          child_last_name: lastName || null,
+          child_phone: childPhone,
+          child_age: leadEditAge,
+          contact_name: cleanSpaces(leadEditContactName),
+          phone,
+          source: leadEditSource,
+          comment: leadEditComment.trim() || null,
+        }, session);
+        await syncWorkspace(session);
+        try {
+          setEntityEvents(await loadAuditEvents("student", selected.id, session));
+        } catch {
+          // The lead itself is already saved; history refresh can wait for the next open.
+        }
+      } else {
+        setLeads((items) => items.map((item) => item.id === selected.id ? {
+          ...item,
+          firstName,
+          lastName: lastName || undefined,
+          child: [firstName, lastName].filter(Boolean).join(" "),
+          childPhone: childPhone ? formatUaPhone(childPhone) : undefined,
+          age: leadEditAge,
+          parent: cleanSpaces(leadEditContactName),
+          phone: formatUaPhone(phone),
+          source: leadEditSource,
+          comment: leadEditComment.trim() || undefined,
+        } : item));
+      }
+      setLeadEditing(false);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти дані заявки.");
+    } finally {
+      setLeadEditSaving(false);
+    }
   };
 
   const saveLeadOutcome = async (
@@ -3648,14 +3745,50 @@ function App() {
 
       {selected && <div className="drawerBackdrop leadDrawerBackdrop">
         <aside className="drawer leadDrawer" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>×</button>
+          <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>×</button>
           <p className="eyebrow">Картка заявки</p>
           <div className="leadDrawerTitleRow">
-            <h2>{selected.child}, {selected.age} років</h2>
+            <div className="leadDrawerIdentity">
+              <h2>{selected.child}, {selected.age} років</h2>
+              {canManageLeads && <button className="leadEditIcon" type="button" aria-label="Редагувати заявку" title="Редагувати заявку" onClick={beginLeadEdit}><UiIcon name="edit" size={14} /></button>}
+            </div>
             <button className={"mobileLeadStatusTrigger stage-" + leadKanbanColumn(selected)} onClick={() => { setLeadActionsOpen(false); setLeadStatusMenuOpen(true); }}>
               <span>{leadDisplayStatus(selected)}</span><i>⌄</i>
             </button>
           </div>
+          {leadEditing && <div className="leadEditPanel">
+            <div className="leadEditPanelHead">
+              <div><b>Редагування заявки</b><small>Основні дані дитини, контакт та коментар.</small></div>
+              <button type="button" aria-label="Закрити редагування" onClick={() => setLeadEditing(false)}><UiIcon name="x" size={15} /></button>
+            </div>
+            <div className="formTwo">
+              <label>Ім’я дитини<input autoFocus value={leadEditFirstName} onChange={(e) => setLeadEditFirstName(e.target.value)} /></label>
+              <label>Прізвище дитини <small>(необов’язково)</small><input value={leadEditLastName} onChange={(e) => setLeadEditLastName(e.target.value)} /></label>
+            </div>
+            <div className="formTwo">
+              <label>Вік<input type="number" min={3} max={25} value={leadEditAge} onChange={(e) => setLeadEditAge(Number(e.target.value))} /></label>
+              <label>Телефон дитини <small>(необов’язково)</small><input inputMode="tel" value={leadEditChildPhone} onChange={(e) => setLeadEditChildPhone(e.target.value)} placeholder="+380…" /></label>
+            </div>
+            <label>Відповідальна особа<input value={leadEditContactName} onChange={(e) => setLeadEditContactName(e.target.value)} /></label>
+            <label>Телефон<input inputMode="tel" value={leadEditPhone} onChange={(e) => setLeadEditPhone(e.target.value)} placeholder="+380…" /></label>
+            <label>Джерело<select value={leadEditSource} onChange={(e) => setLeadEditSource(e.target.value)}>
+              <option value="phone">Телефон</option>
+              <option value="website">Сайт</option>
+              <option value="instagram">Instagram</option>
+              <option value="recommendation">Рекомендація</option>
+              <option value="walk-in">Зайшли особисто</option>
+              <option value="facebook">Facebook</option>
+              <option value="tiktok">TikTok</option>
+              <option value="google">Google</option>
+              <option value="maps">Google Maps</option>
+              <option value="other">Інше</option>
+            </select></label>
+            <label>Коментар<textarea value={leadEditComment} onChange={(e) => setLeadEditComment(e.target.value)} placeholder="Додайте примітку про запит, побажання або домовленості…" /></label>
+            <div className="leadEditActions">
+              <button className="search" type="button" disabled={leadEditSaving} onClick={() => setLeadEditing(false)}>Скасувати</button>
+              <button className="primary" type="button" disabled={leadEditSaving || !leadEditFirstName.trim() || !leadEditContactName.trim() || !leadEditPhone.trim()} onClick={saveLeadDetails}>{leadEditSaving ? "Зберігаємо…" : "Зберегти зміни"}</button>
+            </div>
+          </div>}
           <div className="contactCard"><span>Контакт</span><b>{selected.parent}</b><a href={"tel:" + selected.phone.replace(/\s/g, "")}>{selected.phone}</a></div>
           <div className="desktopLeadStatus">
             {["Пробне заплановано","Після пробного","Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) || ["no_show","cancelled"].includes(selected.trialResult ?? "")
@@ -3669,7 +3802,7 @@ function App() {
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : action.label}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>; })()}
           {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
-          {selected.comment && <div className="noteBox"><span>Коментар</span><p>{selected.comment}</p></div>}
+          <div className={"noteBox leadCommentBox" + (!selected.comment ? " empty" : "")}><span>Коментар</span><p>{selected.comment || "Коментар ще не додано."}</p>{canManageLeads && !leadEditing && <button type="button" className="inlineEditLink" onClick={beginLeadEdit}>{selected.comment ? "Редагувати" : "+ Додати"}</button>}</div>
           {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
           <div className="preferenceSummary">
             <div><span>Бажана локація</span><b>{selected.preferredLocationName ?? "Не вказано"}</b></div>
@@ -4255,6 +4388,8 @@ function applyWorkspace(
   const prospects: Lead[] = bundle.leads.map((item) => ({
     id: item.student_id,
     createdAt: item.created_at,
+    firstName: item.first_name,
+    lastName: item.last_name ?? undefined,
     child: [item.first_name, item.last_name].filter(Boolean).join(" "),
     age: item.age ?? 0,
     parent: item.contact_name ?? "Контакт не вказано",
@@ -4286,6 +4421,8 @@ function applyWorkspace(
 
   const students: Lead[] = bundle.students.map((item) => ({
     id: item.student_id,
+    firstName: item.first_name,
+    lastName: item.last_name ?? undefined,
     child: [item.first_name, item.last_name].filter(Boolean).join(" "),
     age: item.age ?? 0,
     parent: item.contact_name ?? "Контакт не вказано",
@@ -4371,6 +4508,7 @@ function auditEventLabel(type: string) {
   const labels: Record<string, string> = {
     "lead.created": "Заявка створена",
     "lead.duplicate_intake": "Повторна заявка",
+    "lead.details_updated": "Дані заявки змінено",
     "student.crm_status_changed": "Статус заявки змінено",
     "trial.scheduled": "Пробне заплановано",
     "trial.rescheduled": "Пробне перенесено",
