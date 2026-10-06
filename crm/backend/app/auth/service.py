@@ -87,6 +87,7 @@ def bootstrap_owner(db: Session, data: BootstrapOwnerCreate) -> tuple[Organizati
         full_name=data.full_name,
         email=email,
         role=StaffRole.OWNER,
+        can_teach=True,
     ))
     db.commit()
     db.refresh(organization)
@@ -146,7 +147,7 @@ def issue_login_token(db: Session, email: str, password: str) -> tuple[str, Auth
     return create_access_token(user.id), auth_user_info(db, user)
 
 
-def create_invitation(db: Session, org_id: UUID, invited_by_user_id: UUID, email: str, role: StaffRole):
+def create_invitation(db: Session, org_id: UUID, invited_by_user_id: UUID, email: str, role: StaffRole, can_teach: bool = False):
     normalized = normalize_email(email)
     raw_token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
@@ -156,6 +157,7 @@ def create_invitation(db: Session, org_id: UUID, invited_by_user_id: UUID, email
         organization_id=org_id,
         email=normalized,
         role=role,
+        can_teach=can_teach or role == StaffRole.TEACHER,
         token_hash=token_hash,
         invited_by_user_id=invited_by_user_id,
         expires_at=expires_at,
@@ -247,11 +249,13 @@ def accept_invitation(db: Session, raw_token: str, full_name: str, password: str
             full_name=full_name,
             email=invitation.email,
             role=invitation.role,
+            can_teach=invitation.can_teach,
         )
         db.add(staff)
     else:
         staff.user_id = user.id
         staff.role = invitation.role
+        staff.can_teach = invitation.can_teach
         staff.is_active = True
 
     # Once this person joins the organization, every outstanding invitation
