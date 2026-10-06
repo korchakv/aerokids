@@ -25,7 +25,7 @@ services:
       - key: ACCESS_TOKEN_MINUTES
         value: "480"
       - key: CORS_ORIGINS
-        value: https://aerokids-crm.onrender.com,https://crm.aerokids.space
+        value: https://aerokids-crm.onrender.com,https://crm.aerokids.space,https://aerokids.space,https://www.aerokids.space
       - key: AUTH_LOGIN_WINDOW_MINUTES
         value: "15"
       - key: AUTH_LOGIN_IP_LIMIT
