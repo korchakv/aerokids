@@ -1350,3 +1350,176 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 }
 
 .inviteLoginLink{display:flex;align-items:center;justify-content:center;margin-top:20px;text-decoration:none;text-align:center}
+
+
+/* Production polish: sidebar rhythm, duplicate checks, refresh indicator */
+@keyframes akSoftPulse{
+  0%,100%{opacity:.42;transform:scale(.92)}
+  50%{opacity:1;transform:scale(1)}
+}
+.syncPulse{
+  width:7px;
+  height:7px;
+  border-radius:999px;
+  background:var(--ak-accent-strong);
+  box-shadow:0 0 0 3px var(--ak-accent-glow);
+  animation:akSoftPulse 1.25s ease-in-out infinite;
+  flex:0 0 auto;
+}
+.syncBanner.syncing,.syncStatus.refreshing{
+  display:flex!important;
+  align-items:center;
+  gap:8px;
+}
+.syncStatus.refreshing{
+  position:fixed;
+  right:18px;
+  bottom:18px;
+  z-index:90;
+  width:auto;
+  max-width:max-content;
+  margin:0;
+  padding:7px 10px;
+  border:1px solid var(--ak-border);
+  border-radius:999px;
+  background:var(--ak-bg-glass);
+  color:var(--ak-muted);
+  font-size:10.5px;
+  font-weight:700;
+  backdrop-filter:blur(14px);
+  box-shadow:0 10px 28px rgba(0,0,0,.08);
+}
+
+@media(min-width:721px){
+  .shell>.appSidebar{
+    padding:22px 16px 14px!important;
+  }
+  .appNav{
+    gap:4px!important;
+  }
+  .appNav button,
+  .asideThemeToggle{
+    width:100%;
+    min-height:42px!important;
+    padding:10px 12px!important;
+    border-radius:10px!important;
+    display:grid!important;
+    grid-template-columns:18px minmax(0,1fr) auto!important;
+    align-items:center!important;
+    column-gap:9px!important;
+    font-size:13px!important;
+    line-height:1.2!important;
+    text-align:left!important;
+  }
+  .appNav button{
+    border:0!important;
+  }
+  .appNav button svg,
+  .asideThemeToggle svg{
+    width:17px!important;
+    height:17px!important;
+    justify-self:center;
+  }
+  .appNav .navLabel,
+  .asideThemeToggle>span:not(.themeState){
+    min-width:0;
+    justify-self:start;
+    font-weight:600;
+  }
+  .asideFooter{
+    margin-top:auto!important;
+    padding:12px 0 0!important;
+    gap:7px!important;
+    border-top:1px solid var(--ak-border);
+  }
+  .asideThemeToggle{
+    margin:0!important;
+    border:0!important;
+    background:transparent!important;
+    color:var(--ak-muted)!important;
+  }
+  .asideThemeToggle:hover{
+    background:var(--ak-surface)!important;
+    color:var(--ak-text)!important;
+  }
+  .asideThemeToggle .themeState{
+    justify-self:end;
+    min-width:52px;
+    padding:4px 7px;
+    border:1px solid var(--ak-border);
+    border-radius:999px;
+    background:var(--ak-surface-2);
+    color:var(--ak-muted);
+    font-size:10px!important;
+    font-weight:700;
+    line-height:1;
+    text-align:center;
+  }
+  .asideFooter>small{
+    display:block;
+    padding:0 12px!important;
+    margin:0;
+    color:var(--ak-muted-2)!important;
+    font-size:9px!important;
+    line-height:1.25;
+    letter-spacing:.01em;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+}
+
+.duplicateCheck{
+  display:grid;
+  gap:8px;
+  margin:2px 0 12px;
+  padding:12px;
+  border:1px solid var(--ak-border);
+  border-radius:12px;
+  background:var(--ak-surface-2);
+}
+.duplicateCheck.pending{
+  grid-template-columns:auto 1fr;
+  align-items:center;
+  color:var(--ak-muted);
+  font-size:12px;
+  font-weight:700;
+}
+.duplicateCheck.blocked{border-color:rgba(217,108,117,.45)}
+.duplicateCheck.warning{border-color:rgba(206,161,63,.42)}
+.duplicateCheck>b{font-size:13px}
+.duplicateCheck>small{color:var(--ak-muted);line-height:1.45}
+.duplicateMatches{display:grid;gap:6px}
+.duplicateMatch{
+  width:100%;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  padding:9px 10px;
+  border:1px solid var(--ak-border);
+  border-radius:10px;
+  background:var(--ak-bg);
+  color:var(--ak-text);
+  text-align:left;
+  cursor:pointer;
+}
+.duplicateMatch:hover{border-color:var(--ak-accent-soft);background:var(--ak-surface)}
+.duplicateMatch span{display:grid;gap:2px;min-width:0}
+.duplicateMatch span>b{font-size:12px}
+.duplicateMatch span>small{font-size:10.5px;color:var(--ak-muted)}
+.duplicateMatch>strong{font-size:10.5px;color:var(--ak-accent-strong);white-space:nowrap}
+
+@media(max-width:720px){
+  .syncStatus.refreshing{
+    right:10px;
+    bottom:calc(80px + env(safe-area-inset-bottom));
+    padding:6px 9px;
+    font-size:10px;
+  }
+  .duplicateMatch{
+    grid-template-columns:1fr;
+    gap:6px;
+  }
+  .duplicateMatch>strong{justify-self:start}
+}
