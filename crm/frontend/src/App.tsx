@@ -2718,6 +2718,7 @@ function App() {
   const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
   const canManageStaff = !apiEnabled || fullAccessRole;
   const canEditGroups = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
+  const canManagePlans = !apiEnabled || ["owner", "admin", "accountant"].includes(currentMembership?.role ?? "");
   const todayKey = localDateInput(new Date());
   const scheduleWeekStart = startOfLocalWeek(addLocalDays(new Date(), scheduleWeekOffset * 7));
   const scheduleWeekDays = Array.from({ length: 7 }, (_, index) => addLocalDays(scheduleWeekStart, index));
