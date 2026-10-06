@@ -253,15 +253,37 @@ function weekdayLong(value: string) {
   return text ? text.charAt(0).toLocaleUpperCase("uk-UA") + text.slice(1) : "";
 }
 
-function tariffFieldsLabel(fields: string[]) {
-  const labels: Record<string, string> = {
-    name: "назва",
-    price_minor: "ціна",
-    period_days: "дні",
-    lessons_included: "відвідування",
-    is_active: "статус",
+function tariffHistoryDetail(event: ApiAuditEvent) {
+  const payload = event.payload ?? {};
+  const before = (payload.before && typeof payload.before === "object" ? payload.before : {}) as Record<string, unknown>;
+  const after = (payload.after && typeof payload.after === "object" ? payload.after : {}) as Record<string, unknown>;
+  const changed = Array.isArray(payload.changed_fields) ? payload.changed_fields.filter((field): field is string => typeof field === "string") : [];
+
+  const formatValue = (field: string, value: unknown) => {
+    if (value === null || value === undefined || value === "") return "—";
+    if (field === "price_minor" && typeof value === "number") return (value / 100).toLocaleString("uk-UA") + " грн";
+    if (field === "period_days") return String(value) + " дн.";
+    if (field === "lessons_included") return String(value) + " відв.";
+    if (field === "is_active") return value ? "Активний" : "Неактивний";
+    return String(value);
   };
-  return fields.map((field) => labels[field] ?? field).join(", ");
+  const labels: Record<string, string> = {
+    name: "Назва",
+    price_minor: "Ціна",
+    period_days: "Дні",
+    lessons_included: "Відвідування",
+    is_active: "Статус",
+  };
+
+  if (event.event_type === "subscription_plan.created") {
+    const parts = [
+      typeof payload.price_minor === "number" ? formatValue("price_minor", payload.price_minor) : "",
+      payload.period_days ? formatValue("period_days", payload.period_days) : "",
+      payload.lessons_included ? formatValue("lessons_included", payload.lessons_included) : "",
+    ].filter(Boolean);
+    return parts.join(" · ") || "Тариф створено";
+  }
+  return changed.map((field) => `${labels[field] ?? field}: ${formatValue(field, before[field])} → ${formatValue(field, after[field])}`).join(" · ") || "Змінено";
 }
 
 function attendanceStatusLabel(value: AttendanceValue | undefined) {
@@ -3855,7 +3877,7 @@ function App() {
             <button className="subtleHistoryAction" type="button" disabled={planHistoryLoading} onClick={() => planHistoryOpen ? setPlanHistoryOpen(false) : void loadPlanHistory()}>{planHistoryLoading ? "Завантажуємо…" : planHistoryOpen ? "Сховати історію змін" : "Історія змін тарифу"}</button>
             {planHistoryOpen && <div className="tariffHistoryList">
               {planHistory.length === 0 && <small>Змін цього тарифу ще не було.</small>}
-              {planHistory.map((event) => <div key={event.id}><span>{new Date(event.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}</span><b>{event.event_type === "subscription_plan.created" ? "Створено" : "Змінено"}</b><small>{Array.isArray(event.payload?.changed_fields) ? tariffFieldsLabel(event.payload.changed_fields as string[]) : event.actor_name || event.actor_email || "CRM"}</small></div>)}
+              {planHistory.map((event) => <div key={event.id}><span>{new Date(event.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}</span><b>{event.event_type === "subscription_plan.created" ? "Створено" : "Змінено"}</b><small>{tariffHistoryDetail(event)}</small></div>)}
             </div>}
           </div>}
         </div>
