@@ -487,7 +487,7 @@ function App() {
   const [scheduleDuration, setScheduleDuration] = useState(60);
   const [scheduleWeekOffset, setScheduleWeekOffset] = useState(0);
   const [scheduleFilterGroupId, setScheduleFilterGroupId] = useState<EntityId | "all">("all");
-  const [attendanceWeekOffset, setAttendanceWeekOffset] = useState(0);
+  const [attendanceDayOffset, setAttendanceDayOffset] = useState(0);
   const workspaceAutoRefreshBusy = useRef(false);
   useEffect(() => {
     setStaffResetLink("");
@@ -1484,13 +1484,35 @@ function App() {
     setStudentStates((states) => ({ ...states, [id]: state }));
   };
 
+  const attendanceDay = addLocalDays(new Date(), attendanceDayOffset);
+  const attendanceDayKey = localDateInput(attendanceDay);
+  const attendanceTodayKey = localDateInput(new Date());
+  const attendanceNow = Date.now();
+  const attendanceDayLessons = lessons
+    .filter((lesson) => lesson.status !== "cancelled" && localDateInput(new Date(lesson.startsAt)) === attendanceDayKey)
+    .sort((a, b) => dateValue(a.startsAt) - dateValue(b.startsAt));
+  const pendingAttendanceLessons = attendanceDayLessons.filter((lesson) => lesson.status !== "completed");
+  const completedAttendanceLessons = attendanceDayLessons.filter((lesson) => lesson.status === "completed");
+  const journalLessons = [...pendingAttendanceLessons, ...completedAttendanceLessons];
+  const overdueAttendanceLessons = pendingAttendanceLessons.filter((lesson) => dateValue(lesson.startsAt) + lesson.duration * 60_000 < attendanceNow);
+  const inProgressAttendanceLesson = pendingAttendanceLessons.find((lesson) => {
+    const start = dateValue(lesson.startsAt);
+    const end = start + lesson.duration * 60_000;
+    return attendanceDayKey === attendanceTodayKey && start <= attendanceNow && attendanceNow <= end;
+  });
+  const nextAttendanceLesson = pendingAttendanceLessons.find((lesson) => dateValue(lesson.startsAt) > attendanceNow);
+  const nearestAttendanceLesson = inProgressAttendanceLesson ?? nextAttendanceLesson ?? pendingAttendanceLessons[0];
+  const attendanceAttentionLesson = overdueAttendanceLessons[0] ?? nearestAttendanceLesson ?? completedAttendanceLessons[0];
+
   const nearestLesson = [...lessons].sort((a, b) => {
     const now = Date.now();
     return Math.abs(dateValue(a.startsAt) - now) - Math.abs(dateValue(b.startsAt) - now);
   })[0];
   const selectedLesson = apiEnabled && !workspaceLoaded
     ? undefined
-    : lessons.find((lesson) => lesson.id === selectedLessonId) ?? nearestLesson;
+    : active === "Відвідування"
+      ? journalLessons.find((lesson) => lesson.id === selectedLessonId) ?? attendanceAttentionLesson
+      : lessons.find((lesson) => lesson.id === selectedLessonId) ?? nearestLesson;
   const lessonGroup = selectedLesson ? groups.find((group) => group.id === selectedLesson.groupId) : undefined;
   const lessonStudents = lessonGroup
     ? (lessonRoster
@@ -1509,14 +1531,16 @@ function App() {
     ? Math.round(((focusedAttendanceCounts.present + focusedAttendanceCounts.late) / focusedAttendanceCounts.total) * 100)
     : 0;
 
-  const attendanceWeekStart = startOfLocalWeek(addLocalDays(new Date(), attendanceWeekOffset * 7));
-  const attendanceWeekEnd = addLocalDays(attendanceWeekStart, 6);
-  const journalLessons = lessons
-    .filter((lesson) => {
-      const value = localDateInput(new Date(lesson.startsAt));
-      return value >= localDateInput(attendanceWeekStart) && value <= localDateInput(attendanceWeekEnd);
-    })
-    .sort((a, b) => dateValue(a.startsAt) - dateValue(b.startsAt));
+  useEffect(() => {
+    if (active !== "Відвідування" || focusedAttendanceStudentId) return;
+    if (journalLessons.length === 0) {
+      if (selectedLessonId) setSelectedLessonId("");
+      return;
+    }
+    if (!journalLessons.some((lesson) => lesson.id === selectedLessonId)) {
+      setSelectedLessonId((attendanceAttentionLesson ?? journalLessons[0]).id);
+    }
+  }, [active, attendanceDayKey, journalLessons.map((lesson) => lesson.id).join("|"), focusedAttendanceStudentId]);
 
   useEffect(() => {
     setLessonTopicDraft(selectedLesson?.topic ?? "");
@@ -1748,6 +1772,9 @@ function App() {
 
   const saveAttendance = async () => {
     if (!selectedLesson) return;
+    const nextLessonAfterSave = pendingAttendanceLessons.find((lesson) =>
+      lesson.id !== selectedLesson.id && dateValue(lesson.startsAt) >= dateValue(selectedLesson.startsAt)
+    ) ?? pendingAttendanceLessons.find((lesson) => lesson.id !== selectedLesson.id);
     if (lessonStudents.length === 0) {
       setWorkspaceError("У цій групі немає активних учнів, тому відвідування зберігати не потрібно. Додайте учнів до групи або відкрийте інше заняття.");
       return;
@@ -1771,6 +1798,7 @@ function App() {
         }, session);
         await syncWorkspace(session);
         setLessonEditing(false);
+        if (nextLessonAfterSave) setSelectedLessonId(nextLessonAfterSave.id);
         setLessonSaveNotice("attendance");
       } catch (error) {
         setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти відвідування.");
@@ -2991,23 +3019,50 @@ function App() {
 
         {active === "Відвідування" && <section className="attendanceLayout">
           <article className="panel lessonListPanel">
-            <div className="attendanceWeekHead"><div><p className="eyebrow">Журнал</p><h2>{attendanceWeekStart.toLocaleDateString("uk-UA", { day: "numeric", month: "short" })} — {attendanceWeekEnd.toLocaleDateString("uk-UA", { day: "numeric", month: "short" })}</h2></div><span className="counter">{journalLessons.length}</span></div>
-            <div className="attendanceWeekNav"><button className="search" onClick={() => setAttendanceWeekOffset((value) => value - 1)}>←</button><button className="search" disabled={attendanceWeekOffset === 0} onClick={() => setAttendanceWeekOffset(0)}>Сьогодні</button><button className="search" onClick={() => setAttendanceWeekOffset((value) => value + 1)}>→</button></div>
-            <div className="lessonList">
+            <div className="attendanceWeekHead attendanceDayHead">
+              <div>
+                <p className="eyebrow">{attendanceDayOffset === 0 ? "Сьогодні" : "Журнал за день"}</p>
+                <h2>{attendanceDay.toLocaleDateString("uk-UA", { weekday: "long", day: "numeric", month: "long" })}</h2>
+              </div>
+              <span className="counter">{journalLessons.length}</span>
+            </div>
+            <div className="attendanceWeekNav attendanceDayNav">
+              <button className="search" aria-label="Попередній день" title="Попередній день" onClick={() => setAttendanceDayOffset((value) => value - 1)}>←</button>
+              <button className="search" disabled={attendanceDayOffset === 0} onClick={() => setAttendanceDayOffset(0)}>Сьогодні</button>
+              <button className="search" aria-label="Наступний день" title="Наступний день" onClick={() => setAttendanceDayOffset((value) => value + 1)}>→</button>
+            </div>
+            <div className="lessonList attendanceDailyList">
               {journalLessons.map((lesson) => {
                 const group = groups.find((g) => g.id === lesson.groupId);
-                const isPast = dateValue(lesson.startsAt) < Date.now();
+                const start = dateValue(lesson.startsAt);
+                const end = start + lesson.duration * 60_000;
                 const completed = lesson.status === "completed";
-                const rowState = completed ? "completed" : isPast ? "missed" : "planned";
-                const summary = completed ? `${lesson.attendancePresent ?? 0} є · ${lesson.attendanceLate ?? 0} зап. · ${lesson.attendanceAbsent ?? 0} нема · ${lesson.attendanceExcused ?? 0} поважн.` : isPast ? "Журнал не завершено" : "Заплановано";
-                return <button className={"lessonRow " + rowState + " " + (lesson.id === selectedLessonId ? "active" : "")} key={lesson.id} onClick={() => setSelectedLessonId(lesson.id)}>
-                  <time><b>{weekdayLong(lesson.startsAt)}</b>{new Date(lesson.startsAt).toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })}<small>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</small></time>
+                const inProgress = !completed && attendanceDayKey === attendanceTodayKey && start <= attendanceNow && attendanceNow <= end;
+                const overdue = !completed && end < attendanceNow;
+                const nearest = !completed && lesson.id === nearestAttendanceLesson?.id;
+                const rowState = completed ? "completed" : inProgress ? "current" : overdue ? "missed" : nearest ? "nearest" : "planned";
+                const endTime = new Date(end).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" });
+                const summary = completed
+                  ? `Відмічено · ${lesson.attendancePresent ?? 0} є · ${lesson.attendanceAbsent ?? 0} нема`
+                  : inProgress
+                    ? `Зараз · до ${endTime}`
+                    : overdue
+                      ? "Потрібно відмітити відвідування"
+                      : nearest
+                        ? "Найближче заняття"
+                        : "Заплановано";
+                return <button className={"lessonRow attendanceDailyRow " + rowState + " " + (lesson.id === selectedLessonId ? "active" : "")} key={lesson.id} onClick={() => setSelectedLessonId(lesson.id)}>
+                  <time>
+                    <strong>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</strong>
+                    <small>до {endTime}</small>
+                  </time>
                   <span><b>{group?.name ?? "Група"}</b><small>{summary}</small></span>
-                  <i>{completed ? "✓" : isPast ? "!" : "•"}</i>
+                  <i className={"lessonStateBadge " + rowState}>{completed ? "✓ Відмічено" : inProgress ? "Зараз" : overdue ? "! Відмітити" : nearest ? "Найближче" : "Заплановано"}</i>
                 </button>;
               })}
-              {journalLessons.length === 0 && <div className="emptyState compactEmpty">На цей тиждень занять немає.</div>}
+              {journalLessons.length === 0 && <div className="emptyState compactEmpty">На цей день занять немає.</div>}
             </div>
+            {completedAttendanceLessons.length > 0 && pendingAttendanceLessons.length > 0 && <div className="attendanceCompletedHint">Відмічені заняття автоматично переходять униз списку.</div>}
           </article>
           <article className="panel attendancePanel">
             {lessonSaveNotice && <div className="lessonSaveNotice">✓ Збережено</div>}
