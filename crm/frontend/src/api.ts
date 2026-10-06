@@ -621,15 +621,20 @@ export function apiPut<T>(path: string, body: unknown, session: Session) {
 }
 
 export async function apiDelete(path: string, session: Session): Promise<void> {
-  if (!API_URL) throw new Error("API URL is not configured");
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${session.accessToken}`,
-      "X-Organization-Id": session.organizationId,
-    },
-  });
-  if (!response.ok) throw await responseError(response);
+  if (!API_URL) throw new Error("CRM не підключена до сервера. Перевірте налаштування API.");
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Organization-Id": session.organizationId,
+      },
+    });
+  } catch {
+    throw new Error("Не вдалося з’єднатися із сервером CRM. Перевірте інтернет-з’єднання та спробуйте ще раз.");
+  }
+  if (!response.ok) throw await responseError(response, path, "DELETE");
 }
 
 
