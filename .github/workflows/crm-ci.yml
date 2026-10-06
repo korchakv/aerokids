@@ -111,6 +111,90 @@ jobs:
           PY
           alembic upgrade head
 
+      - name: Verify database migration copy and fingerprinting
+        env:
+          PGPASSWORD: schoolcrm
+        run: |
+          psql -h localhost -U schoolcrm -d postgres -c "CREATE DATABASE migration_source;"
+          psql -h localhost -U schoolcrm -d postgres -c "CREATE DATABASE migration_target;"
+
+          DATABASE_URL=postgresql+psycopg://schoolcrm:schoolcrm@localhost:5432/migration_source alembic upgrade head
+
+          DATABASE_URL=postgresql+psycopg://schoolcrm:schoolcrm@localhost:5432/migration_source python - <<'PY'
+          from datetime import time
+          from sqlalchemy.orm import Session
+
+          from app.db.session import engine
+          from app.models.core import (
+              AvailabilityPreference,
+              Contact,
+              Location,
+              Organization,
+              Student,
+              StudentAvailability,
+              StudentContact,
+          )
+
+          with Session(engine) as db:
+              org = Organization(name="Migration Test", slug="migration-test")
+              db.add(org)
+              db.flush()
+
+              location = Location(
+                  organization_id=org.id,
+                  name="Frankfurt Test",
+                  address="Test address",
+              )
+              contact = Contact(
+                  organization_id=org.id,
+                  full_name="Parent Test",
+                  phone="+380931234567",
+                  email="parent@example.com",
+              )
+              student = Student(
+                  organization_id=org.id,
+                  first_name="Child",
+                  last_name="Test",
+                  age_at_inquiry=10,
+                  source="ci",
+              )
+              db.add_all([location, contact, student])
+              db.flush()
+
+              student.preferred_location_id = location.id
+              db.add(StudentContact(
+                  organization_id=org.id,
+                  student_id=student.id,
+                  contact_id=contact.id,
+                  relation="parent",
+                  is_primary=True,
+              ))
+              db.add(StudentAvailability(
+                  organization_id=org.id,
+                  student_id=student.id,
+                  weekday=1,
+                  start_time=time(17, 0),
+                  end_time=time(18, 0),
+                  preference=AvailabilityPreference.PREFERRED,
+                  note="CI migration",
+              ))
+              db.commit()
+          PY
+
+          python - <<'PY'
+          from app.db.migrate_database import migrate_database
+
+          source = "postgresql+psycopg://schoolcrm:schoolcrm@localhost:5432/migration_source"
+          target = "postgresql+psycopg://schoolcrm:schoolcrm@localhost:5432/migration_target"
+
+          first = migrate_database(source, target)
+          assert sum(item["rows"] for item in first.values()) >= 6
+          assert all(item["status"] == "verified" for item in first.values())
+
+          second = migrate_database(source, target)
+          assert all(item["status"] == "already-identical" for item in second.values())
+          PY
+
 
   full-stack-smoke:
     runs-on: ubuntu-latest
