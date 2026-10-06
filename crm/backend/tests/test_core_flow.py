@@ -410,6 +410,44 @@ def test_empty_group_can_be_deleted_without_losing_history_tables(client):
     assert schedules.status_code == 404, schedules.text
 
 
+def test_empty_group_with_unfinished_lesson_placeholder_can_be_deleted(client):
+    org = create_org(client, "Delete Draft Lesson Group", "delete-draft-lesson-group")
+    headers = {"X-Organization-Id": org["id"]}
+
+    group = client.post(
+        "/groups",
+        headers=headers,
+        json={"name": "12", "capacity": 8},
+    )
+    assert group.status_code == 201, group.text
+    group_id = group.json()["id"]
+
+    lesson = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={
+            "group_id": group_id,
+            "starts_at": "2026-10-05T17:00:00+03:00",
+            "duration_minutes": 60,
+            "topic": "Заняття",
+        },
+    )
+    assert lesson.status_code == 201, lesson.text
+    lesson_id = lesson.json()["id"]
+    assert lesson.json()["status"] == "scheduled"
+
+    deleted = client.delete(f"/groups/{group_id}", headers=headers)
+    assert deleted.status_code == 204, deleted.text
+
+    groups = client.get("/workspace/groups", headers=headers)
+    assert groups.status_code == 200, groups.text
+    assert all(item["group_id"] != group_id for item in groups.json())
+
+    lessons = client.get("/lesson-sessions", headers=headers)
+    assert lessons.status_code == 200, lessons.text
+    assert all(item["id"] != lesson_id for item in lessons.json())
+
+
 def test_group_delete_is_blocked_while_students_are_enrolled(client):
     org = create_org(client, "Protected Group Delete", "protected-group-delete")
     headers = {"X-Organization-Id": org["id"]}
