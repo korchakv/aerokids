@@ -60,6 +60,8 @@ type Lead = {
   recommendedLevel?: string;
   teacherNotes?: string;
   nextContactAt?: string;
+  followUpReason?: string;
+  followUpNote?: string;
   closeReason?: string;
   closeNote?: string;
 };
@@ -346,6 +348,7 @@ function App() {
   const [leadEnrollmentSaving, setLeadEnrollmentSaving] = useState(false);
   const [leadActionsOpen, setLeadActionsOpen] = useState(false);
   const [leadStatusMenuOpen, setLeadStatusMenuOpen] = useState(false);
+  const [leadDeleteSaving, setLeadDeleteSaving] = useState(false);
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateAgeFilter, setCandidateAgeFilter] = useState<"all" | "8-10" | "11-13">("all");
   const [candidateLevelFilter, setCandidateLevelFilter] = useState("all");
@@ -504,6 +507,8 @@ function App() {
   const [trialMode, setTrialMode] = useState<"schedule" | "complete" | null>(null);
   const [postTrialMode, setPostTrialMode] = useState<"thinking" | "close" | null>(null);
   const [followUpAt, setFollowUpAt] = useState("");
+  const [followUpReason, setFollowUpReason] = useState("temporary");
+  const [followUpNote, setFollowUpNote] = useState("");
   const [closeKind, setCloseKind] = useState<"declined" | "no_response" | "not_relevant">("declined");
   const [closeReason, setCloseReason] = useState("schedule");
   const [closeNote, setCloseNote] = useState("");
@@ -1196,7 +1201,7 @@ function App() {
 
   const saveLeadOutcome = async (
     crmStatus: "contacted" | "trial_completed" | "waiting_for_group" | "declined" | "no_response" | "not_relevant",
-    options: { nextContactAt?: string; closeReason?: string; closeNote?: string } = {},
+    options: { nextContactAt?: string; followUpReason?: string; followUpNote?: string; closeReason?: string; closeNote?: string } = {},
   ) => {
     if (!selected) return;
     if (apiEnabled && session) {
@@ -1205,6 +1210,8 @@ function App() {
         await apiPatch(`/students/${selected.id}/lead-outcome`, {
           crm_status: crmStatus,
           next_contact_at: options.nextContactAt ? new Date(options.nextContactAt).toISOString() : null,
+          follow_up_reason: options.followUpReason || null,
+          follow_up_note: options.followUpNote || null,
           close_reason: options.closeReason || null,
           close_note: options.closeNote || null,
         }, session);
@@ -1229,6 +1236,8 @@ function App() {
       ...item,
       status: statusMap[crmStatus] ?? item.status,
       nextContactAt: options.nextContactAt || undefined,
+      followUpReason: options.followUpReason || undefined,
+      followUpNote: options.followUpNote || undefined,
       closeReason: options.closeReason || undefined,
       closeNote: options.closeNote || undefined,
     } : item));
@@ -1241,7 +1250,11 @@ function App() {
       return;
     }
     const status = selected?.trialResult === "no_show" || selected?.trialResult === "cancelled" ? "contacted" : "trial_completed";
-    void saveLeadOutcome(status, { nextContactAt: followUpAt });
+    void saveLeadOutcome(status, {
+      nextContactAt: followUpAt,
+      followUpReason,
+      followUpNote: followUpNote.trim() || undefined,
+    });
   };
 
   const closeLead = () => {
@@ -1290,8 +1303,39 @@ function App() {
     setLeadActionsOpen(false);
     setLeadStatusMenuOpen(false);
     setTrialMode(null);
+    setFollowUpAt(selected?.nextContactAt ? toLocalDateTimeInput(selected.nextContactAt) : "");
+    setFollowUpReason(selected?.followUpReason || "temporary");
+    setFollowUpNote(selected?.followUpNote || "");
     setPostTrialMode("thinking");
     revealLeadWorkflow("lead-followup-workflow");
+  };
+
+  const setFollowUpPreset = (months: number) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() + months);
+    date.setHours(10, 0, 0, 0);
+    setFollowUpAt(toLocalDateTimeInput(date.toISOString()));
+  };
+
+  const deleteSelectedLead = async () => {
+    if (!selected || leadDeleteSaving) return;
+    if (!window.confirm(`Видалити заявку «${selected.child}»? Це варто робити тільки для помилково створених заявок. Якщо вже є важлива історія, CRM заблокує видалення.`)) return;
+    setLeadDeleteSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiDelete(`/students/${selected.id}`, session);
+        await syncWorkspace(session);
+      } else {
+        setLeads((items) => items.filter((item) => item.id !== selected.id));
+      }
+      setSelectedId(null);
+      setLeadActionsOpen(false);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося видалити заявку.");
+    } finally {
+      setLeadDeleteSaving(false);
+    }
   };
 
   const beginLeadEnrollment = () => {
@@ -3995,15 +4039,14 @@ function App() {
             </div>
           </>}
 
+          {canDeleteStudents && <div className="recordDangerZone">
+            <span>Службова дія</span>
+            <button className="subtleDangerAction" type="button" disabled={studentDeleteSaving} onClick={deleteSelectedStudent}>{studentDeleteSaving ? "Видаляємо…" : "Видалити учня"}</button>
+          </div>}
           {apiEnabled ? <AuditHistory title="Історія учня" events={entityEvents} loading={historyLoading} /> : <div className="history">
             <h3>Історія учня</h3>
             <div><i></i><p><b>Пробне заняття</b><span>{selectedStudent.recommendedLevel ?? "Рівень не вказано"}</span></p></div>
             <div><i></i><p><b>Зараховано</b><span>{studentGroup(selectedStudent.id)?.name ?? "Групу не вказано"}</span></p></div>
-          </div>}
-          {canDeleteStudents && <div className="subtleDeleteRow">
-            <button className="subtleDangerAction" type="button" disabled={studentDeleteSaving} onClick={deleteSelectedStudent}>
-              {studentDeleteSaving ? "Видаляємо…" : "Видалити учня"}
-            </button>
           </div>}
         </aside>
       </div>}
@@ -4115,7 +4158,7 @@ function App() {
             <div><span className="leadCompletenessIcon">!</span><p><b>Картку варто доповнити</b><small>Не заповнено: {selectedMissingDetails.join(", ")}.</small></p></div>
             {canManageLeads && <button type="button" onClick={beginLeadEdit}>Доповнити</button>}
           </div>}
-          {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : action.label}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>; })()}
+          {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : "Повернутись пізніше"}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>{selected.followUpReason && <small>{({ temporary: "Тимчасово не можуть", finances: "Фінанси", schedule: "Завантаженість / графік", age: "Ще замала дитина", relocation: "Переїзд / відсутність", other: "Інше" } as Record<string,string>)[selected.followUpReason] ?? selected.followUpReason}</small>}{selected.followUpNote && <small>{selected.followUpNote}</small>}</div>; })()}
           {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
           <div className={"noteBox leadCommentBox" + (!selected.comment ? " empty" : "")}><span>Коментар</span><p>{selected.comment || "Коментар ще не додано."}</p>{canManageLeads && !leadEditing && <button type="button" className="inlineEditLink" onClick={beginLeadEdit}>{selected.comment ? "Редагувати" : "+ Додати"}</button>}</div>
           {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
@@ -4217,9 +4260,23 @@ function App() {
           </div>}
 
           {postTrialMode === "thinking" && <div id="lead-followup-workflow" className="workflowBox leadWorkflowBox">
-            <div className="workflowHead"><h3>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Передзвонити пізніше" : "Ще думають"}</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
-            <p className="softPreferenceHint">Залишаємо заявку в роботі й ставимо дату, коли треба зв’язатися з батьками знову.</p>
-            <DateTimeEditor label="Наступний контакт" value={followUpAt} onChange={setFollowUpAt} />
+            <div className="workflowHead"><h3>Повернутись пізніше</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
+            <p className="softPreferenceHint">Заявка лишається активною, але до вибраної дати не потрапляє в щоденні дії. У потрібний день CRM нагадає зв’язатися з батьками.</p>
+            <div className="followUpPresets">
+              <button className="search" type="button" onClick={() => setFollowUpPreset(1)}>+1 місяць</button>
+              <button className="search" type="button" onClick={() => setFollowUpPreset(3)}>+3 місяці</button>
+              <button className="search" type="button" onClick={() => setFollowUpPreset(6)}>+6 місяців</button>
+            </div>
+            <DateTimeEditor label="Нагадати" value={followUpAt} onChange={setFollowUpAt} />
+            <label>Причина<select value={followUpReason} onChange={(e) => setFollowUpReason(e.target.value)}>
+              <option value="temporary">Тимчасово не можуть</option>
+              <option value="finances">Фінанси</option>
+              <option value="schedule">Завантаженість / графік</option>
+              <option value="age">Ще замала дитина</option>
+              <option value="relocation">Переїзд / відсутність</option>
+              <option value="other">Інше</option>
+            </select></label>
+            <label>Коментар <small>(необов’язково)</small><textarea value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} maxLength={500} placeholder="Наприклад: повернуться після завершення семестру" /></label>
             <button className="primary full" disabled={!followUpAt} onClick={saveThinkingFollowUp}>Зберегти нагадування</button>
           </div>}
 
@@ -4265,11 +4322,12 @@ function App() {
                 {selected.status === "Пробне заплановано" && <><button className="mobileLeadSheetAction" onClick={beginTrialResult}><i>✓</i><span><b>Внести результат пробного</b><small>Був / не прийшов / скасували</small></span></button><button className="mobileLeadSheetAction" onClick={beginTrialScheduling}><i>↻</i><span><b>Перенести пробне</b><small>Змінити дату, час або локацію</small></span></button></>}
                 {selected.status === "Після пробного" && <><button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void saveLeadOutcome("waiting_for_group"); }}><i>✓</i><span><b>Готові навчатися</b><small>Перемістити в «Очікує групу»</small></span></button><button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>☎</i><span><b>Ще думають</b><small>Запланувати наступний контакт</small></span></button></>}
                 {selected.status === "Очікує групу" && <button className="mobileLeadSheetAction" onClick={beginLeadEnrollment}><i>→</i><span><b>Зарахувати учня</b><small>У групу або без групи</small></span></button>}
-                {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Пробне заплановано" && <button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>◷</i><span><b>Запланувати дзвінок</b><small>Поставити дату наступного контакту</small></span></button>}
+                {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Пробне заплановано" && <button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>◷</i><span><b>Повернутись пізніше</b><small>1 / 3 / 6 місяців або своя дата</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Очікує групу" && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void updateStatus(selected.id, "Очікує групу"); }}><i>◎</i><span><b>Очікує групу</b><small>Позначити готовність до підбору групи</small></span></button>}
                 <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); setLeadStatusMenuOpen(true); }}><i>⇄</i><span><b>Перемістити заявку</b><small>Змінити етап вручну</small></span></button>
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction danger" onClick={beginLeadClose}><i>×</i><span><b>Закрити заявку</b><small>Відмова, немає відповіді або неактуально</small></span></button>}
                 {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); reopenLead(); }}><i>↺</i><span><b>Повернути в роботу</b><small>Відновити активну заявку</small></span></button>}
+                {canDeleteStudents && <button className="mobileLeadSheetAction danger quietDelete" disabled={leadDeleteSaving} onClick={deleteSelectedLead}><i>⌫</i><span><b>{leadDeleteSaving ? "Видаляємо…" : "Видалити заявку"}</b><small>Тільки якщо створена помилково</small></span></button>}
               </div>
             </section>
           </div>}
@@ -4289,6 +4347,10 @@ function App() {
             </section>
           </div>}
 
+          {canDeleteStudents && <div className="recordDangerZone">
+            <span>Службова дія</span>
+            <button className="subtleDangerAction" type="button" disabled={leadDeleteSaving} onClick={deleteSelectedLead}>{leadDeleteSaving ? "Видаляємо…" : "Видалити заявку"}</button>
+          </div>}
           {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} /> : <div className="history">
             <h3>Історія</h3>
             <div><i></i><p><b>Заявка створена</b><span>Джерело: {leadSourceLabel(selected.source)}</span></p></div>
@@ -4741,6 +4803,8 @@ function applyWorkspace(
     teacherNotes: item.teacher_notes ?? undefined,
     trialResult: item.latest_trial_status ?? undefined,
     nextContactAt: item.next_contact_at ?? undefined,
+    followUpReason: item.follow_up_reason ?? undefined,
+    followUpNote: item.follow_up_note ?? undefined,
     closeReason: item.close_reason ?? undefined,
     closeNote: item.close_note ?? undefined,
   }));
