@@ -702,6 +702,7 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 .appNav button svg{flex:0 0 auto}
 .iconButton{display:grid!important;place-items:center!important;width:40px;min-width:40px;height:40px;padding:0!important;border-radius:10px!important}
 .headerThemeButton{display:none!important}
+@media(min-width:721px){.headerThemeButton{display:grid!important}}
 .headerPrimaryAction{display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .loginAction{display:flex!important;align-items:center;justify-content:center;gap:8px}
 .groupBackButton,.lessonBackButton{display:inline-flex!important;align-items:center;gap:6px}
