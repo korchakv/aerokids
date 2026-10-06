@@ -2185,3 +2185,48 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
     gap:0;
   }
 }
+
+
+/* Global save confirmation */
+.saveToast{
+  position:fixed;
+  right:22px;
+  bottom:22px;
+  z-index:240;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:42px;
+  padding:9px 13px;
+  border:1px solid var(--ak-border);
+  border-radius:12px;
+  background:var(--ak-bg-glass);
+  color:var(--ak-text);
+  box-shadow:0 12px 34px rgba(0,0,0,.16);
+  backdrop-filter:blur(12px);
+  animation:saveToastIn .18s ease-out;
+}
+.saveToast span{
+  display:grid;
+  place-items:center;
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  background:var(--ak-accent-strong);
+  color:#fff;
+  font-size:12px;
+  font-weight:900;
+}
+.saveToast b{
+  font-size:12px;
+}
+@keyframes saveToastIn{
+  from{opacity:0;transform:translateY(7px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@media(max-width:650px){
+  .saveToast{
+    right:14px;
+    bottom:14px;
+  }
+}
