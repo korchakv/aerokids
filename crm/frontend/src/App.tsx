@@ -3111,7 +3111,7 @@ function App() {
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => { setShowLocationForm(false); if (locationReturnToGroup) { setLocationReturnToGroup(false); setShowGroupForm(true); } }}>×</button>
           <p className="eyebrow">Мережа</p><h2>Нова локація</h2>
-          {locationReturnToGroup && <p className="modalIntro">Спочатку створіть локацію. Після збереження повернемо вас до створення групи й виберемо її автоматично.</p>}
+          {locationReturnToGroup && <p className="modalIntro">Після збереження повернемо вас до створення групи й виберемо нову локацію автоматично.</p>}
           <label>Назва<input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="AeroKids Центр" /></label>
           <label>Адреса<input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="Івано-Франківськ" /></label>
           <button className="primary full" disabled={!locationName.trim()} onClick={createLocationDemo}>Створити локацію</button>
@@ -3236,7 +3236,7 @@ function App() {
           <p className="eyebrow">Працівник</p>
           <div className="studentHero"><span>{selectedStaff.fullName[0]}</span><div><h2>{selectedStaff.fullName}</h2><p>{selectedStaff.role}{selectedStaff.canTeach ? " · Викладає" : ""}</p></div></div>
           <div className="contactCard"><span>Контакти</span><b>{selectedStaff.email || "Email не вказано"}</b><a href={"tel:" + selectedStaff.phone.replace(/\s/g,"")}>{selectedStaff.phone || "Телефон не вказано"}</a></div>
-          <div className="studentSection"><h3>Обов’язки</h3><label className="toggleRow responsibilityToggle"><input type="checkbox" checked={selectedStaff.canTeach} onChange={async (e) => {
+          <div className="studentSection"><h3>Обов’язки</h3><label className="toggleRow responsibilityToggle"><input type="checkbox" checked={selectedStaff.canTeach || selectedStaff.role === "Викладач"} disabled={selectedStaff.role === "Викладач"} onChange={async (e) => {
             const next = e.target.checked;
             if (apiEnabled && session) {
               try {
@@ -3296,7 +3296,7 @@ function App() {
           <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.filter((plan) => plan.price > 0).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {money(plan.price)}</option>)}</select></label>
           <label>Оплатити до<input type="date" value={paymentDueDate} min={localDateInput(new Date())} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
           <label className="toggleRow"><input type="checkbox" checked={paymentAutoRenew} onChange={(e) => setPaymentAutoRenew(e.target.checked)} /><span><b>Автопродовження</b><small>Наступне нарахування створиться автоматично перед завершенням цього періоду.</small></span></label>
-          {activeStudents.length === 0 && <div className="formNotice">Спочатку зарахуйте хоча б одного учня до групи.</div>}
+          {activeStudents.length === 0 && <div className="formNotice">Спочатку зарахуйте хоча б одного учня.</div>}
           {!plans.some((plan) => plan.price > 0) && <div className="formNotice">Створіть тариф із ціною, щоб зробити нарахування.</div>}
           <button className="primary full" disabled={paymentSaving || !paymentStudentId || !paymentPlanId || !plans.some((plan) => plan.id === paymentPlanId && plan.price > 0)} onClick={createPayment}>{paymentSaving ? "Створюємо…" : "Створити нарахування"}</button>
         </div>
