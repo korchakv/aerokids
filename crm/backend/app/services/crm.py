@@ -533,6 +533,10 @@ def delete_group(
     for assignment in assignments:
         db.delete(assignment)
 
+    # Flush dependent rows first because these models do not declare ORM relationships
+    # that would otherwise order the DELETE statements for PostgreSQL.
+    db.flush()
+
     record_audit(
         db,
         org_id,
