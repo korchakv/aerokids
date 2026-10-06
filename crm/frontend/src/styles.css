@@ -2520,3 +2520,67 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
     width:calc(100vw - 20px);
   }
 }
+
+
+/* Accessible proportional UI scaling */
+html{
+  --ak-ui-scale:1;
+}
+body{
+  zoom:var(--ak-ui-scale);
+}
+.uiScaleControl{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) 42px;
+  align-items:center;
+  gap:6px;
+  width:100%;
+  padding:6px;
+  border:1px solid var(--ak-border);
+  border-radius:11px;
+  background:var(--ak-surface-2);
+}
+.uiScaleControl>button{
+  min-height:36px;
+  padding:0 8px;
+  border:1px solid transparent;
+  border-radius:8px;
+  background:var(--ak-surface);
+  color:var(--ak-text);
+  font:inherit;
+  font-size:12px;
+  font-weight:900;
+  cursor:pointer;
+}
+.uiScaleControl>button:hover:not(:disabled){
+  border-color:var(--ak-border);
+  color:var(--ak-accent-text);
+}
+.uiScaleControl>button:disabled{
+  opacity:.35;
+  cursor:default;
+}
+.uiScaleControl>span{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  min-width:0;
+}
+.uiScaleControl b{
+  font-size:11px;
+}
+.uiScaleControl small{
+  color:var(--ak-muted);
+  font-size:10px;
+}
+.mobileScaleButton{
+  font-size:12px!important;
+  font-weight:900!important;
+  letter-spacing:-.02em;
+}
+@media(max-width:720px){
+  .uiScaleControl{
+    display:none;
+  }
+}
