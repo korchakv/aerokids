@@ -1961,12 +1961,14 @@ def payment_financials(db: Session, org_id: UUID, payment: Payment) -> dict:
 
     net_paid = max(0, paid_minor - refunded_minor)
     balance = max(0, adjusted_amount - net_paid)
+    credit = max(0, net_paid - adjusted_amount)
     return {
         "adjusted_amount_minor": adjusted_amount,
         "paid_minor": paid_minor,
         "refunded_minor": refunded_minor,
         "net_paid_minor": net_paid,
         "balance_minor": balance,
+        "credit_minor": credit,
         "transactions": transactions,
     }
 
@@ -1984,6 +1986,7 @@ def _sync_payment_state(db: Session, org_id: UUID, payment: Payment) -> dict:
     payment.paid_minor = finance["paid_minor"]
     payment.refunded_minor = finance["refunded_minor"]
     payment.balance_minor = finance["balance_minor"]
+    payment.credit_minor = finance["credit_minor"]
     return finance
 
 
@@ -1993,6 +1996,7 @@ def _attach_payment_financials(db: Session, org_id: UUID, payment: Payment) -> P
     payment.paid_minor = finance["paid_minor"]
     payment.refunded_minor = finance["refunded_minor"]
     payment.balance_minor = finance["balance_minor"]
+    payment.credit_minor = finance["credit_minor"]
     return payment
 
 
