@@ -574,6 +574,61 @@ def test_student_delete_is_blocked_after_enrollment(client):
     assert "архів" in deleted.json()["detail"].lower()
 
 
+def test_lead_can_be_deferred_with_reason_and_note(client):
+    org = create_org(client, "Deferred Lead", "deferred-lead")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post(
+        "/students",
+        headers=headers,
+        json={"first_name": "Марко", "age_at_inquiry": 10},
+    ).json()
+
+    response = client.patch(
+        f"/students/{student['id']}/lead-outcome",
+        headers=headers,
+        json={
+            "crm_status": "contacted",
+            "next_contact_at": "2027-04-06T10:00:00+03:00",
+            "follow_up_reason": "temporary",
+            "follow_up_note": "Повернутись після семестру",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["follow_up_reason"] == "temporary"
+    assert response.json()["follow_up_note"] == "Повернутись після семестру"
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    item = next(row for row in leads.json() if row["student_id"] == student["id"])
+    assert item["follow_up_reason"] == "temporary"
+    assert item["follow_up_note"] == "Повернутись після семестру"
+    assert item["next_contact_at"].startswith("2027-04-06T")
+
+
+def test_deferred_lead_without_history_can_still_be_deleted(client):
+    org = create_org(client, "Delete Deferred Lead", "delete-deferred-lead")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post(
+        "/students",
+        headers=headers,
+        json={"first_name": "Тестова", "age_at_inquiry": 9},
+    ).json()
+
+    deferred = client.patch(
+        f"/students/{student['id']}/lead-outcome",
+        headers=headers,
+        json={
+            "crm_status": "contacted",
+            "next_contact_at": "2027-01-06T10:00:00+02:00",
+            "follow_up_reason": "schedule",
+        },
+    )
+    assert deferred.status_code == 200, deferred.text
+
+    deleted = client.delete(f"/students/{student['id']}", headers=headers)
+    assert deleted.status_code == 204, deleted.text
+
+
 def test_student_profile_and_transfer(client):
     org = create_org(client, "AeroKiDS", "aerokids-students")
     headers = {"X-Organization-Id": org["id"]}
