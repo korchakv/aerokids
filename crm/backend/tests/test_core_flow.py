@@ -534,6 +534,46 @@ def test_group_formation_rejects_cross_tenant_student(client):
     assert response.status_code == 404
 
 
+def test_student_without_history_can_be_deleted(client):
+    org = create_org(client, "Delete Student", "delete-student")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post(
+        "/students",
+        headers=headers,
+        json={"first_name": "Помилковий", "age_at_inquiry": 10},
+    )
+    assert student.status_code == 201, student.text
+    student_id = student.json()["id"]
+
+    deleted = client.delete(f"/students/{student_id}", headers=headers)
+    assert deleted.status_code == 204, deleted.text
+
+    students = client.get("/students", headers=headers)
+    assert students.status_code == 200, students.text
+    assert all(item["id"] != student_id for item in students.json())
+
+
+def test_student_delete_is_blocked_after_enrollment(client):
+    org = create_org(client, "Protected Student Delete", "protected-student-delete")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Історія"}).json()
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "History Group", "capacity": 8, "student_ids": [student["id"]]},
+    )
+    assert formed.status_code == 201, formed.text
+
+    deleted = client.delete(f"/students/{student['id']}", headers=headers)
+    assert deleted.status_code == 409, deleted.text
+    assert "архів" in deleted.json()["detail"].lower()
+
+
 def test_student_profile_and_transfer(client):
     org = create_org(client, "AeroKiDS", "aerokids-students")
     headers = {"X-Organization-Id": org["id"]}

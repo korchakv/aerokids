@@ -498,6 +498,7 @@ function App() {
   const [locationAddress, setLocationAddress] = useState("");
   const [selectedId, setSelectedId] = useState<EntityId | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<EntityId | null>(null);
+  const [studentDeleteSaving, setStudentDeleteSaving] = useState(false);
   const [studentStates, setStudentStates] = useState<Record<EntityId, "Активний" | "Пауза" | "Архів">>({});
   const [transferGroupId, setTransferGroupId] = useState<EntityId | null>(null);
   const [trialMode, setTrialMode] = useState<"schedule" | "complete" | null>(null);
@@ -1537,6 +1538,28 @@ function App() {
       }
     }
     setStudentStates((states) => ({ ...states, [id]: state }));
+  };
+
+  const deleteSelectedStudent = async () => {
+    if (!selectedStudent || studentDeleteSaving) return;
+    if (!window.confirm(`Видалити учня «${selectedStudent.child}»? Якщо вже є історія навчання або оплат, CRM не дозволить видалення.`)) return;
+
+    setStudentDeleteSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiDelete(`/students/${selectedStudent.id}`, session);
+        await syncWorkspace(session);
+      } else {
+        setLeads((items) => items.filter((item) => item.id !== selectedStudent.id));
+        setGroups((items) => items.map((group) => ({ ...group, members: group.members.filter((id) => id !== selectedStudent.id) })));
+      }
+      setSelectedStudentId(null);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося видалити учня.");
+    } finally {
+      setStudentDeleteSaving(false);
+    }
   };
 
   const attendanceDay = addLocalDays(new Date(), attendanceDayOffset);
@@ -2751,6 +2774,7 @@ function App() {
   const canManageRecurringSchedule = !apiEnabled || fullAccessRole;
   const canManageLeads = !apiEnabled || fullAccessRole;
   const canManageStudents = !apiEnabled || fullAccessRole;
+  const canDeleteStudents = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
   const canManageStaff = !apiEnabled || fullAccessRole;
   const canEditGroups = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
@@ -3975,6 +3999,11 @@ function App() {
             <h3>Історія учня</h3>
             <div><i></i><p><b>Пробне заняття</b><span>{selectedStudent.recommendedLevel ?? "Рівень не вказано"}</span></p></div>
             <div><i></i><p><b>Зараховано</b><span>{studentGroup(selectedStudent.id)?.name ?? "Групу не вказано"}</span></p></div>
+          </div>}
+          {canDeleteStudents && <div className="subtleDeleteRow">
+            <button className="subtleDangerAction" type="button" disabled={studentDeleteSaving} onClick={deleteSelectedStudent}>
+              {studentDeleteSaving ? "Видаляємо…" : "Видалити учня"}
+            </button>
           </div>}
         </aside>
       </div>}

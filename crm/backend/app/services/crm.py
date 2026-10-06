@@ -328,6 +328,87 @@ def list_students(db: Session, org_id: UUID) -> list[Student]:
     return list(db.scalars(select(Student).where(Student.organization_id == org_id).order_by(Student.created_at.desc())))
 
 
+def delete_student(
+    db: Session,
+    org_id: UUID,
+    student_id: UUID,
+    actor_user_id: UUID | None = None,
+) -> None:
+    student = scoped_get(db, Student, org_id, student_id)
+
+    enrollment = db.scalar(select(Enrollment.id).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.student_id == student.id,
+    ).limit(1))
+    if enrollment is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Учень уже був зарахований до групи. Щоб не втратити історію навчання, видалити його не можна — використайте «Архів».",
+        )
+
+    completed_trial = db.scalar(select(TrialLesson.id).where(
+        TrialLesson.organization_id == org_id,
+        TrialLesson.student_id == student.id,
+        TrialLesson.status == TrialStatus.COMPLETED,
+    ).limit(1))
+    if completed_trial is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="У цього учня вже є завершене пробне заняття. Щоб не втратити історію, видалити його не можна — використайте «Архів».",
+        )
+
+    protected_history_checks = (
+        (Attendance, "Є відмітки відвідування."),
+        (StudentSubscription, "Є абонемент."),
+        (SubscriptionUsage, "Є списання занять з абонемента."),
+        (MakeupCredit, "Є відпрацювання."),
+        (Payment, "Є фінансова історія."),
+        (PaymentTransaction, "Є фінансові операції."),
+        (SubscriptionPause, "Є історія пауз абонемента."),
+        (PaymentReminder, "Є історія нагадувань про оплату."),
+    )
+    for model, reason in protected_history_checks:
+        history = db.scalar(select(model.id).where(
+            model.organization_id == org_id,
+            model.student_id == student.id,
+        ).limit(1))
+        if history is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{reason} Щоб не втратити історію учня, видалення заблоковано — використайте «Архів».",
+            )
+
+    # Draft/pre-enrollment data can be safely cleaned up for an accidentally created student.
+    db.execute(delete(StudentAvailability).where(
+        StudentAvailability.organization_id == org_id,
+        StudentAvailability.student_id == student.id,
+    ))
+    db.execute(delete(StudentContact).where(
+        StudentContact.organization_id == org_id,
+        StudentContact.student_id == student.id,
+    ))
+    db.execute(delete(TrialLesson).where(
+        TrialLesson.organization_id == org_id,
+        TrialLesson.student_id == student.id,
+    ))
+    db.flush()
+
+    record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        "student.deleted",
+        {
+            "name": " ".join(part for part in (student.first_name, student.last_name) if part),
+            "reason": "manual_delete_before_history",
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.delete(student)
+    db.commit()
+
+
 def attach_contact(db: Session, org_id: UUID, student_id: UUID, contact_id: UUID, relation: str | None, is_primary: bool) -> StudentContact:
     scoped_get(db, Student, org_id, student_id)
     scoped_get(db, Contact, org_id, contact_id)
