@@ -599,6 +599,7 @@ function App() {
   }, [session?.accessToken, session?.organizationId]);
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
+  const selectedMissingDetails = selected ? leadMissingDetails(selected) : [];
   const selectedStudent = leads.find((lead) => lead.id === selectedStudentId) ?? null;
   const activeStudents = leads.filter((lead) => lead.status === "Зарахований");
   const activeLocations = useMemo(() => locations.filter((location) => location.isActive), [locations]);
@@ -795,9 +796,9 @@ function App() {
 
   const createManualLead = async () => {
     const childNameError = personNameError(leadChildName, "Ім’я дитини");
-    const childLastNameError = personNameError(leadChildLastName, "Прізвище дитини");
+    const childLastNameError = leadChildLastName.trim() ? personNameError(leadChildLastName, "Прізвище дитини") : "";
     const childPhoneError = uaPhoneError(leadChildPhone, false);
-    const contactNameError = fullNameError(leadContactName, "Відповідальна особа");
+    const contactNameError = personNameError(leadContactName, "Відповідальна особа");
     const phoneError = uaPhoneError(leadPhone);
     if (childNameError || childLastNameError || childPhoneError || contactNameError || phoneError) {
       setWorkspaceError(childNameError || childLastNameError || childPhoneError || contactNameError || phoneError);
@@ -3352,7 +3353,7 @@ function App() {
             <label>Вік<input type="number" min={3} max={25} value={leadAge} onChange={(e) => setLeadAge(Number(e.target.value))} /></label>
             <label>Телефон дитини <small>(необов’язково)</small><input type="tel" inputMode="tel" maxLength={19} className={leadChildPhone && uaPhoneError(leadChildPhone, false) ? "inputInvalid" : ""} value={leadChildPhone} onChange={(e) => setLeadChildPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadChildPhone)) setLeadChildPhone(formatUaPhone(leadChildPhone)); void checkManualLeadDuplicates(); }} placeholder="+380 67 123 45 67" />{leadChildPhone && uaPhoneError(leadChildPhone, false) && <small className="fieldError">{uaPhoneError(leadChildPhone, false)}</small>}</label>
           </div>
-          <label>Ім’я та прізвище відповідального *<input className={leadContactName && fullNameError(leadContactName, "Відповідальна особа") ? "inputInvalid" : ""} value={leadContactName} maxLength={160} autoComplete="name" onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана Петренко" />{leadContactName && fullNameError(leadContactName, "Відповідальна особа") && <small className="fieldError">{fullNameError(leadContactName, "Відповідальна особа")}</small>}</label>
+          <label>Ім’я відповідальної особи * <small>(прізвище можна дописати пізніше)</small><input className={leadContactName && personNameError(leadContactName, "Відповідальна особа") ? "inputInvalid" : ""} value={leadContactName} maxLength={160} autoComplete="name" onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана або Оксана Петренко" />{leadContactName && personNameError(leadContactName, "Відповідальна особа") && <small className="fieldError">{personNameError(leadContactName, "Відповідальна особа")}</small>}</label>
           <label>Телефон відповідального *<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={leadPhone && uaPhoneError(leadPhone) ? "inputInvalid" : ""} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadPhone)) setLeadPhone(formatUaPhone(leadPhone)); void checkManualLeadDuplicates(); }} placeholder="+380 67 123 45 67" />{leadPhone && uaPhoneError(leadPhone) && <small className="fieldError">{uaPhoneError(leadPhone)}</small>}</label>
           {leadDuplicateChecking && <div className="duplicateCheck pending"><span className="syncPulse" />Перевіряємо номер у CRM…</div>}
           {!leadDuplicateChecking && leadDuplicateMatches.length > 0 && <div className={"duplicateCheck " + (leadDuplicateMatches.some((item) => item.likely_same_student) ? "blocked" : "warning")}>
@@ -3371,7 +3372,7 @@ function App() {
             <option value="walk-in">Зайшли особисто</option>
           </select></label>
           <label>Коментар<textarea value={leadComment} onChange={(e) => setLeadComment(e.target.value)} placeholder="Що цікавить, бажаний час, примітки…" /></label>
-          <button className="primary full" disabled={leadDuplicateChecking || leadDuplicateMatches.some((item) => item.likely_same_student) || Boolean(personNameError(leadChildName, "Ім’я дитини") || personNameError(leadChildLastName, "Прізвище дитини") || uaPhoneError(leadChildPhone, false) || fullNameError(leadContactName, "Відповідальна особа") || uaPhoneError(leadPhone))} onClick={createManualLead}>{leadDuplicateChecking ? "Перевіряємо номер…" : leadDuplicateMatches.some((item) => item.likely_same_student) ? "Перевірте існуючу картку" : "Створити заявку"}</button>
+          <button className="primary full" disabled={leadDuplicateChecking || leadDuplicateMatches.some((item) => item.likely_same_student) || Boolean(personNameError(leadChildName, "Ім’я дитини") || (leadChildLastName.trim() ? personNameError(leadChildLastName, "Прізвище дитини") : "") || uaPhoneError(leadChildPhone, false) || personNameError(leadContactName, "Відповідальна особа") || uaPhoneError(leadPhone))} onClick={createManualLead}>{leadDuplicateChecking ? "Перевіряємо номер…" : leadDuplicateMatches.some((item) => item.likely_same_student) ? "Перевірте існуючу картку" : "Створити заявку"}</button>
         </div>
       </div>}
 
@@ -3800,6 +3801,10 @@ function App() {
                 </label>}
           </div>
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
+          {selectedMissingDetails.length > 0 && <div className="leadCompletenessNotice">
+            <div><span className="leadCompletenessIcon">!</span><p><b>Картку варто доповнити</b><small>Не заповнено: {selectedMissingDetails.join(", ")}.</small></p></div>
+            {canManageLeads && <button type="button" onClick={beginLeadEdit}>Доповнити</button>}
+          </div>}
           {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : action.label}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>; })()}
           {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
           <div className={"noteBox leadCommentBox" + (!selected.comment ? " empty" : "")}><span>Коментар</span><p>{selected.comment || "Коментар ще не додано."}</p>{canManageLeads && !leadEditing && <button type="button" className="inlineEditLink" onClick={beginLeadEdit}>{selected.comment ? "Редагувати" : "+ Додати"}</button>}</div>
@@ -4050,6 +4055,7 @@ function LeadKanban({
       {items.length === 0 && <div className="kanbanEmpty">Перетягніть сюди заявку</div>}
       {items.map((lead) => {
         const urgency = leadUrgency(lead);
+        const missingDetails = leadMissingDetails(lead);
         return <article
           key={lead.id}
           draggable={movingId !== lead.id}
@@ -4071,6 +4077,7 @@ function LeadKanban({
             <span className="sourceBadge">{leadSourceLabel(lead.source)}</span>
             {lead.preferredLocationName && <span className="locationBadge">{lead.preferredLocationName}</span>}
             {lead.recommendedLevel && <span className="levelBadge">{lead.recommendedLevel}</span>}
+            {missingDetails.length > 0 && <span className="incompleteDataBadge" title={"Не заповнено: " + missingDetails.join(", ")}>! Доповнити дані</span>}
           </div>
           {(() => { const action = leadActionMeta(lead); return <div className={"kanbanNextAction action-" + action.type + " " + urgency}><i>{urgency === "overdue" ? "!" : action.icon}</i><span><b>{urgency === "overdue" ? "Прострочено" : action.label}</b><small>{leadNextAction(lead)}</small></span></div>; })()}
           {(lead.parent || lead.phone) && <div className="kanbanContact">
@@ -4347,6 +4354,18 @@ function canonicalLeadSource(source: string | null | undefined) {
     "google maps": "maps",
   };
   return aliases[value] ?? value;
+}
+
+function leadMissingDetails(lead: Lead): string[] {
+  const missing: string[] = [];
+  if (!lead.lastName?.trim()) missing.push("прізвище дитини");
+  const contactName = cleanSpaces(lead.parent ?? "");
+  if (!contactName || contactName === "Контакт не вказано") {
+    missing.push("ім’я відповідальної особи");
+  } else if (contactName.split(" ").filter(Boolean).length < 2) {
+    missing.push("прізвище відповідальної особи");
+  }
+  return missing;
 }
 
 function leadSourceLabel(source: string | null | undefined) {
