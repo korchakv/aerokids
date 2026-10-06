@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentReminder, PaymentStatus, PaymentTransaction, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPause, SubscriptionPlan, SubscriptionStatus, SubscriptionUsage, MakeupCredit, TrialLesson, TrialStatus, User
-from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, GroupUpdate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
+from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, GroupUpdate, IntakeCreate, LeadDetailsUpdate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 from app.services.schedule_matching import enrollment_schedule_note, evaluate_schedule_match
 
 def record_audit(
@@ -837,6 +837,91 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
     db.refresh(student)
     db.refresh(contact)
     return student, contact
+
+
+def update_lead_details(
+    db: Session,
+    org_id: UUID,
+    student_id: UUID,
+    data: LeadDetailsUpdate,
+    actor_user_id: UUID | None = None,
+) -> Student:
+    student = scoped_get(db, Student, org_id, student_id)
+
+    primary_link = db.scalar(
+        select(StudentContact)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == student.id,
+        )
+        .order_by(StudentContact.is_primary.desc(), StudentContact.id)
+    )
+    contact = scoped_get(db, Contact, org_id, primary_link.contact_id) if primary_link is not None else None
+
+    before = {
+        "child_name": " ".join(part for part in [student.first_name, student.last_name] if part),
+        "child_phone": student.phone,
+        "child_age": student.age_at_inquiry,
+        "contact_name": contact.full_name if contact else None,
+        "contact_phone": contact.phone if contact else None,
+        "source": student.source,
+        "comment": student.notes,
+    }
+
+    student.first_name = data.child_first_name
+    student.last_name = data.child_last_name
+    student.phone = data.child_phone
+    student.age_at_inquiry = data.child_age
+    student.source = data.source
+    student.notes = data.comment
+
+    if contact is None:
+        contact = Contact(
+            organization_id=org_id,
+            full_name=data.contact_name,
+            phone=data.phone,
+        )
+        db.add(contact)
+        db.flush()
+        primary_link = StudentContact(
+            organization_id=org_id,
+            student_id=student.id,
+            contact_id=contact.id,
+            relation="parent_or_guardian",
+            is_primary=True,
+        )
+        db.add(primary_link)
+    else:
+        contact.full_name = data.contact_name
+        contact.phone = data.phone
+
+    after = {
+        "child_name": " ".join(part for part in [student.first_name, student.last_name] if part),
+        "child_phone": student.phone,
+        "child_age": student.age_at_inquiry,
+        "contact_name": contact.full_name,
+        "contact_phone": contact.phone,
+        "source": student.source,
+        "comment": student.notes,
+    }
+    changed_fields = [key for key, value in after.items() if before.get(key) != value]
+
+    record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        "lead.details_updated",
+        {
+            "changed_fields": changed_fields,
+            "source": student.source,
+            "comment_changed": before["comment"] != after["comment"],
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(student)
+    return student
 
 
 def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, status, actor_user_id: UUID | None = None) -> Student:
