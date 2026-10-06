@@ -253,6 +253,17 @@ function weekdayLong(value: string) {
   return text ? text.charAt(0).toLocaleUpperCase("uk-UA") + text.slice(1) : "";
 }
 
+function tariffFieldsLabel(fields: string[]) {
+  const labels: Record<string, string> = {
+    name: "назва",
+    price_minor: "ціна",
+    period_days: "дні",
+    lessons_included: "відвідування",
+    is_active: "статус",
+  };
+  return fields.map((field) => labels[field] ?? field).join(", ");
+}
+
 function attendanceStatusLabel(value: AttendanceValue | undefined) {
   const labels: Record<AttendanceValue, string> = {
     present: "Був",
@@ -2033,9 +2044,9 @@ function App() {
     const nextStudentId = activeStudents.some((student) => student.id === paymentStudentId)
       ? paymentStudentId
       : (activeStudents[0]?.id ?? "");
-    const nextPlanId = plans.some((plan) => plan.id === paymentPlanId && plan.price > 0)
+    const nextPlanId = plans.some((plan) => plan.id === paymentPlanId && plan.isActive && plan.price > 0)
       ? paymentPlanId
-      : (plans.find((plan) => plan.price > 0)?.id ?? "");
+      : (plans.find((plan) => plan.isActive && plan.price > 0)?.id ?? "");
 
     setPaymentStudentId(nextStudentId);
     setPaymentPlanId(nextPlanId);
@@ -2100,8 +2111,8 @@ function App() {
       return;
     }
     const plan = plans.find((item) => item.id === paymentPlanId);
-    if (!plan || plan.price <= 0) {
-      setWorkspaceError("Для нарахування оберіть абонемент із заданою ціною.");
+    if (!plan || !plan.isActive || plan.price <= 0) {
+      setWorkspaceError("Для нарахування оберіть активний тариф із заданою ціною.");
       return;
     }
     if (apiEnabled && session) {
