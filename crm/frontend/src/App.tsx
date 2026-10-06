@@ -979,6 +979,17 @@ function App() {
       setLeadProcedureTarget("waiting");
       return;
     }
+    if (target === "deferred") {
+      openLead(lead.id);
+      const date = new Date();
+      date.setMonth(date.getMonth() + 6);
+      date.setHours(10, 0, 0, 0);
+      setDeferAt(toLocalDateTimeInput(date.toISOString()));
+      setDeferReason("later");
+      setDeferNote("");
+      window.setTimeout(() => setPostTrialMode("defer"), 0);
+      return;
+    }
     if (target === "closed") {
       openLead(lead.id);
       setLeadProcedureTarget("closed");
