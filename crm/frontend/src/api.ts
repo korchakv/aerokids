@@ -92,7 +92,14 @@ export function changeOrganization(session: Session, organizationId: string): Se
 
 export function loadSession(): Session | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        sessionStorage.setItem(STORAGE_KEY, raw);
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
     return raw ? JSON.parse(raw) as Session : null;
   } catch {
     return null;
@@ -100,10 +107,12 @@ export function loadSession(): Session | null {
 }
 
 export function saveSession(session: Session) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  localStorage.removeItem(STORAGE_KEY);
 }
 
 export function clearSession() {
+  sessionStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(STORAGE_KEY);
 }
 
