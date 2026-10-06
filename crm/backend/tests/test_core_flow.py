@@ -1141,6 +1141,98 @@ def test_teacher_has_admin_level_operational_access(client):
     assert owner_invite.status_code == 403
 
 
+def test_admin_can_teach_when_responsibility_is_enabled(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKids",
+            "organization_slug": "admin-teaches",
+            "full_name": "Owner",
+            "email": "owner-admin-teaches@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    owner_headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    group = client.post(
+        "/groups/form",
+        headers=owner_headers,
+        json={"name": "FPV Admin Group", "capacity": 6, "location_id": None, "student_ids": [], "schedule_slots": []},
+    )
+    assert group.status_code == 201, group.text
+
+    invite = client.post(
+        "/organization-invitations",
+        headers=owner_headers,
+        json={"email": "teaching-admin@example.com", "role": "admin", "can_teach": True},
+    )
+    assert invite.status_code == 201, invite.text
+    assert invite.json()["can_teach"] is True
+
+    accepted = client.post(
+        "/auth/accept-invite",
+        json={
+            "invite_token": invite.json()["invite_token"],
+            "full_name": "Teaching Admin",
+            "password": "admin-secure-password",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    staff = client.get("/staff", headers=owner_headers)
+    assert staff.status_code == 200, staff.text
+    admin = next(item for item in staff.json() if item["email"] == "teaching-admin@example.com")
+    assert admin["role"] == "admin"
+    assert admin["can_teach"] is True
+
+    assigned = client.post(
+        f"/staff/{admin['id']}/groups",
+        headers=owner_headers,
+        json={"group_id": group.json()["group"]["id"], "is_primary": True},
+    )
+    assert assigned.status_code == 201, assigned.text
+
+
+def test_non_teaching_staff_cannot_be_assigned_as_teacher(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKids",
+            "organization_slug": "non-teaching-staff",
+            "full_name": "Owner",
+            "email": "owner-nonteaching@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    owner_headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+    group = client.post(
+        "/groups/form",
+        headers=owner_headers,
+        json={"name": "Manager Group", "capacity": 6, "location_id": None, "student_ids": [], "schedule_slots": []},
+    ).json()
+    manager = client.post(
+        "/staff",
+        headers=owner_headers,
+        json={"full_name": "Office Manager", "role": "manager", "can_teach": False},
+    )
+    assert manager.status_code == 201, manager.text
+    assert manager.json()["can_teach"] is False
+
+    denied = client.post(
+        f"/staff/{manager.json()['id']}/groups",
+        headers=owner_headers,
+        json={"group_id": group["group"]["id"], "is_primary": True},
+    )
+    assert denied.status_code == 409, denied.text
+
+
 def test_invitation_is_single_use(client):
     bootstrap = client.post(
         "/auth/bootstrap",
