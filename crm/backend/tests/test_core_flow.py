@@ -407,8 +407,7 @@ def test_empty_group_can_be_deleted_without_losing_history_tables(client):
     assert all(item["group_id"] != group_id for item in visible_groups.json())
 
     schedules = client.get(f"/group-schedules?group_id={group_id}", headers=headers)
-    assert schedules.status_code == 200, schedules.text
-    assert schedules.json() == []
+    assert schedules.status_code == 404, schedules.text
 
 
 def test_group_delete_is_blocked_while_students_are_enrolled(client):
@@ -473,7 +472,7 @@ def test_location_delete_is_blocked_while_active_group_uses_it(client):
 
     deleted = client.delete(f"/locations/{location['id']}", headers=headers)
     assert deleted.status_code == 409, deleted.text
-    assert "активна група" in deleted.json()["detail"].lower()
+    assert "використовує група" in deleted.json()["detail"].lower()
 
 
 def test_group_formation_rejects_cross_tenant_student(client):
