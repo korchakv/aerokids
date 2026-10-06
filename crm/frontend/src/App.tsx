@@ -3034,7 +3034,11 @@ function App() {
         </header>
 
         {apiEnabled && workspaceLoading && <div className="syncBanner syncing"><span className="syncPulse" />Оновлення даних…</div>}
-        {apiEnabled && workspaceError && <div className="syncBanner error">{workspaceError}</div>}
+        {apiEnabled && workspaceError && <div className="globalErrorToast" role="alert" aria-live="assertive">
+          <span className="globalErrorIcon">!</span>
+          <div><b>Не вдалося виконати дію</b><p>{workspaceError}</p></div>
+          <button type="button" aria-label="Закрити повідомлення" onClick={() => setWorkspaceError("")}>×</button>
+        </div>}
         {apiEnabled && workspaceLoaded && !workspaceLoading && !workspaceError && workspaceRefreshing && <div className="syncStatus refreshing"><span className="syncPulse" />Оновлення даних…</div>}
         {saveToastTick > 0 && <div className="saveToast" role="status" aria-live="polite"><span>✓</span><b>Збережено</b></div>}
 
@@ -3124,7 +3128,7 @@ function App() {
 
         {active === "Заявки" && <section className="panel leadsPage">
           <div className="panelHead leadsHead">
-            <div><p className="eyebrow">Воронка</p><h2>Заявки та пробні</h2></div>
+            <div className="leadsTitleBlock"><p className="eyebrow">Робота із заявками</p><h2>Від звернення до зарахування</h2><span>Перетягуйте картки між етапами. Для етапів із додатковими даними CRM одразу відкриє потрібну дію.</span></div>
             <div className="leadControls">
               <label className="leadSort">Джерело<select value={leadSourceFilter} onChange={(e) => setLeadSourceFilter(e.target.value)}>
                 <option value="all">Усі джерела</option>
@@ -3138,9 +3142,9 @@ function App() {
             </div>
           </div>
           <div className="kanbanSummary kanbanSummarySimple">
-            <div className="kanbanSummaryStat"><span>В роботі</span><strong>{leadActiveCount}</strong></div>
-            <div className="kanbanSummaryStat attention"><span>Потрібна дія</span><strong>{leadActionCount}</strong></div>
-            <span className="kanbanHint">Етапи вже видно в колонках. Зверху лишили тільки джерело та порядок карток усередині етапів.</span>
+            <div className="kanbanSummaryStat"><span>Активні заявки</span><strong>{leadActiveCount}</strong></div>
+            <div className="kanbanSummaryStat attention"><span>Потребують дії</span><strong>{leadActionCount}</strong></div>
+            <span className="kanbanHint">Картки впорядковуються всередині кожного етапу. Відкладені заявки з’являться знову у вибрану дату.</span>
           </div>
           <details className="mobileLeadTools">
             <summary><UiIcon name="settings" size={16} /><span>Фільтри</span>{(leadSourceFilter !== "all" || leadSort !== "priority") && <i>●</i>}</summary>
@@ -4573,7 +4577,19 @@ function LeadKanban({
 
   return <div className="kanbanBoard">
     <div className="leadKanban">{activeColumns.map((column) => renderColumn(column, leads.filter((lead) => leadKanbanColumn(lead) === column.id)))}</div>
-    <div className={"closedKanbanDock deferredKanbanDock " + (deferredExpanded ? "expanded " : "")}>
+    <div
+      className={"closedKanbanDock deferredKanbanDock " + (deferredExpanded ? "expanded " : "") + (overColumn === "deferred" ? "dragOver" : "")}
+      onDragOver={(event) => { event.preventDefault(); setOverColumn("deferred"); }}
+      onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const id = event.dataTransfer.getData("text/lead-id") || draggedId;
+        const lead = leads.find((item) => item.id === id);
+        setDraggedId(null);
+        setOverColumn(null);
+        if (lead) void onMove(lead, "deferred");
+      }}
+    >
       <button className="closedKanbanToggle" onClick={() => setDeferredExpanded((value) => !value)}>
         <span><i></i><b>{deferredColumn.title}</b><small>{deferredColumn.hint}</small></span>
         <span><strong>{deferredItems.length}</strong><em>{deferredExpanded ? "Згорнути ↑" : "Розгорнути ↓"}</em></span>
