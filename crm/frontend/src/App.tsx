@@ -2991,16 +2991,6 @@ function App() {
           setActive(item);
         }} className={active === item ? "active" : ""} key={item}><UiIcon name={navigationIcon(item)} size={17} /><span className="navLabel">{item}</span></button>)}</nav>
         <div className="asideFooter">
-          <button className="themeToggle asideThemeToggle" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}>
-            <UiIcon name="theme" size={18} />
-            <span>Тема</span>
-            <span className="themeState">{theme === "dark" ? "Темна" : "Світла"}</span>
-          </button>
-          <div className="uiScaleControl" aria-label="Масштаб інтерфейсу">
-            <button type="button" aria-label="Зменшити масштаб" title="Зменшити" disabled={uiScale === UI_SCALE_LEVELS[0]} onClick={() => changeUiScale(-1)}>A−</button>
-            <span><b>Текст</b><small>{Math.round(uiScale * 100)}%</small></span>
-            <button type="button" aria-label="Збільшити масштаб" title="Збільшити" disabled={uiScale === UI_SCALE_LEVELS[UI_SCALE_LEVELS.length - 1]} onClick={() => changeUiScale(1)}>A+</button>
-          </div>
           <small>crm.aerokids.space</small>
         </div>
       </aside>
@@ -3010,8 +3000,6 @@ function App() {
           <div className="headerTitleBar">
             <div><p className="eyebrow">{headerContext}</p><h1>{active}</h1></div>
             <div className="mobileTopIcons">
-              <button className="search iconButton mobileScaleButton" type="button" aria-label="Збільшити масштаб інтерфейсу" title={"Масштаб " + Math.round(uiScale * 100) + "%"} onClick={() => changeUiScale(uiScale === UI_SCALE_LEVELS[UI_SCALE_LEVELS.length - 1] ? -1 : 1)}>A+</button>
-              <button className="search iconButton mobileThemeButton" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} title={theme === "dark" ? "Світла тема" : "Темна тема"} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}><UiIcon name="theme" size={19} /></button>
               {session && <button className="search iconButton mobileLogoutButton" aria-label="Вийти" title="Вийти" onClick={() => { clearSession(); setSession(null); }}><UiIcon name="logout" size={19} /></button>}
             </div>
           </div>
@@ -3610,17 +3598,39 @@ function App() {
         </section>}
 
                 {active === "Налаштування" && <section className="settingsLayout">
-          <article className="panel settingsPanel">
-            <div className="panelHead"><div><p className="eyebrow">Організація</p><h2>Основні налаштування</h2></div></div>
-            <p className="settingsIntro">Ці значення належать конкретній школі або гуртку й не впливають на інші організації в CRM.</p>
-            <label>Назва організації<input value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} /></label>
-            <div className="formTwo">
-              <label>Часовий пояс<input value={organizationTimezone} onChange={(e) => setOrganizationTimezone(e.target.value)} placeholder="Europe/Kyiv" /></label>
-              <label>Валюта<input value={organizationCurrency} maxLength={3} onChange={(e) => setOrganizationCurrency(e.target.value.toUpperCase())} placeholder="UAH" /></label>
-            </div>
-            <label>Локаль<input value={organizationLocale} onChange={(e) => setOrganizationLocale(e.target.value)} placeholder="uk-UA" /></label>
-            <button className="primary" disabled={organizationSaving || !organizationName.trim()} onClick={saveOrganizationSettings}>{organizationSaving ? "Зберігаємо…" : "Зберегти налаштування"}</button>
-          </article>
+          <div className="settingsPrimaryColumn">
+            <article className="panel settingsPanel">
+              <div className="panelHead"><div><p className="eyebrow">Організація</p><h2>Основні налаштування</h2></div></div>
+              <p className="settingsIntro">Ці значення належать конкретній школі або гуртку й не впливають на інші організації в CRM.</p>
+              <label>Назва організації<input value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} /></label>
+              <div className="formTwo">
+                <label>Часовий пояс<input value={organizationTimezone} onChange={(e) => setOrganizationTimezone(e.target.value)} placeholder="Europe/Kyiv" /></label>
+                <label>Валюта<input value={organizationCurrency} maxLength={3} onChange={(e) => setOrganizationCurrency(e.target.value.toUpperCase())} placeholder="UAH" /></label>
+              </div>
+              <label>Локаль<input value={organizationLocale} onChange={(e) => setOrganizationLocale(e.target.value)} placeholder="uk-UA" /></label>
+              <button className="primary" disabled={organizationSaving || !organizationName.trim()} onClick={saveOrganizationSettings}>{organizationSaving ? "Зберігаємо…" : "Зберегти налаштування"}</button>
+            </article>
+
+            <article className="panel settingsPanel appearanceSettings">
+              <div className="panelHead"><div><p className="eyebrow">Інтерфейс</p><h2>Вигляд інтерфейсу</h2></div></div>
+              <p className="settingsIntro">Тема та масштаб зберігаються для цього браузера. Це зручно, якщо потрібно зробити CRM контрастнішою або збільшити всі елементи для кращої читабельності.</p>
+              <div className="appearanceSettingRow">
+                <div><b>Тема</b><small>Світла або темна схема</small></div>
+                <div className="appearanceThemeSwitch" role="group" aria-label="Тема інтерфейсу">
+                  <button type="button" className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>Світла</button>
+                  <button type="button" className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}>Темна</button>
+                </div>
+              </div>
+              <div className="appearanceSettingRow">
+                <div><b>Масштаб</b><small>Пропорційно збільшує текст, кнопки, поля та відступи</small></div>
+                <div className="uiScaleControl settingsScaleControl" aria-label="Масштаб інтерфейсу">
+                  <button type="button" aria-label="Зменшити масштаб" title="Зменшити" disabled={uiScale === UI_SCALE_LEVELS[0]} onClick={() => changeUiScale(-1)}>A−</button>
+                  <span><b>{Math.round(uiScale * 100)}%</b><small>масштаб</small></span>
+                  <button type="button" aria-label="Збільшити масштаб" title="Збільшити" disabled={uiScale === UI_SCALE_LEVELS[UI_SCALE_LEVELS.length - 1]} onClick={() => changeUiScale(1)}>A+</button>
+                </div>
+              </div>
+            </article>
+          </div>
           <aside className="panel settingsHelp">
             <p className="eyebrow">SaaS</p><h2>Налаштування tenant</h2>
             <p>Часовий пояс використовується для дат і розкладу, валюта — для фінансів, локаль — для форматування чисел та дат.</p>
