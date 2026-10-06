@@ -24,7 +24,7 @@ type AvailabilityWindowDraft = {
 
 type DraftScheduleSlot = { weekday: number; start_time: string; duration_minutes: number };
 
-type LeadKanbanColumnId = "new" | "contacted" | "trial" | "no_show" | "after_trial" | "waiting" | "closed";
+type LeadKanbanColumnId = "new" | "contacted" | "trial" | "no_show" | "after_trial" | "waiting" | "deferred" | "closed";
 
 const leadKanbanColumns: Array<{ id: LeadKanbanColumnId; title: string; hint: string }> = [
   { id: "new", title: "Нові", hint: "Перший контакт" },
@@ -33,6 +33,7 @@ const leadKanbanColumns: Array<{ id: LeadKanbanColumnId; title: string; hint: st
   { id: "no_show", title: "Не прийшов", hint: "Потрібна дія" },
   { id: "after_trial", title: "Після пробного", hint: "Очікуємо рішення" },
   { id: "waiting", title: "Очікує групу", hint: "Готовий до набору" },
+  { id: "deferred", title: "Повернутись пізніше", hint: "Нагадування на майбутнє" },
   { id: "closed", title: "Закриті", hint: "Відмова / неактуально" },
 ];
 
@@ -60,6 +61,9 @@ type Lead = {
   recommendedLevel?: string;
   teacherNotes?: string;
   nextContactAt?: string;
+  deferredUntil?: string;
+  deferredReason?: string;
+  deferredNote?: string;
   closeReason?: string;
   closeNote?: string;
 };
@@ -502,8 +506,11 @@ function App() {
   const [studentStates, setStudentStates] = useState<Record<EntityId, "Активний" | "Пауза" | "Архів">>({});
   const [transferGroupId, setTransferGroupId] = useState<EntityId | null>(null);
   const [trialMode, setTrialMode] = useState<"schedule" | "complete" | null>(null);
-  const [postTrialMode, setPostTrialMode] = useState<"thinking" | "close" | null>(null);
+  const [postTrialMode, setPostTrialMode] = useState<"thinking" | "defer" | "close" | null>(null);
   const [followUpAt, setFollowUpAt] = useState("");
+  const [deferAt, setDeferAt] = useState("");
+  const [deferReason, setDeferReason] = useState("later");
+  const [deferNote, setDeferNote] = useState("");
   const [closeKind, setCloseKind] = useState<"declined" | "no_response" | "not_relevant">("declined");
   const [closeReason, setCloseReason] = useState("schedule");
   const [closeNote, setCloseNote] = useState("");
@@ -759,6 +766,7 @@ function App() {
   }, [leads, leadSort, leadSourceFilter]);
 
   const leadActionCount = useMemo(() => leads.filter((lead) => {
+    if (leadIsDeferred(lead)) return false;
     if (["Відмовились", "Не відповідає", "Неактуально", "Зарахований"].includes(lead.status)) return false;
     if (lead.nextContactAt && dateValue(lead.nextContactAt) <= Date.now()) return true;
     if (lead.trialResult === "no_show" || lead.trialResult === "cancelled") return true;
@@ -767,7 +775,7 @@ function App() {
   }).length, [leads]);
 
   const leadActiveCount = useMemo(() => leads.filter((lead) =>
-    !["Відмовились", "Не відповідає", "Неактуально", "Зарахований"].includes(lead.status)
+    !leadIsDeferred(lead) && !["Відмовились", "Не відповідає", "Неактуально", "Зарахований"].includes(lead.status)
   ).length, [leads]);
 
   const visibleStudents = useMemo(() => activeStudents.filter((item) => {
@@ -969,6 +977,17 @@ function App() {
     if (target === "waiting") {
       openLead(lead.id);
       setLeadProcedureTarget("waiting");
+      return;
+    }
+    if (target === "deferred") {
+      openLead(lead.id);
+      const date = new Date();
+      date.setMonth(date.getMonth() + 6);
+      date.setHours(10, 0, 0, 0);
+      setDeferAt(toLocalDateTimeInput(date.toISOString()));
+      setDeferReason("later");
+      setDeferNote("");
+      window.setTimeout(() => setPostTrialMode("defer"), 0);
       return;
     }
     if (target === "closed") {
@@ -1244,6 +1263,57 @@ function App() {
     void saveLeadOutcome(status, { nextContactAt: followUpAt });
   };
 
+  const saveDeferredLead = async () => {
+    if (!selected || !deferAt) {
+      setWorkspaceError("Вкажіть дату, коли повернутися до заявки.");
+      return;
+    }
+    if (apiEnabled && session) {
+      try {
+        setWorkspaceError("");
+        await apiPatch(`/students/${selected.id}/defer`, {
+          deferred_until: new Date(deferAt).toISOString(),
+          reason: deferReason,
+          note: deferNote.trim() || null,
+        }, session);
+        await syncWorkspace(session);
+        setPostTrialMode(null);
+        return;
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося відкласти заявку.");
+        return;
+      }
+    }
+    setLeads((items) => items.map((item) => item.id === selected.id ? {
+      ...item,
+      deferredUntil: deferAt,
+      deferredReason: deferReason,
+      deferredNote: deferNote.trim() || undefined,
+      nextContactAt: deferAt,
+    } : item));
+    setPostTrialMode(null);
+  };
+
+  const resumeDeferredLead = async () => {
+    if (!selected) return;
+    if (apiEnabled && session) {
+      try {
+        await apiPatch(`/students/${selected.id}/defer`, { deferred_until: null, reason: null, note: null }, session);
+        await syncWorkspace(session);
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося повернути заявку в роботу.");
+      }
+      return;
+    }
+    setLeads((items) => items.map((item) => item.id === selected.id ? {
+      ...item,
+      deferredUntil: undefined,
+      deferredReason: undefined,
+      deferredNote: undefined,
+      nextContactAt: undefined,
+    } : item));
+  };
+
   const closeLead = () => {
     if (closeKind === "declined" && !closeReason) {
       setWorkspaceError("Оберіть причину відмови.");
@@ -1292,6 +1362,27 @@ function App() {
     setTrialMode(null);
     setPostTrialMode("thinking");
     revealLeadWorkflow("lead-followup-workflow");
+  };
+
+  const beginLeadDefer = () => {
+    setLeadActionsOpen(false);
+    setLeadStatusMenuOpen(false);
+    setTrialMode(null);
+    const date = new Date();
+    date.setMonth(date.getMonth() + 6);
+    date.setHours(10, 0, 0, 0);
+    setDeferAt(toLocalDateTimeInput(date.toISOString()));
+    setDeferReason("later");
+    setDeferNote("");
+    setPostTrialMode("defer");
+    revealLeadWorkflow("lead-defer-workflow");
+  };
+
+  const setDeferredMonths = (months: number) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() + months);
+    date.setHours(10, 0, 0, 0);
+    setDeferAt(toLocalDateTimeInput(date.toISOString()));
   };
 
   const beginLeadEnrollment = () => {
@@ -2811,6 +2902,7 @@ function App() {
     .sort((a, b) => dateValue(a.trialAt) - dateValue(b.trialAt));
   const dashboardLeadTasks = canSeeLeads ? leads
     .filter((lead) => {
+      if (leadIsDeferred(lead)) return false;
       if (["Відмовились", "Не відповідає", "Неактуально", "Зарахований"].includes(lead.status)) return false;
       if (lead.status === "Нова" || lead.status === "Після пробного") return true;
       if (lead.trialResult === "no_show" || lead.trialResult === "cancelled") return true;
@@ -4223,6 +4315,35 @@ function App() {
             <button className="primary full" disabled={!followUpAt} onClick={saveThinkingFollowUp}>Зберегти нагадування</button>
           </div>}
 
+          {postTrialMode === "defer" && <div id="lead-defer-workflow" className="workflowBox leadWorkflowBox deferWorkflowBox">
+            <div className="workflowHead"><h3>Повернутись пізніше</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
+            <p className="softPreferenceHint">Заявка сховається з основного канбану. У потрібний день вона автоматично повернеться в активні дії.</p>
+            <div className="deferQuickDates">
+              <button className="search" type="button" onClick={() => setDeferredMonths(1)}>Через 1 місяць</button>
+              <button className="search" type="button" onClick={() => setDeferredMonths(3)}>Через 3 місяці</button>
+              <button className="search" type="button" onClick={() => setDeferredMonths(6)}>Через 6 місяців</button>
+            </div>
+            <DateTimeEditor label="Повернутись до заявки" value={deferAt} onChange={setDeferAt} />
+            <label>Причина<select value={deferReason} onChange={(e) => setDeferReason(e.target.value)}>
+              <option value="later">Зараз не можуть, хочуть пізніше</option>
+              <option value="age">Ще замала дитина</option>
+              <option value="schedule">Зараз не підходить графік</option>
+              <option value="finance">Фінанси / тимчасово не готові</option>
+              <option value="school">Навчання / завантаженість</option>
+              <option value="move">Переїзд / тимчасово не в місті</option>
+              <option value="other">Інше</option>
+            </select></label>
+            <label>Коментар<textarea value={deferNote} onChange={(e) => setDeferNote(e.target.value)} placeholder="Наприклад: написати після зимових канікул" /></label>
+            <button className="primary full" disabled={!deferAt || !deferReason} onClick={saveDeferredLead}>Відкласти заявку</button>
+          </div>}
+
+          {leadIsDeferred(selected) && <div className="deferredLeadNotice">
+            <span>Повернутись пізніше</span>
+            <b>{selected.deferredUntil ? new Date(selected.deferredUntil).toLocaleString("uk-UA", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}</b>
+            <small>{deferReasonLabel(selected.deferredReason)}{selected.deferredNote ? " · " + selected.deferredNote : ""}</small>
+            <button className="search" type="button" onClick={resumeDeferredLead}>Повернути в роботу зараз</button>
+          </div>}
+
           {postTrialMode === "close" && <div id="lead-close-workflow" className="workflowBox leadWorkflowBox">
             <div className="workflowHead"><h3>Закрити заявку</h3><button onClick={() => setPostTrialMode(null)}>×</button></div>
             <label>Результат<select value={closeKind} onChange={(e) => setCloseKind(e.target.value as typeof closeKind)}>
@@ -4244,6 +4365,7 @@ function App() {
           </div>}
 
           {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && postTrialMode !== "close" && <div className="leadCancelBeforeHistory">
+            {!leadIsDeferred(selected) && <button className="search deferLeadAction" onClick={beginLeadDefer}>Повернутись пізніше</button>}
             <button className="search dangerSoft" onClick={beginLeadClose}>Скасувати заявку</button>
           </div>}
 
@@ -4268,6 +4390,8 @@ function App() {
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Пробне заплановано" && <button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>◷</i><span><b>Запланувати дзвінок</b><small>Поставити дату наступного контакту</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Очікує групу" && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void updateStatus(selected.id, "Очікує групу"); }}><i>◎</i><span><b>Очікує групу</b><small>Позначити готовність до підбору групи</small></span></button>}
                 <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); setLeadStatusMenuOpen(true); }}><i>⇄</i><span><b>Перемістити заявку</b><small>Змінити етап вручну</small></span></button>
+                {!leadIsDeferred(selected) && !["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction" onClick={beginLeadDefer}><i>◷</i><span><b>Повернутись пізніше</b><small>Сховати заявку до вибраної дати</small></span></button>}
+                {leadIsDeferred(selected) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void resumeDeferredLead(); }}><i>↺</i><span><b>Повернути в роботу зараз</b><small>Прибрати відкладене нагадування</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction danger" onClick={beginLeadClose}><i>×</i><span><b>Закрити заявку</b><small>Відмова, немає відповіді або неактуально</small></span></button>}
                 {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); reopenLead(); }}><i>↺</i><span><b>Повернути в роботу</b><small>Відновити активну заявку</small></span></button>}
               </div>
@@ -4302,8 +4426,26 @@ function App() {
   );
 }
 
+function leadIsDeferred(lead: Lead): boolean {
+  return Boolean(lead.deferredUntil && dateValue(lead.deferredUntil) > Date.now());
+}
+
+function deferReasonLabel(reason: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    later: "Зараз не можуть, хочуть пізніше",
+    age: "Ще замала дитина",
+    schedule: "Зараз не підходить графік",
+    finance: "Фінанси / тимчасово не готові",
+    school: "Навчання / завантаженість",
+    move: "Переїзд / тимчасово не в місті",
+    other: "Інше",
+  };
+  return reason ? (labels[reason] ?? reason) : "Причину не вказано";
+}
+
 function leadKanbanColumn(lead: Lead): LeadKanbanColumnId {
   if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return "closed";
+  if (leadIsDeferred(lead)) return "deferred";
   if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "no_show";
   if (lead.status === "Після пробного") return "after_trial";
   if (lead.status === "Пробне заплановано") return "trial";
@@ -4338,9 +4480,12 @@ function LeadKanban({
 }) {
   const [draggedId, setDraggedId] = useState<EntityId | null>(null);
   const [overColumn, setOverColumn] = useState<LeadKanbanColumnId | null>(null);
+  const [deferredExpanded, setDeferredExpanded] = useState(false);
   const [closedExpanded, setClosedExpanded] = useState(false);
-  const activeColumns = leadKanbanColumns.filter((column) => column.id !== "closed");
+  const activeColumns = leadKanbanColumns.filter((column) => column.id !== "closed" && column.id !== "deferred");
+  const deferredColumn = leadKanbanColumns.find((column) => column.id === "deferred")!;
   const closedColumn = leadKanbanColumns.find((column) => column.id === "closed")!;
+  const deferredItems = leads.filter((lead) => leadKanbanColumn(lead) === "deferred").sort((a, b) => dateValue(a.deferredUntil) - dateValue(b.deferredUntil));
   const closedItems = leads.filter((lead) => leadKanbanColumn(lead) === "closed");
 
   const renderColumn = (column: (typeof leadKanbanColumns)[number], items: Lead[], compact = false) => <section
@@ -4402,6 +4547,13 @@ function LeadKanban({
 
   return <div className="kanbanBoard">
     <div className="leadKanban">{activeColumns.map((column) => renderColumn(column, leads.filter((lead) => leadKanbanColumn(lead) === column.id)))}</div>
+    <div className={"closedKanbanDock deferredKanbanDock " + (deferredExpanded ? "expanded " : "")}>
+      <button className="closedKanbanToggle" onClick={() => setDeferredExpanded((value) => !value)}>
+        <span><i></i><b>{deferredColumn.title}</b><small>{deferredColumn.hint}</small></span>
+        <span><strong>{deferredItems.length}</strong><em>{deferredExpanded ? "Згорнути ↑" : "Розгорнути ↓"}</em></span>
+      </button>
+      {deferredExpanded && <div className="closedKanbanContent">{renderColumn(deferredColumn, deferredItems, true)}</div>}
+    </div>
     <div
       className={"closedKanbanDock " + (closedExpanded ? "expanded " : "") + (overColumn === "closed" ? "dragOver" : "")}
       onDragOver={(event) => { event.preventDefault(); setOverColumn("closed"); }}
@@ -4602,6 +4754,10 @@ function leadPrimaryActionLabel(lead: Lead) {
 }
 
 function leadNextAction(lead: Lead) {
+  if (leadIsDeferred(lead) && lead.deferredUntil) {
+    const when = new Date(lead.deferredUntil);
+    return `Повернутись: ${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit" })}`;
+  }
   if (lead.status === "Відмовились") return "Закрито: відмовились";
   if (lead.status === "Не відповідає") return "Закрито: не відповідає";
   if (lead.status === "Неактуально") return "Закрито: неактуально";
@@ -4624,6 +4780,7 @@ function leadNextAction(lead: Lead) {
 }
 
 function leadActionMeta(lead: Lead): { type: "call" | "trial" | "decision" | "group" | "closed" | "general"; icon: string; label: string } {
+  if (leadIsDeferred(lead)) return { type: "general", icon: "◷", label: "Пізніше" };
   if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return { type: "closed", icon: "×", label: "Закрито" };
   if (lead.status === "Пробне заплановано") return { type: "trial", icon: "◷", label: "Пробне" };
   if (lead.trialResult === "no_show" || lead.trialResult === "cancelled" || lead.nextContactAt || lead.status === "Нова" || lead.status === "Зв'язались") return { type: "call", icon: "☎", label: "Контакт" };
@@ -4741,6 +4898,9 @@ function applyWorkspace(
     teacherNotes: item.teacher_notes ?? undefined,
     trialResult: item.latest_trial_status ?? undefined,
     nextContactAt: item.next_contact_at ?? undefined,
+    deferredUntil: item.deferred_until ?? undefined,
+    deferredReason: item.deferred_reason ?? undefined,
+    deferredNote: item.deferred_note ?? undefined,
     closeReason: item.close_reason ?? undefined,
     closeNote: item.close_note ?? undefined,
   }));
@@ -4842,6 +5002,8 @@ function auditEventLabel(type: string) {
     "trial.no_show": "Не прийшов на пробне",
     "trial.cancelled": "Пробне скасовано",
     "lead.outcome_updated": "Рішення по заявці",
+    "lead.deferred": "Повернутись пізніше",
+    "lead.deferred_cleared": "Повернуто в роботу",
     "student.enrolled": "Зараховано до групи",
     "student.enrolled_without_group": "Зараховано без групи",
     "student.transferred": "Переведено в іншу групу",

@@ -431,6 +431,9 @@ def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate, actor_user_
     db.flush()
     student.crm_status = CrmStatus.TRIAL_SCHEDULED
     student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
     student.lead_close_reason = None
     student.lead_close_note = None
     record_audit(db, org_id, "student", student.id, "trial.scheduled", {"trial_id": str(item.id), "starts_at": item.starts_at.isoformat()}, actor_user_id=actor_user_id)
@@ -450,6 +453,9 @@ def update_trial(db: Session, org_id: UUID, trial_id: UUID, starts_at: datetime 
     student = scoped_get(db, Student, org_id, trial.student_id)
     student.crm_status = CrmStatus.TRIAL_SCHEDULED
     student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
     student.lead_close_reason = None
     student.lead_close_note = None
     record_audit(db, org_id, "student", student.id, "trial.rescheduled", {
@@ -713,6 +719,10 @@ def create_enrollment(
     db.add(item)
     student.crm_status = CrmStatus.ENROLLED
     student.student_status = StudentStatus.ACTIVE
+    student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
     record_audit(
         db,
         org_id,
@@ -1008,6 +1018,9 @@ def update_lead_details(
 def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, status, actor_user_id: UUID | None = None) -> Student:
     student = scoped_get(db, Student, org_id, student_id)
     student.crm_status = status
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
     record_audit(db, org_id, "student", student.id, "student.crm_status_changed", {"crm_status": status.value if hasattr(status, "value") else str(status)}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(student)
@@ -1068,10 +1081,51 @@ def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommende
     return trial
 
 
+def defer_lead(
+    db: Session,
+    org_id: UUID,
+    student_id: UUID,
+    deferred_until: datetime | None,
+    reason: str | None,
+    note: str | None,
+    actor_user_id: UUID | None = None,
+) -> Student:
+    student = scoped_get(db, Student, org_id, student_id)
+    if student.student_status != StudentStatus.PROSPECT:
+        raise HTTPException(status_code=409, detail="Відкласти можна лише активну заявку, не зарахованого учня.")
+
+    if deferred_until is not None:
+        now = datetime.now(timezone.utc)
+        value = deferred_until if deferred_until.tzinfo else deferred_until.replace(tzinfo=timezone.utc)
+        if value <= now:
+            raise HTTPException(status_code=422, detail="Дата повернення має бути в майбутньому.")
+        student.deferred_until = deferred_until
+        student.deferred_reason = reason
+        student.deferred_note = note
+        student.next_contact_at = deferred_until
+        event_type = "lead.deferred"
+        payload = {"deferred_until": deferred_until.isoformat(), "reason": reason, "note": note}
+    else:
+        student.deferred_until = None
+        student.deferred_reason = None
+        student.deferred_note = None
+        student.next_contact_at = None
+        event_type = "lead.deferred_cleared"
+        payload = {}
+
+    record_audit(db, org_id, "student", student.id, event_type, payload, actor_user_id=actor_user_id)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
 def update_lead_outcome(db: Session, org_id: UUID, student_id: UUID, data, actor_user_id: UUID | None = None) -> Student:
     student = scoped_get(db, Student, org_id, student_id)
     student.crm_status = data.crm_status
     student.next_contact_at = data.next_contact_at
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
 
     if data.crm_status in {CrmStatus.DECLINED, CrmStatus.NO_RESPONSE, CrmStatus.NOT_RELEVANT}:
         student.lead_close_reason = data.close_reason
@@ -1189,6 +1243,10 @@ def form_group(db: Session, org_id: UUID, data, actor_user_id: UUID | None = Non
             ))
             student.crm_status = CrmStatus.ENROLLED
             student.student_status = StudentStatus.ACTIVE
+            student.next_contact_at = None
+            student.deferred_until = None
+            student.deferred_reason = None
+            student.deferred_note = None
             record_audit(db, org_id, "student", student.id, "student.enrolled", {
                 "group_id": str(group.id), "group_name": group.name,
                 "schedule_match": match.status, "schedule_note": note,
@@ -1226,6 +1284,9 @@ def enroll_student_without_group(
     student.crm_status = CrmStatus.ENROLLED
     student.student_status = StudentStatus.ACTIVE
     student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
     student.lead_close_reason = None
     student.lead_close_note = None
     record_audit(
@@ -1320,6 +1381,10 @@ def transfer_student(db: Session, org_id: UUID, student_id: UUID, to_group_id: U
 
     student.crm_status = CrmStatus.ENROLLED
     student.student_status = StudentStatus.ACTIVE
+    student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
     record_audit(db, org_id, "student", student.id, "student.transferred", {"to_group_id": str(target.id), "to_group_name": target.name}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(enrollment)
@@ -3650,6 +3715,9 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             "recommended_level": trial.recommended_level if trial else None,
             "teacher_notes": trial.teacher_notes if trial else None,
             "next_contact_at": student.next_contact_at,
+            "deferred_until": student.deferred_until,
+            "deferred_reason": student.deferred_reason,
+            "deferred_note": student.deferred_note,
             "close_reason": student.lead_close_reason,
             "close_note": student.lead_close_note,
         })

@@ -208,6 +208,54 @@ def test_lead_outcome_tracks_follow_up_and_close_reason(client):
     assert missing_reason.status_code == 422
 
 
+def test_lead_can_be_deferred_and_returned_to_work(client):
+    org = create_org(client, "Deferred Leads", "deferred-leads")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Олена", "age_at_inquiry": 10}).json()
+
+    deferred = client.patch(
+        f"/students/{student['id']}/defer",
+        headers=headers,
+        json={
+            "deferred_until": "2035-04-06T10:00:00+03:00",
+            "reason": "later",
+            "note": "Написати навесні",
+        },
+    )
+    assert deferred.status_code == 200, deferred.text
+    assert deferred.json()["deferred_until"].startswith("2035-04-06T")
+    assert deferred.json()["deferred_reason"] == "later"
+    assert deferred.json()["next_contact_at"].startswith("2035-04-06T")
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    row = next(item for item in leads.json() if item["student_id"] == student["id"])
+    assert row["deferred_reason"] == "later"
+    assert row["deferred_note"] == "Написати навесні"
+
+    resumed = client.patch(
+        f"/students/{student['id']}/defer",
+        headers=headers,
+        json={"deferred_until": None},
+    )
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["deferred_until"] is None
+    assert resumed.json()["next_contact_at"] is None
+
+
+def test_lead_defer_rejects_past_date(client):
+    org = create_org(client, "Deferred Past", "deferred-past")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Тарас"}).json()
+
+    response = client.patch(
+        f"/students/{student['id']}/defer",
+        headers=headers,
+        json={"deferred_until": "2020-01-01T10:00:00+02:00", "reason": "later"},
+    )
+    assert response.status_code == 422, response.text
+
+
 def test_scheduling_trial_updates_crm_status(client):
     org = create_org(client, "AeroKiDS", "aerokids-schedule")
     headers = {"X-Organization-Id": org["id"]}
