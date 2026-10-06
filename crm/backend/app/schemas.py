@@ -730,6 +730,7 @@ class StudentSubscriptionRead(ORMModel):
     price_minor: int
     period_days: int | None
     lessons_included: int | None
+    lesson_unit_price_minor: int | None = None
     credit_minor: int = 0
     discount_minor: int
     discount_label: str | None
