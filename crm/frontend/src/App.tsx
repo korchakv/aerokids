@@ -130,7 +130,7 @@ type StaffDemo = {
 
 const allNav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти", "Налаштування"];
 
-type UiIconName = "home" | "leads" | "student" | "groups" | "calendar" | "attendance" | "wallet" | "staff" | "location" | "reports" | "settings" | "search" | "logout" | "login" | "plus" | "sun" | "moon" | "theme" | "x" | "back";
+type UiIconName = "home" | "leads" | "student" | "groups" | "calendar" | "attendance" | "wallet" | "staff" | "location" | "reports" | "settings" | "search" | "logout" | "login" | "plus" | "sun" | "moon" | "theme" | "edit" | "x" | "back";
 
 function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -153,6 +153,7 @@ function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number }) {
     case "sun": return <svg {...common}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>;
     case "moon": return <svg {...common}><path d="M20 15.5A8 8 0 1 1 8.5 4 6.5 6.5 0 0 0 20 15.5Z"/></svg>;
     case "theme": return <svg {...common}><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg>;
+    case "edit": return <svg {...common}><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="m13.8 8.2 3 3"/></svg>;
     case "x": return <svg {...common}><path d="m6 6 12 12M18 6 6 18"/></svg>;
     case "back": return <svg {...common}><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg>;
   }
@@ -393,6 +394,14 @@ function App() {
   const [selectedGroupTeacherId, setSelectedGroupTeacherId] = useState<EntityId | "">("");
   const [groupTeacherSaving, setGroupTeacherSaving] = useState(false);
   const [groupTeacherEditing, setGroupTeacherEditing] = useState(false);
+  const [groupEditing, setGroupEditing] = useState(false);
+  const [groupEditName, setGroupEditName] = useState("");
+  const [groupEditCapacity, setGroupEditCapacity] = useState(8);
+  const [groupEditLocationId, setGroupEditLocationId] = useState<EntityId | "">("");
+  const [groupEditTeacherId, setGroupEditTeacherId] = useState<EntityId | "">("");
+  const [groupEditSchedule, setGroupEditSchedule] = useState<DraftScheduleSlot[]>([]);
+  const [groupEditSaving, setGroupEditSaving] = useState(false);
+  const [groupEditError, setGroupEditError] = useState("");
   const [paymentReminders, setPaymentReminders] = useState<ApiPaymentReminder[]>([]);
   const [reminderSavingId, setReminderSavingId] = useState<EntityId | null>(null);
   const [showStaffForm, setShowStaffForm] = useState(false);
@@ -1651,6 +1660,8 @@ function App() {
     setGroupCandidateId("");
     setSelectedGroupTeacherId(groupTeacher(groupId)?.id ?? "");
     setGroupTeacherEditing(false);
+    setGroupEditing(false);
+    setGroupEditError("");
     if (!apiEnabled || !session) return;
     setGroupDetailLoading(true);
     try {
@@ -1659,6 +1670,93 @@ function App() {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити групу.");
     } finally {
       setGroupDetailLoading(false);
+    }
+  };
+
+  const beginGroupEdit = () => {
+    if (!selectedGroupId) return;
+    const source = groupDetail?.group;
+    setGroupEditName(source?.name ?? selectedGroup?.name ?? "");
+    setGroupEditCapacity(source?.capacity ?? selectedGroup?.capacity ?? 8);
+    setGroupEditLocationId(source?.location_id ?? "");
+    setGroupEditTeacherId(groupTeacher(selectedGroupId)?.id ?? "");
+    setGroupEditSchedule((groupDetail?.schedules ?? []).map((slot) => ({
+      weekday: slot.weekday,
+      start_time: slot.start_time.slice(0, 5),
+      duration_minutes: slot.duration_minutes,
+    })));
+    setGroupEditError("");
+    setGroupTeacherEditing(false);
+    setGroupEditing(true);
+  };
+
+  const persistGroupTeacher = async (groupId: EntityId, teacherId: EntityId | "") => {
+    if (!session) return;
+    const currentlyAssigned = staff.filter((member) => member.groupIds.includes(groupId));
+    for (const teacher of currentlyAssigned) {
+      if (teacher.id !== teacherId) {
+        await apiDelete(`/staff/${teacher.id}/groups/${groupId}`, session);
+      }
+    }
+    if (teacherId && !currentlyAssigned.some((teacher) => teacher.id === teacherId)) {
+      await apiPost(`/staff/${teacherId}/groups`, {
+        group_id: groupId,
+        is_primary: true,
+      }, session);
+    }
+  };
+
+  const saveGroupEdit = async () => {
+    if (!selectedGroupId || groupEditSaving) return;
+    const normalizedName = groupEditName.trim();
+    const memberCount = groupDetail?.members.length ?? selectedGroup?.members.length ?? 0;
+    if (!normalizedName) {
+      setGroupEditError("Вкажіть назву групи.");
+      return;
+    }
+    if (groupEditCapacity < Math.max(1, memberCount)) {
+      setGroupEditError(`Місткість не може бути меншою за кількість учасників (${memberCount}).`);
+      return;
+    }
+    if (hasDuplicateSlots(groupEditSchedule)) {
+      setGroupEditError("Приберіть однакові дні та години в розкладі.");
+      return;
+    }
+
+    setGroupEditSaving(true);
+    setGroupEditError("");
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiPut(`/groups/${selectedGroupId}`, {
+          name: normalizedName,
+          capacity: groupEditCapacity,
+          location_id: groupEditLocationId || null,
+          min_age: groupDetail?.group.min_age ?? null,
+          max_age: groupDetail?.group.max_age ?? null,
+          schedule_slots: groupEditSchedule,
+        }, session);
+        await persistGroupTeacher(selectedGroupId, groupEditTeacherId);
+        await syncWorkspace(session);
+        setGroupDetail(await loadGroupDetail(selectedGroupId, session));
+        setSelectedGroupTeacherId(groupEditTeacherId);
+      } else {
+        setGroups((items) => items.map((group) => group.id === selectedGroupId ? {
+          ...group,
+          name: normalizedName,
+          capacity: groupEditCapacity,
+          location: locations.find((location) => location.id === groupEditLocationId)?.name ?? "Локація не вказана",
+          schedule: scheduleDraftLabel(groupEditSchedule),
+          teacherName: staff.find((member) => member.id === groupEditTeacherId)?.fullName,
+        } : group));
+      }
+      setGroupEditing(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не вдалося зберегти зміни групи.";
+      setGroupEditError(message);
+      setWorkspaceError(message);
+    } finally {
+      setGroupEditSaving(false);
     }
   };
 
@@ -1695,18 +1793,7 @@ function App() {
     setGroupTeacherSaving(true);
     setWorkspaceError("");
     try {
-      const currentlyAssigned = activeTeachers.filter((teacher) => teacher.groupIds.includes(selectedGroupId));
-      for (const teacher of currentlyAssigned) {
-        if (teacher.id !== selectedGroupTeacherId) {
-          await apiDelete(`/staff/${teacher.id}/groups/${selectedGroupId}`, session);
-        }
-      }
-      if (selectedGroupTeacherId) {
-        await apiPost(`/staff/${selectedGroupTeacherId}/groups`, {
-          group_id: selectedGroupId,
-          is_primary: true,
-        }, session);
-      }
+      await persistGroupTeacher(selectedGroupId, selectedGroupTeacherId);
       await syncWorkspace(session);
       setGroupTeacherEditing(false);
     } catch (error) {
@@ -1785,6 +1872,8 @@ function App() {
     setShowGroupCandidatePicker(false);
     setGroupCandidateId("");
     setGroupTeacherEditing(false);
+    setGroupEditing(false);
+    setGroupEditError("");
   };
 
   const goToStudentAttendance = (studentId: EntityId, groupId: EntityId) => {
@@ -2242,6 +2331,7 @@ function App() {
   const canManageStudents = !apiEnabled || fullAccessRole;
   const canManageLocations = !apiEnabled || fullAccessRole;
   const canManageStaff = !apiEnabled || fullAccessRole;
+  const canEditGroups = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const todayKey = localDateInput(new Date());
   const scheduleWeekStart = startOfLocalWeek(addLocalDays(new Date(), scheduleWeekOffset * 7));
   const scheduleWeekDays = Array.from({ length: 7 }, (_, index) => addLocalDays(scheduleWeekStart, index));
@@ -3127,7 +3217,10 @@ function App() {
           <p className="eyebrow">Група</p>
           <div className="groupDetailHero">
             <div className="groupDetailIdentity">
-              <h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2>
+              <div className="groupDetailTitleRow">
+                <h2>{groupDetail?.group.name ?? selectedGroup?.name ?? "Група"}</h2>
+                {canEditGroups && <button className="groupEditIcon" type="button" aria-label="Редагувати групу" title="Редагувати групу" onClick={beginGroupEdit}><UiIcon name="edit" size={15} /></button>}
+              </div>
               <div className="groupDetailMeta">
                 <span>{selectedGroup?.location ?? "Локація не вказана"}</span>
                 <span>{selectedGroup?.schedule ?? "Розклад не вказаний"}</span>
@@ -3140,6 +3233,32 @@ function App() {
             </div>
             <div className="groupDetailHeroActions"><strong>{groupDetail?.members.length ?? selectedGroup?.members.length ?? 0}/{groupDetail?.group.capacity ?? selectedGroup?.capacity ?? "—"}</strong>{canManageLeads && <button className="primary compact" onClick={() => { setShowGroupCandidatePicker((value) => !value); setGroupCandidateId(existingGroupCandidates[0]?.id ?? ""); }}>+ Додати учня</button>}</div>
           </div>
+          {groupEditing && <div className="groupEditPanel">
+            <div className="groupEditPanelHead">
+              <div><b>Редагування групи</b><small>Назва, місткість, локація, викладач і регулярний розклад.</small></div>
+              <button className="groupEditPanelClose" type="button" aria-label="Закрити редагування" onClick={() => { setGroupEditing(false); setGroupEditError(""); }}><UiIcon name="x" size={16} /></button>
+            </div>
+            <label>Назва групи<input autoFocus value={groupEditName} maxLength={160} onChange={(e) => { setGroupEditName(e.target.value); setGroupEditError(""); }} /></label>
+            <div className="formTwo">
+              <label>Місткість<input type="number" min={Math.max(1, groupDetail?.members.length ?? selectedGroup?.members.length ?? 0)} max={100} value={groupEditCapacity} onChange={(e) => { setGroupEditCapacity(Number(e.target.value)); setGroupEditError(""); }} /></label>
+              <label>Локація <small>(необов’язково)</small><select value={groupEditLocationId} onChange={(e) => setGroupEditLocationId(e.target.value)}>
+                <option value="">Без локації</option>
+                {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+              </select></label>
+            </div>
+            {canManageStaff && <label>Викладач <small>(необов’язково)</small><select value={groupEditTeacherId} onChange={(e) => setGroupEditTeacherId(e.target.value)}>
+              <option value="">Не призначено</option>
+              {activeTeachers.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.fullName}</option>)}
+            </select></label>}
+            <div className="groupCreateScheduleHead"><div><b>Регулярний розклад</b><small>Можна змінити день, годину, тривалість, додати або прибрати заняття.</small></div></div>
+            <ScheduleSlotEditor value={groupEditSchedule} onChange={(slots) => { setGroupEditSchedule(slots); setGroupEditError(""); }} />
+            {groupEditSchedule.length === 0 && <div className="groupEditHint">Розклад можна залишити порожнім і додати пізніше.</div>}
+            {groupEditError && <div className="groupCreateError">{groupEditError}</div>}
+            <div className="groupEditActions">
+              <button className="search" type="button" disabled={groupEditSaving} onClick={() => { setGroupEditing(false); setGroupEditError(""); }}>Скасувати</button>
+              <button className="primary" type="button" disabled={groupEditSaving || !groupEditName.trim() || hasDuplicateSlots(groupEditSchedule)} onClick={saveGroupEdit}>{groupEditSaving ? "Зберігаємо…" : "Зберегти зміни"}</button>
+            </div>
+          </div>}
           {canManageStaff && groupTeacherEditing && <div className="groupTeacherAssign">
             <label>Викладач<select autoFocus value={selectedGroupTeacherId} onChange={(e) => setSelectedGroupTeacherId(e.target.value)}>
               <option value="">Не призначено</option>
@@ -4547,7 +4666,7 @@ function ScheduleSlotEditor({ value, onChange }: { value: DraftScheduleSlot[]; o
     <WeekdayPicker value={slot.weekday} onChange={(weekday) => update(index, { weekday })} />
     <TimeSelect label="Початок" value={slot.start_time} onChange={(start_time) => update(index, { start_time })} />
     <DurationSelect value={slot.duration_minutes} onChange={(duration_minutes) => update(index, { duration_minutes })} />
-    <button type="button" className="link danger" onClick={() => onChange(value.filter((_, i) => i !== index))} disabled={value.length === 1}>Видалити</button>
+    <button type="button" className="link danger" onClick={() => onChange(value.filter((_, i) => i !== index))}>Видалити</button>
   </div>)}<button type="button" className="search" onClick={() => onChange([...value, { weekday: (value.at(-1)?.weekday ?? -1) + 1 > 6 ? 0 : (value.at(-1)?.weekday ?? -1) + 1, start_time: "17:00", duration_minutes: 60 }])}>+ Додати день</button></fieldset>;
 }
 

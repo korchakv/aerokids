@@ -312,6 +312,77 @@ def test_empty_group_can_be_created_with_schedule(client):
     assert {item["weekday"] for item in schedules.json()} == {1, 3}
 
 
+def test_group_can_be_edited_with_location_capacity_and_schedule(client):
+    org = create_org(client, "Editable Groups", "editable-groups")
+    headers = {"X-Organization-Id": org["id"]}
+    location = client.post(
+        "/locations",
+        headers=headers,
+        json={"name": "Центр", "address": "Івано-Франківськ"},
+    )
+    assert location.status_code == 201, location.text
+
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={
+            "name": "Помилкова назва",
+            "capacity": 8,
+            "schedule_slots": [
+                {"weekday": 1, "start_time": "10:00", "duration_minutes": 60},
+                {"weekday": 3, "start_time": "10:00", "duration_minutes": 60},
+            ],
+        },
+    )
+    assert formed.status_code == 201, formed.text
+    group_id = formed.json()["group"]["id"]
+
+    updated = client.put(
+        f"/groups/{group_id}",
+        headers=headers,
+        json={
+            "name": "FPV Вечір",
+            "capacity": 10,
+            "location_id": location.json()["id"],
+            "schedule_slots": [
+                {"weekday": 0, "start_time": "18:15", "duration_minutes": 60},
+                {"weekday": 4, "start_time": "18:15", "duration_minutes": 90},
+            ],
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["name"] == "FPV Вечір"
+    assert updated.json()["capacity"] == 10
+    assert updated.json()["location_id"] == location.json()["id"]
+
+    schedules = client.get(f"/group-schedules?group_id={group_id}", headers=headers)
+    assert schedules.status_code == 200, schedules.text
+    assert {(item["weekday"], item["start_time"][:5], item["duration_minutes"]) for item in schedules.json()} == {
+        (0, "18:15", 60),
+        (4, "18:15", 90),
+    }
+
+    # Re-enable a previously used slot: the unique DB row should be reused, not duplicated.
+    restored = client.put(
+        f"/groups/{group_id}",
+        headers=headers,
+        json={
+            "name": "FPV Вечір",
+            "capacity": 10,
+            "location_id": location.json()["id"],
+            "schedule_slots": [
+                {"weekday": 1, "start_time": "10:00", "duration_minutes": 75},
+            ],
+        },
+    )
+    assert restored.status_code == 200, restored.text
+    restored_schedules = client.get(f"/group-schedules?group_id={group_id}", headers=headers)
+    assert restored_schedules.status_code == 200, restored_schedules.text
+    assert [(item["weekday"], item["start_time"][:5], item["duration_minutes"]) for item in restored_schedules.json()] == [
+        (1, "10:00", 75),
+    ]
+
+
 def test_group_formation_rejects_cross_tenant_student(client):
     org_a = create_org(client, "School A", "school-a-form")
     org_b = create_org(client, "School B", "school-b-form")
