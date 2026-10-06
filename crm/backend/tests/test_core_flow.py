@@ -1737,6 +1737,72 @@ def test_authenticated_manual_intake_creates_real_lead(client):
     assert leads.json()[0]["source"] == "phone"
 
 
+def test_lead_details_can_be_edited_including_comment_and_contact(client):
+    org = create_org(client, "Editable Leads", "editable-leads")
+    headers = {"X-Organization-Id": org["id"]}
+
+    created = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Софія",
+            "child_age": 10,
+            "contact_name": "Марина Коваль",
+            "phone": "0672223344",
+            "source": "phone",
+            "comment": "Початковий коментар",
+        },
+    )
+    assert created.status_code == 201, created.text
+    student_id = created.json()["student_id"]
+
+    updated = client.patch(
+        f"/students/{student_id}/lead-details",
+        headers=headers,
+        json={
+            "child_first_name": "Софія",
+            "child_last_name": "Іваненко",
+            "child_phone": "093 111 22 33",
+            "child_age": 11,
+            "contact_name": "Марина Іваненко",
+            "phone": "050 222 33 44",
+            "source": "instagram",
+            "comment": "Хочуть FPV, зручно після 17:00",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["first_name"] == "Софія"
+    assert updated.json()["last_name"] == "Іваненко"
+    assert updated.json()["phone"] == "+380931112233"
+    assert updated.json()["age_at_inquiry"] == 11
+    assert updated.json()["source"] == "instagram"
+    assert updated.json()["notes"] == "Хочуть FPV, зручно після 17:00"
+
+    detail = client.get(f"/students/{student_id}", headers=headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["contacts"][0]["full_name"] == "Марина Іваненко"
+    assert detail.json()["contacts"][0]["phone"] == "+380502223344"
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    row = next(item for item in leads.json() if item["student_id"] == student_id)
+    assert row["last_name"] == "Іваненко"
+    assert row["student_phone"] == "+380931112233"
+    assert row["contact_name"] == "Марина Іваненко"
+    assert row["contact_phone"] == "+380502223344"
+    assert row["comment"] == "Хочуть FPV, зручно після 17:00"
+
+    events = client.get(
+        "/audit-events",
+        headers=headers,
+        params={"entity_type": "student", "entity_id": student_id},
+    )
+    assert events.status_code == 200, events.text
+    edited = next(item for item in events.json() if item["event_type"] == "lead.details_updated")
+    assert "comment" in edited["payload"]["changed_fields"]
+    assert edited["payload"]["comment_changed"] is True
+
+
 def test_group_capacity_blocks_extra_enrollment_and_transfer(client):
     org = create_org(client, "AeroKiDS", "capacity-school")
     headers = {"X-Organization-Id": org["id"]}
