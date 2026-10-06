@@ -1525,7 +1525,7 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 }
 
 
-.groupLocationRequired{
+.groupLocationOptional{
   min-height:100%;
   display:grid;
   align-content:center;
@@ -1535,9 +1535,9 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
   border-radius:11px;
   background:var(--ak-surface-2);
 }
-.groupLocationRequired>b{font-size:12px;color:var(--ak-text)}
-.groupLocationRequired>small{font-size:10.5px;line-height:1.35;color:var(--ak-muted)}
-.groupLocationRequired>button{justify-self:start;margin-top:3px;padding:7px 10px!important;font-size:11px!important}
+.groupLocationOptional>b{font-size:12px;color:var(--ak-text)}
+.groupLocationOptional>small{font-size:10.5px;line-height:1.35;color:var(--ak-muted)}
+.groupLocationOptional>button{justify-self:start;margin-top:3px;padding:7px 10px!important;font-size:11px!important}
 .groupCreateError{
   margin:4px 0 10px;
   padding:9px 11px;
@@ -1548,3 +1548,29 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
   font-size:11px;
   line-height:1.4;
 }
+
+
+.enrollmentOr{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:10px 0 2px;
+  color:var(--ak-muted-2);
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.enrollmentOr::before,.enrollmentOr::after{
+  content:"";
+  height:1px;
+  flex:1;
+  background:var(--ak-border);
+}
+.enrollWithoutGroup{
+  display:grid!important;
+  gap:3px!important;
+  text-align:left!important;
+  justify-items:start!important;
+}
+.enrollWithoutGroup b{font-size:12px;color:var(--ak-text)}
+.enrollWithoutGroup small{font-size:10.5px;line-height:1.35;color:var(--ak-muted)}
