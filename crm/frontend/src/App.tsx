@@ -4666,7 +4666,7 @@ function ScheduleSlotEditor({ value, onChange }: { value: DraftScheduleSlot[]; o
     <WeekdayPicker value={slot.weekday} onChange={(weekday) => update(index, { weekday })} />
     <TimeSelect label="Початок" value={slot.start_time} onChange={(start_time) => update(index, { start_time })} />
     <DurationSelect value={slot.duration_minutes} onChange={(duration_minutes) => update(index, { duration_minutes })} />
-    <button type="button" className="link danger" onClick={() => onChange(value.filter((_, i) => i !== index))} disabled={value.length === 1}>Видалити</button>
+    <button type="button" className="link danger" onClick={() => onChange(value.filter((_, i) => i !== index))}>Видалити</button>
   </div>)}<button type="button" className="search" onClick={() => onChange([...value, { weekday: (value.at(-1)?.weekday ?? -1) + 1 > 6 ? 0 : (value.at(-1)?.weekday ?? -1) + 1, start_time: "17:00", duration_minutes: 60 }])}>+ Додати день</button></fieldset>;
 }
 
