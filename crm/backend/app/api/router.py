@@ -173,6 +173,15 @@ def locations(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db))
     return crm.list_locations(db, org_id)
 
 
+@router.delete("/locations/{location_id}", status_code=204)
+def delete_location(
+    location_id: UUID,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    crm.delete_location(db, access.organization_id, location_id, access.user_id)
+
+
 @router.post("/contacts", response_model=ContactRead, status_code=201)
 def create_contact(data: ContactCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return crm.create_contact(db, org_id, data)
@@ -237,6 +246,15 @@ def update_group(
     db: Session = Depends(get_db),
 ):
     return crm.update_group(db, access.organization_id, group_id, data, access.user_id)
+
+
+@router.delete("/groups/{group_id}", status_code=204)
+def delete_group(
+    group_id: UUID,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
+    db: Session = Depends(get_db),
+):
+    crm.delete_group(db, access.organization_id, group_id, access.user_id)
 
 
 @router.post("/enrollments", response_model=EnrollmentRead, status_code=201)

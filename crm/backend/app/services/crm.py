@@ -220,7 +220,82 @@ def create_location(db: Session, org_id: UUID, data: LocationCreate) -> Location
 
 
 def list_locations(db: Session, org_id: UUID) -> list[Location]:
-    return list(db.scalars(select(Location).where(Location.organization_id == org_id).order_by(Location.name)))
+    return list(db.scalars(
+        select(Location)
+        .where(Location.organization_id == org_id, Location.is_active.is_(True))
+        .order_by(Location.name)
+    ))
+
+
+def delete_location(
+    db: Session,
+    org_id: UUID,
+    location_id: UUID,
+    actor_user_id: UUID | None = None,
+) -> None:
+    location = scoped_get(db, Location, org_id, location_id)
+
+    group = db.scalar(select(Group.id).where(
+        Group.organization_id == org_id,
+        Group.location_id == location.id,
+    ).limit(1))
+    if group is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Цю локацію використовує група. Спочатку змініть локацію в групі або видаліть порожню групу.",
+        )
+
+    lesson = db.scalar(select(LessonSession.id).where(
+        LessonSession.organization_id == org_id,
+        LessonSession.location_id == location.id,
+    ).limit(1))
+    if lesson is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Для цієї локації вже є заняття в історії або розкладі. Щоб не втратити дані, її видалити не можна.",
+        )
+
+    trial = db.scalar(select(TrialLesson.id).where(
+        TrialLesson.organization_id == org_id,
+        TrialLesson.location_id == location.id,
+    ).limit(1))
+    if trial is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Для цієї локації вже є пробні заняття. Щоб не втратити історію, її видалити не можна.",
+        )
+
+    staff_link = db.scalar(select(StaffLocation.id).where(
+        StaffLocation.organization_id == org_id,
+        StaffLocation.location_id == location.id,
+    ).limit(1))
+    if staff_link is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Ця локація призначена працівнику. Спочатку приберіть її в картці працівника.",
+        )
+
+    student_preference = db.scalar(select(Student.id).where(
+        Student.organization_id == org_id,
+        Student.preferred_location_id == location.id,
+    ).limit(1))
+    if student_preference is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Ця локація вказана в побажаннях учня. Спочатку змініть бажану локацію в картці учня.",
+        )
+
+    record_audit(
+        db,
+        org_id,
+        "location",
+        location.id,
+        "location.deleted",
+        {"name": location.name},
+        actor_user_id=actor_user_id,
+    )
+    db.delete(location)
+    db.commit()
 
 
 def create_contact(db: Session, org_id: UUID, data: ContactCreate) -> Contact:
@@ -404,6 +479,75 @@ def update_group(
     db.commit()
     db.refresh(group)
     return group
+
+
+def delete_group(
+    db: Session,
+    org_id: UUID,
+    group_id: UUID,
+    actor_user_id: UUID | None = None,
+) -> None:
+    group = scoped_get(db, Group, org_id, group_id)
+
+    enrollment = db.scalar(select(Enrollment.id).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.group_id == group.id,
+    ).limit(1))
+    if enrollment is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="У цій групі є або були учні. Щоб не втратити історію навчання, таку групу видалити не можна.",
+        )
+
+    lesson = db.scalar(select(LessonSession.id).where(
+        LessonSession.organization_id == org_id,
+        LessonSession.group_id == group.id,
+    ).limit(1))
+    if lesson is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="У цієї групи вже є заняття в історії або розкладі. Щоб не втратити дані, таку групу видалити не можна.",
+        )
+
+    subscription = db.scalar(select(StudentSubscription.id).where(
+        StudentSubscription.organization_id == org_id,
+        StudentSubscription.group_id == group.id,
+    ).limit(1))
+    if subscription is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Ця група вже використовується в абонементах. Щоб не втратити фінансову історію, її видалити не можна.",
+        )
+
+    schedules = list(db.scalars(select(GroupSchedule).where(
+        GroupSchedule.organization_id == org_id,
+        GroupSchedule.group_id == group.id,
+    )))
+    for schedule in schedules:
+        db.delete(schedule)
+
+    assignments = list(db.scalars(select(GroupStaff).where(
+        GroupStaff.organization_id == org_id,
+        GroupStaff.group_id == group.id,
+    )))
+    for assignment in assignments:
+        db.delete(assignment)
+
+    # Flush dependent rows first because these models do not declare ORM relationships
+    # that would otherwise order the DELETE statements for PostgreSQL.
+    db.flush()
+
+    record_audit(
+        db,
+        org_id,
+        "group",
+        group.id,
+        "group.deleted",
+        {"name": group.name},
+        actor_user_id=actor_user_id,
+    )
+    db.delete(group)
+    db.commit()
 
 
 def list_groups(db: Session, org_id: UUID) -> list[Group]:

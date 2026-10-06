@@ -401,6 +401,7 @@ function App() {
   const [groupEditTeacherId, setGroupEditTeacherId] = useState<EntityId | "">("");
   const [groupEditSchedule, setGroupEditSchedule] = useState<DraftScheduleSlot[]>([]);
   const [groupEditSaving, setGroupEditSaving] = useState(false);
+  const [groupDeleteSaving, setGroupDeleteSaving] = useState(false);
   const [groupEditError, setGroupEditError] = useState("");
   const [paymentReminders, setPaymentReminders] = useState<ApiPaymentReminder[]>([]);
   const [reminderSavingId, setReminderSavingId] = useState<EntityId | null>(null);
@@ -412,6 +413,9 @@ function App() {
   const [inviteLink, setInviteLink] = useState("");
   const [staffResetLink, setStaffResetLink] = useState("");
   const [showLocationForm, setShowLocationForm] = useState(false);
+  const [locationEditId, setLocationEditId] = useState<EntityId | null>(null);
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [locationDeleteSaving, setLocationDeleteSaving] = useState(false);
   const [staffName, setStaffName] = useState("");
   const [staffRole, setStaffRole] = useState<StaffRoleDemo>("Викладач");
   const [staffCanTeach, setStaffCanTeach] = useState(true);
@@ -1263,6 +1267,7 @@ function App() {
 
   const createLocationFromGroup = () => {
     setGroupCreateError("");
+    setLocationEditId(null);
     setLocationName("");
     setLocationAddress("");
     setLocationReturnToGroup(true);
@@ -1764,6 +1769,31 @@ function App() {
     }
   };
 
+  const deleteSelectedGroup = async () => {
+    if (!selectedGroupId || groupDeleteSaving) return;
+    const groupName = groupDetail?.group.name ?? selectedGroup?.name ?? "Група";
+    if (!window.confirm(`Видалити групу «${groupName}»? Вона зникне з активних груп, але історія занять залишиться в CRM.`)) return;
+
+    setGroupDeleteSaving(true);
+    setGroupEditError("");
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiDelete(`/groups/${selectedGroupId}`, session);
+        await syncWorkspace(session);
+      } else {
+        setGroups((items) => items.filter((group) => group.id !== selectedGroupId));
+      }
+      closeGroupDetail();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не вдалося видалити групу.";
+      setGroupEditError(message);
+      setWorkspaceError(message);
+    } finally {
+      setGroupDeleteSaving(false);
+    }
+  };
+
   const addCandidateToExistingGroup = async (candidateId?: EntityId) => {
     const targetId = candidateId || groupCandidateId;
     if (!selectedGroupId || !targetId || groupCandidateSaving) return;
@@ -2211,11 +2241,51 @@ function App() {
     }
   };
 
-  const createLocationDemo = async () => {
-    if (!locationName.trim()) return;
-    if (apiEnabled && session) {
-      try {
+  const openLocationCreation = () => {
+    setLocationEditId(null);
+    setLocationName("");
+    setLocationAddress("");
+    setLocationReturnToGroup(false);
+    setWorkspaceError("");
+    setShowLocationForm(true);
+  };
+
+  const openLocationEdit = (location: LocationDemo) => {
+    setLocationEditId(location.id);
+    setLocationName(location.name);
+    setLocationAddress(location.address);
+    setLocationReturnToGroup(false);
+    setWorkspaceError("");
+    setShowLocationForm(true);
+  };
+
+  const closeLocationForm = () => {
+    setShowLocationForm(false);
+    setLocationEditId(null);
+    setLocationName("");
+    setLocationAddress("");
+    if (locationReturnToGroup) {
+      setLocationReturnToGroup(false);
+      setShowGroupForm(true);
+    }
+  };
+
+  const saveLocationDemo = async () => {
+    if (!locationName.trim() || locationSaving) return;
+    setLocationSaving(true);
+    try {
+      if (apiEnabled && session) {
         setWorkspaceError("");
+        if (locationEditId) {
+          await apiPatch(`/locations/${locationEditId}`, {
+            name: locationName.trim(),
+            address: locationAddress.trim() || null,
+          }, session);
+          await syncWorkspace(session);
+          closeLocationForm();
+          return;
+        }
+
         const created = await apiPost<{ id: EntityId; name: string }>("/locations", {
           name: locationName.trim(),
           address: locationAddress.trim() || null,
@@ -2230,25 +2300,60 @@ function App() {
           setShowGroupForm(true);
         }
         return;
-      } catch (error) {
-        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити локацію.");
+      }
+
+      if (locationEditId) {
+        setLocations((items) => items.map((item) => item.id === locationEditId ? {
+          ...item,
+          name: locationName.trim(),
+          address: locationAddress.trim(),
+        } : item));
+        closeLocationForm();
         return;
       }
+
+      const nextId = crypto.randomUUID();
+      setLocations((items) => [...items, {
+        id: nextId,
+        name: locationName.trim(),
+        address: locationAddress.trim(),
+        isActive: true,
+      }]);
+      setLocationName("");
+      setLocationAddress("");
+      setShowLocationForm(false);
+      if (locationReturnToGroup) {
+        setGroupLocationId(nextId);
+        setLocationReturnToGroup(false);
+        setShowGroupForm(true);
+      }
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : locationEditId ? "Не вдалося зберегти локацію." : "Не вдалося створити локацію.");
+    } finally {
+      setLocationSaving(false);
     }
-    const nextId = crypto.randomUUID();
-    setLocations((items) => [...items, {
-      id: nextId,
-      name: locationName.trim(),
-      address: locationAddress.trim(),
-      isActive: true,
-    }]);
-    setLocationName("");
-    setLocationAddress("");
-    setShowLocationForm(false);
-    if (locationReturnToGroup) {
-      setGroupLocationId(nextId);
-      setLocationReturnToGroup(false);
-      setShowGroupForm(true);
+  };
+
+  const deleteLocationDemo = async () => {
+    if (!locationEditId || locationDeleteSaving) return;
+    const location = locations.find((item) => item.id === locationEditId);
+    if (!window.confirm(`Видалити локацію «${location?.name ?? "Локація"}»? Історичні дані залишаться в CRM.`)) return;
+
+    setLocationDeleteSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiDelete(`/locations/${locationEditId}`, session);
+        await syncWorkspace(session);
+      } else {
+        setLocations((items) => items.filter((item) => item.id !== locationEditId));
+        setStaff((items) => items.map((member) => ({ ...member, locationIds: member.locationIds.filter((id) => id !== locationEditId) })));
+      }
+      closeLocationForm();
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося видалити локацію.");
+    } finally {
+      setLocationDeleteSaving(false);
     }
   };
 
@@ -2333,7 +2438,7 @@ function App() {
   const canManageRecurringSchedule = !apiEnabled || fullAccessRole;
   const canManageLeads = !apiEnabled || fullAccessRole;
   const canManageStudents = !apiEnabled || fullAccessRole;
-  const canManageLocations = !apiEnabled || fullAccessRole;
+  const canManageLocations = !apiEnabled || ["owner", "admin"].includes(currentMembership?.role ?? "");
   const canManageStaff = !apiEnabled || fullAccessRole;
   const canEditGroups = !apiEnabled || ["owner", "admin", "manager"].includes(currentMembership?.role ?? "");
   const todayKey = localDateInput(new Date());
@@ -2965,14 +3070,14 @@ function App() {
         {active === "Локації" && <section className="locationsLayout">
           <div className="panelHead locationsHead">
             <div><p className="eyebrow">Мережа</p><h2>Локації школи</h2></div>
-            {canManageLocations && <button className="primary" onClick={() => setShowLocationForm(true)}>+ Додати локацію</button>}
+            {canManageLocations && <button className="primary" onClick={openLocationCreation}>+ Додати локацію</button>}
           </div>
           <div className="locationCards">
             {locations.map((location) => {
               const locationStaff = staff.filter((member) => member.locationIds.includes(location.id) && member.isActive);
               const locationGroups = groups.filter((group) => group.location === location.name);
               return <article className="panel locationCard" key={location.id}>
-                <div className="locationTop"><span className="locationIcon">⌂</span><span className={"staffStatus " + (location.isActive ? "active" : "inactive")}>{location.isActive ? "Активна" : "Неактивна"}</span></div>
+                <div className="locationTop"><span className="locationIcon">⌂</span><div className="locationTopActions"><span className={"staffStatus " + (location.isActive ? "active" : "inactive")}>{location.isActive ? "Активна" : "Неактивна"}</span>{canManageLocations && <button className="locationEditIcon" type="button" aria-label={"Редагувати " + location.name} title="Редагувати локацію" onClick={() => openLocationEdit(location)}><UiIcon name="edit" size={14} /></button>}</div></div>
                 <h2>{location.name}</h2>
                 <p>{location.address || "Адресу ще не вказано"}</p>
                 <div className="locationMetrics"><span><b>{locationStaff.length}</b> працівників</span><span><b>{locationGroups.length}</b> груп</span></div>
@@ -3202,13 +3307,14 @@ function App() {
       </div>}
 
       {showLocationForm && <div className="modalBackdrop">
-        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => { setShowLocationForm(false); if (locationReturnToGroup) { setLocationReturnToGroup(false); setShowGroupForm(true); } }}>×</button>
-          <p className="eyebrow">Мережа</p><h2>Нова локація</h2>
+        <div className="groupModal locationEditModal" onClick={(e) => e.stopPropagation()}>
+          <button className="drawerClose" onClick={closeLocationForm}>×</button>
+          <p className="eyebrow">Мережа</p><h2>{locationEditId ? "Редагувати локацію" : "Нова локація"}</h2>
           {locationReturnToGroup && <p className="modalIntro">Після збереження повернемо вас до створення групи й виберемо нову локацію автоматично.</p>}
-          <label>Назва<input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="AeroKids Центр" /></label>
+          <label>Назва<input autoFocus value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="AeroKids Центр" /></label>
           <label>Адреса<input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="Івано-Франківськ" /></label>
-          <button className="primary full" disabled={!locationName.trim()} onClick={createLocationDemo}>Створити локацію</button>
+          <button className="primary full" disabled={!locationName.trim() || locationSaving || locationDeleteSaving} onClick={saveLocationDemo}>{locationSaving ? "Зберігаємо…" : locationEditId ? "Зберегти зміни" : "Створити локацію"}</button>
+          {locationEditId && <div className="subtleDeleteRow"><button className="subtleDangerAction" type="button" disabled={locationSaving || locationDeleteSaving} onClick={deleteLocationDemo}>{locationDeleteSaving ? "Видаляємо…" : "Видалити локацію"}</button></div>}
         </div>
       </div>}
 
@@ -3258,9 +3364,12 @@ function App() {
             <ScheduleSlotEditor value={groupEditSchedule} onChange={(slots) => { setGroupEditSchedule(slots); setGroupEditError(""); }} />
             {groupEditSchedule.length === 0 && <div className="groupEditHint">Розклад можна залишити порожнім і додати пізніше.</div>}
             {groupEditError && <div className="groupCreateError">{groupEditError}</div>}
-            <div className="groupEditActions">
-              <button className="search" type="button" disabled={groupEditSaving} onClick={() => { setGroupEditing(false); setGroupEditError(""); }}>Скасувати</button>
-              <button className="primary" type="button" disabled={groupEditSaving || !groupEditName.trim() || hasDuplicateSlots(groupEditSchedule)} onClick={saveGroupEdit}>{groupEditSaving ? "Зберігаємо…" : "Зберегти зміни"}</button>
+            <div className="groupEditFooter">
+              <button className="subtleDangerAction" type="button" disabled={groupEditSaving || groupDeleteSaving} onClick={deleteSelectedGroup}>{groupDeleteSaving ? "Видаляємо…" : "Видалити групу"}</button>
+              <div className="groupEditActions">
+                <button className="search" type="button" disabled={groupEditSaving || groupDeleteSaving} onClick={() => { setGroupEditing(false); setGroupEditError(""); }}>Скасувати</button>
+                <button className="primary" type="button" disabled={groupEditSaving || groupDeleteSaving || !groupEditName.trim() || hasDuplicateSlots(groupEditSchedule)} onClick={saveGroupEdit}>{groupEditSaving ? "Зберігаємо…" : "Зберегти зміни"}</button>
+              </div>
             </div>
           </div>}
           {canManageStaff && groupTeacherEditing && <div className="groupTeacherAssign">

@@ -1735,3 +1735,77 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
   .groupEditActions{display:grid;grid-template-columns:1fr 1fr}
   .groupEditActions button{min-width:0;width:100%}
 }
+
+
+/* Quiet destructive actions inside edit modes */
+.groupEditFooter{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:2px;
+}
+.subtleDeleteRow{
+  display:flex;
+  justify-content:flex-start;
+  margin-top:2px;
+}
+.subtleDangerAction{
+  appearance:none;
+  border:0;
+  background:transparent;
+  padding:4px 2px;
+  color:var(--ak-muted);
+  font:inherit;
+  font-size:10.5px;
+  font-weight:600;
+  text-decoration:underline;
+  text-decoration-thickness:1px;
+  text-underline-offset:3px;
+  opacity:.66;
+  cursor:pointer;
+}
+.subtleDangerAction:hover{
+  color:#b64b58;
+  opacity:1;
+}
+.subtleDangerAction:disabled{
+  opacity:.35;
+  cursor:not-allowed;
+}
+.locationTopActions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.locationEditIcon{
+  display:grid;
+  place-items:center;
+  width:28px;
+  height:28px;
+  padding:0;
+  border:1px solid transparent;
+  border-radius:8px;
+  background:transparent;
+  color:var(--ak-muted);
+  opacity:.62;
+  cursor:pointer;
+}
+.locationEditIcon:hover{
+  border-color:var(--ak-border);
+  background:var(--ak-surface);
+  color:var(--ak-accent-text);
+  opacity:1;
+}
+.locationEditModal .subtleDeleteRow{
+  margin-top:0;
+}
+@media(max-width:720px){
+  .groupEditFooter{
+    display:grid;
+    grid-template-columns:1fr;
+  }
+  .groupEditFooter>.subtleDangerAction{
+    justify-self:start;
+  }
+}

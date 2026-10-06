@@ -383,6 +383,98 @@ def test_group_can_be_edited_with_location_capacity_and_schedule(client):
     ]
 
 
+def test_empty_group_can_be_deleted_without_losing_history_tables(client):
+    org = create_org(client, "Delete Empty Group", "delete-empty-group")
+    headers = {"X-Organization-Id": org["id"]}
+
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={
+            "name": "Помилкова група",
+            "capacity": 8,
+            "schedule_slots": [{"weekday": 2, "start_time": "17:00", "duration_minutes": 60}],
+        },
+    )
+    assert formed.status_code == 201, formed.text
+    group_id = formed.json()["group"]["id"]
+
+    deleted = client.delete(f"/groups/{group_id}", headers=headers)
+    assert deleted.status_code == 204, deleted.text
+
+    visible_groups = client.get("/workspace/groups", headers=headers)
+    assert visible_groups.status_code == 200, visible_groups.text
+    assert all(item["group_id"] != group_id for item in visible_groups.json())
+
+    schedules = client.get(f"/group-schedules?group_id={group_id}", headers=headers)
+    assert schedules.status_code == 404, schedules.text
+
+
+def test_group_delete_is_blocked_while_students_are_enrolled(client):
+    org = create_org(client, "Protected Group Delete", "protected-group-delete")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Олег", "age_at_inquiry": 10}).json()
+    client.patch(
+        f"/students/{student['id']}/crm-status",
+        headers=headers,
+        json={"crm_status": "waiting_for_group"},
+    )
+    formed = client.post(
+        "/groups/form",
+        headers=headers,
+        json={"name": "Активна група", "capacity": 8, "student_ids": [student["id"]]},
+    )
+    assert formed.status_code == 201, formed.text
+
+    deleted = client.delete(f"/groups/{formed.json()['group']['id']}", headers=headers)
+    assert deleted.status_code == 409, deleted.text
+    assert "учні" in deleted.json()["detail"].lower()
+
+
+def test_location_can_be_edited_and_deleted_when_unused(client):
+    org = create_org(client, "Editable Locations", "editable-locations")
+    headers = {"X-Organization-Id": org["id"]}
+    created = client.post(
+        "/locations",
+        headers=headers,
+        json={"name": "Стара назва", "address": "Стара адреса"},
+    )
+    assert created.status_code == 201, created.text
+    location_id = created.json()["id"]
+
+    updated = client.patch(
+        f"/locations/{location_id}",
+        headers=headers,
+        json={"name": "Нова назва", "address": "Нова адреса"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["name"] == "Нова назва"
+    assert updated.json()["address"] == "Нова адреса"
+
+    deleted = client.delete(f"/locations/{location_id}", headers=headers)
+    assert deleted.status_code == 204, deleted.text
+
+    locations = client.get("/locations", headers=headers)
+    assert locations.status_code == 200, locations.text
+    assert all(item["id"] != location_id for item in locations.json())
+
+
+def test_location_delete_is_blocked_while_active_group_uses_it(client):
+    org = create_org(client, "Protected Location Delete", "protected-location-delete")
+    headers = {"X-Organization-Id": org["id"]}
+    location = client.post("/locations", headers=headers, json={"name": "Центр"}).json()
+    group = client.post(
+        "/groups",
+        headers=headers,
+        json={"name": "Центр група", "capacity": 8, "location_id": location["id"]},
+    )
+    assert group.status_code == 201, group.text
+
+    deleted = client.delete(f"/locations/{location['id']}", headers=headers)
+    assert deleted.status_code == 409, deleted.text
+    assert "використовує група" in deleted.json()["detail"].lower()
+
+
 def test_group_formation_rejects_cross_tenant_student(client):
     org_a = create_org(client, "School A", "school-a-form")
     org_b = create_org(client, "School B", "school-b-form")
