@@ -3124,7 +3124,6 @@ function App() {
                         <button className={value === "present" ? "active present" : ""} onClick={() => markAttendance(student.id, "present")}>✓ Є</button>
                         <button className={value === "absent" ? "active absent" : ""} onClick={() => markAttendance(student.id, "absent")}>Нема</button>
                         <button className={value === "excused" ? "active excused" : ""} onClick={() => markAttendance(student.id, "excused")}>Поважна причина</button>
-                        <button className={value === "late" ? "active late" : ""} onClick={() => markAttendance(student.id, "late")}>Запізнився</button>
                       </div>
                       {(value === "absent" || value === "excused") && <input className="attendanceReasonInput" value={attendanceNotes[selectedLesson.id]?.[student.id] ?? ""} onChange={(e) => setAttendanceNote(student.id, e.target.value)} maxLength={300} placeholder={value === "excused" ? "Причина / коментар (за потреби)" : "Причина відсутності (за потреби)"} />}
                     </div>;
