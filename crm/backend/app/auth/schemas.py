@@ -92,6 +92,14 @@ class AcceptInvitationCreate(BaseModel):
     _full_name = field_validator("full_name")(normalize_name)
 
 
+class InvitationStatusCreate(BaseModel):
+    invite_token: str = Field(min_length=20, max_length=300)
+
+
+class InvitationStatusResult(BaseModel):
+    status: str
+
+
 class BootstrapStatus(BaseModel):
     available: bool
 

@@ -166,20 +166,42 @@ def create_invitation(db: Session, org_id: UUID, invited_by_user_id: UUID, email
     return invitation, raw_token
 
 
-def accept_invitation(db: Session, raw_token: str, full_name: str, password: str):
+def invitation_status(db: Session, raw_token: str) -> str:
     token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
     invitation = db.scalar(select(OrganizationInvitation).where(
         OrganizationInvitation.token_hash == token_hash,
-        OrganizationInvitation.accepted_at.is_(None),
     ))
+    if invitation is None:
+        return "invalid"
+    if invitation.accepted_at is not None:
+        return "accepted"
+
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        return "expired"
+    return "valid"
+
+
+def accept_invitation(db: Session, raw_token: str, full_name: str, password: str):
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    invitation = db.scalar(
+        select(OrganizationInvitation)
+        .where(OrganizationInvitation.token_hash == token_hash)
+        .with_for_update()
+    )
     now = datetime.now(timezone.utc)
     if invitation is None:
-        raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
+        raise HTTPException(status_code=400, detail="Invitation is invalid")
+    if invitation.accepted_at is not None:
+        raise HTTPException(status_code=409, detail="This invitation has already been accepted")
+
     expires_at = invitation.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at < now:
-        raise HTTPException(status_code=400, detail="Invitation is invalid or expired")
+        raise HTTPException(status_code=400, detail="Invitation has expired")
 
     user = db.scalar(select(User).where(User.email == invitation.email))
     if user is None:
@@ -232,11 +254,19 @@ def accept_invitation(db: Session, raw_token: str, full_name: str, password: str
         staff.role = invitation.role
         staff.is_active = True
 
-    invitation.accepted_at = now
+    # Once this person joins the organization, every outstanding invitation
+    # for the same organization/email becomes unusable as well.
+    outstanding = list(db.scalars(select(OrganizationInvitation).where(
+        OrganizationInvitation.organization_id == invitation.organization_id,
+        OrganizationInvitation.email == invitation.email,
+        OrganizationInvitation.accepted_at.is_(None),
+    )))
+    for item in outstanding:
+        item.accepted_at = now
+
     db.commit()
     db.refresh(user)
     return user, create_access_token(user.id), auth_user_info(db, user)
-
 
 
 def create_password_reset_link(

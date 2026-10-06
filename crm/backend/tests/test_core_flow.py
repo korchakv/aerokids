@@ -1161,6 +1161,18 @@ def test_invitation_is_single_use(client):
         headers=headers,
         json={"email": "single-teacher@example.com", "role": "teacher"},
     ).json()
+    second_invite = client.post(
+        "/organization-invitations",
+        headers=headers,
+        json={"email": "single-teacher@example.com", "role": "teacher"},
+    ).json()
+
+    status_before = client.post(
+        "/auth/invite-status",
+        json={"invite_token": invite["invite_token"]},
+    )
+    assert status_before.status_code == 200
+    assert status_before.json() == {"status": "valid"}
 
     payload = {
         "invite_token": invite["invite_token"],
@@ -1168,7 +1180,24 @@ def test_invitation_is_single_use(client):
         "password": "teacher-secure-password",
     }
     assert client.post("/auth/accept-invite", json=payload).status_code == 200
-    assert client.post("/auth/accept-invite", json=payload).status_code == 400
+
+    status_after = client.post(
+        "/auth/invite-status",
+        json={"invite_token": invite["invite_token"]},
+    )
+    assert status_after.status_code == 200
+    assert status_after.json() == {"status": "accepted"}
+
+    second_status = client.post(
+        "/auth/invite-status",
+        json={"invite_token": second_invite["invite_token"]},
+    )
+    assert second_status.status_code == 200
+    assert second_status.json() == {"status": "accepted"}
+
+    reused = client.post("/auth/accept-invite", json=payload)
+    assert reused.status_code == 409
+    assert reused.json()["detail"] == "This invitation has already been accepted"
 
 
 def test_workspace_overviews_return_real_tenant_data(client):

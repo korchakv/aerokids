@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, getInvitationStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
@@ -4035,6 +4035,7 @@ function LoginView({ onAuthenticated, theme, onToggleTheme }: { onAuthenticated:
   const [organizationSlug, setOrganizationSlug] = useState("aerokids");
   const [ownerName, setOwnerName] = useState("");
   const [bootstrapSecret, setBootstrapSecret] = useState("");
+  const [inviteStatus, setInviteStatus] = useState<"checking" | "valid" | "accepted" | "expired" | "invalid" | "error">(inviteToken ? "checking" : "valid");
 
   useEffect(() => {
     document.body.classList.add("crmLoginActive");
@@ -4042,7 +4043,15 @@ function LoginView({ onAuthenticated, theme, onToggleTheme }: { onAuthenticated:
   }, []);
 
   useEffect(() => {
-    if (inviteToken || resetToken) {
+    if (inviteToken) {
+      setCheckingBootstrap(false);
+      setInviteStatus("checking");
+      getInvitationStatus(inviteToken)
+        .then((status) => setInviteStatus(status))
+        .catch(() => setInviteStatus("error"));
+      return;
+    }
+    if (resetToken) {
       setCheckingBootstrap(false);
       return;
     }
@@ -4050,7 +4059,7 @@ function LoginView({ onAuthenticated, theme, onToggleTheme }: { onAuthenticated:
       .then(setBootstrapAvailable)
       .catch(() => setBootstrapAvailable(false))
       .finally(() => setCheckingBootstrap(false));
-  }, []);
+  }, [inviteToken, resetToken]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -4079,7 +4088,13 @@ function LoginView({ onAuthenticated, theme, onToggleTheme }: { onAuthenticated:
       window.history.replaceState({}, "", window.location.pathname);
       onAuthenticated(nextSession);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не вдалося прийняти запрошення");
+      const message = err instanceof Error ? err.message : "Не вдалося прийняти запрошення";
+      if (message.includes("already been accepted")) {
+        setInviteStatus("accepted");
+        setError("");
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -4137,10 +4152,32 @@ function LoginView({ onAuthenticated, theme, onToggleTheme }: { onAuthenticated:
           {error && <div className="loginError">{error}</div>}
           <button className="primary full" disabled={loading}>{loading ? "Зберігаємо…" : "Змінити пароль"}</button>
         </form>
-      </> : inviteToken ? <>
+      </> : inviteToken ? inviteStatus === "checking" ? <>
+        <div className="loginChecking">Перевіряємо запрошення…</div>
+      </> : inviteStatus === "accepted" ? <>
+        <p className="eyebrow">Запрошення використано</p>
+        <h1>Вже зареєстровано</h1>
+        <p className="loginIntro">За цим посиланням уже зареєстровано користувача. Запрошення одноразове і більше не активне.</p>
+        <a className="primary full inviteLoginLink" href="/">Перейти до входу</a>
+      </> : inviteStatus === "expired" ? <>
+        <p className="eyebrow">Запрошення неактивне</p>
+        <h1>Термін дії минув</h1>
+        <p className="loginIntro">Це посилання на запрошення вже прострочене. Попросіть адміністратора створити нове.</p>
+        <a className="primary full inviteLoginLink" href="/">Перейти до входу</a>
+      </> : inviteStatus === "invalid" ? <>
+        <p className="eyebrow">Запрошення недійсне</p>
+        <h1>Посилання не працює</h1>
+        <p className="loginIntro">Перевірте, чи посилання скопійовано повністю, або попросіть адміністратора створити нове запрошення.</p>
+        <a className="primary full inviteLoginLink" href="/">Перейти до входу</a>
+      </> : inviteStatus === "error" ? <>
+        <p className="eyebrow">Не вдалося перевірити</p>
+        <h1>Спробуйте ще раз</h1>
+        <p className="loginIntro">CRM тимчасово не змогла перевірити це запрошення.</p>
+        <button className="primary full" type="button" onClick={() => window.location.reload()}>Повторити перевірку</button>
+      </> : <>
         <p className="eyebrow">Запрошення</p>
         <h1>Створіть свій доступ</h1>
-        <p className="loginIntro">Вкажіть ім’я та пароль. Роль і організація вже задані запрошенням.</p>
+        <p className="loginIntro">Вкажіть ім’я та пароль. Роль і організація вже задані запрошенням. Це посилання можна використати лише один раз.</p>
         <form onSubmit={acceptInvitation}>
           <label>Ваше ім’я<input autoComplete="name" value={inviteName} onChange={(e) => setInviteName(e.target.value)} required /></label>
           <label>Пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>

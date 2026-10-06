@@ -1348,3 +1348,5 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
   .loginBrand{margin-bottom:18px!important}
   .loginCard h1{font-size:22px!important}
 }
+
+.inviteLoginLink{display:flex;align-items:center;justify-content:center;margin-top:20px;text-decoration:none;text-align:center}
