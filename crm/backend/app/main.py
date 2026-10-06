@@ -6,20 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router
 from app.core.config import settings
-from app.db.migrate_database import run_migration_from_environment
 
 
-logger = logging.getLogger("uvicorn.error")
 is_production = settings.environment.lower() == "production"
 
-migration_result = run_migration_from_environment(settings.database_url)
-if migration_result is not None:
-    total_rows = sum(item["rows"] for item in migration_result.values())
-    logger.info(
-        "Database migration verified: %s tables, %s rows",
-        len(migration_result),
-        total_rows,
-    )
 
 app = FastAPI(
     title="School CRM API",
