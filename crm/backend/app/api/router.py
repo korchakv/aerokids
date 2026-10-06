@@ -202,6 +202,15 @@ def students(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole
     return crm.list_students(db, org_id)
 
 
+@router.delete("/students/{student_id}", status_code=204)
+def delete_student(
+    student_id: UUID,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
+    db: Session = Depends(get_db),
+):
+    crm.delete_student(db, access.organization_id, student_id, access.user_id)
+
+
 @router.post("/students/{student_id}/contacts", status_code=201)
 def add_student_contact(student_id: UUID, data: StudentContactCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     item = crm.attach_contact(db, org_id, student_id, data.contact_id, data.relation, data.is_primary)
