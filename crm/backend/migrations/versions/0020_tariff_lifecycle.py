@@ -20,6 +20,7 @@ def upgrade() -> None:
         batch.alter_column("ends_on", existing_type=sa.Date(), nullable=True)
         batch.add_column(sa.Column("period_days", sa.Integer(), nullable=True))
         batch.add_column(sa.Column("lessons_included", sa.Integer(), nullable=True))
+        batch.add_column(sa.Column("lesson_unit_price_minor", sa.Integer(), nullable=True))
         batch.add_column(sa.Column("credit_minor", sa.Integer(), nullable=False, server_default="0"))
 
     # Freeze the plan rules that were in effect when each existing subscription
@@ -53,6 +54,7 @@ def downgrade() -> None:
     )
     with op.batch_alter_table("student_subscriptions") as batch:
         batch.drop_column("credit_minor")
+        batch.drop_column("lesson_unit_price_minor")
         batch.drop_column("lessons_included")
         batch.drop_column("period_days")
         batch.alter_column("ends_on", existing_type=sa.Date(), nullable=False)
