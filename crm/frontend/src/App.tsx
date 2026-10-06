@@ -1187,6 +1187,29 @@ function App() {
     }
   };
 
+  const enrollLeadWithoutGroup = async () => {
+    if (!selected || leadEnrollmentSaving) return;
+    setLeadEnrollmentSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiPost(`/students/${selected.id}/enroll-without-group`, {}, session);
+        await syncWorkspace(session);
+      } else {
+        setLeads((items) => items.map((lead) => lead.id === selected.id ? { ...lead, status: "Зарахований" } : lead));
+        setStudentStates((items) => ({ ...items, [selected.id]: "Активний" }));
+      }
+      setLeadProcedureTarget(null);
+      setSelectedId(null);
+      setSelectedStudentId(selected.id);
+      setActive("Учні");
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зарахувати учня без групи.");
+    } finally {
+      setLeadEnrollmentSaving(false);
+    }
+  };
+
   const toggleCandidate = (id: EntityId) => {
     setSelectedCandidates((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   };
@@ -3292,7 +3315,7 @@ function App() {
           </div>
           <div className="studentInfoGrid">
             <div><span>Група</span><b>{studentGroup(selectedStudent.id)?.name ?? "Без групи"}</b><small>{studentGroup(selectedStudent.id)?.schedule ?? "Розклад не задано"}</small></div>
-            <div><span>Локація</span><b>{studentGroup(selectedStudent.id)?.location ?? "—"}</b></div>
+            <div><span>Локація</span><b>{studentGroup(selectedStudent.id)?.location ?? "Без локації"}</b></div>
           </div>
           <div className="contactCard"><span>Контакт</span><b>{selectedStudent.parent}</b><a href={"tel:" + selectedStudent.phone.replace(/\s/g, "")}>{selectedStudent.phone}</a></div>
 
@@ -3305,12 +3328,12 @@ function App() {
             </div>
 
             <div className="studentSection">
-              <h3>Перевести в іншу групу</h3>
+              <h3>{studentGroup(selectedStudent.id) ? "Перевести в іншу групу" : "Додати до групи"}</h3>
               <select className="transferSelect" value={transferGroupId ?? ""} onChange={(e) => setTransferGroupId(e.target.value || null)}>
                 <option value="">Оберіть групу</option>
                 {groups.map((group) => <option value={group.id} key={group.id}>{group.name} · {group.members.length}/{group.capacity}</option>)}
               </select>
-              <button className="primary full" disabled={transferGroupId === null || transferGroupId === studentGroup(selectedStudent.id)?.id} onClick={transferStudent}>Перевести учня</button>
+              <button className="primary full" disabled={transferGroupId === null || transferGroupId === studentGroup(selectedStudent.id)?.id} onClick={transferStudent}>{studentGroup(selectedStudent.id) ? "Перевести учня" : "Додати учня до групи"}</button>
             </div>
           </>}
 
@@ -3446,19 +3469,24 @@ function App() {
                 <button className="search dangerSoft" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Не хочуть продовжувати</button>
               </div>
             </>}
-            {selected.status === "Очікує групу" && <small>Готові навчатися · потрібно підібрати групу.</small>}
+            {selected.status === "Очікує групу" && <small>Готові навчатися · можна зарахувати в групу або без групи.</small>}
           </div>}
 
           {leadProcedureTarget === "waiting" && <div id="lead-enrollment-workflow" className="workflowBox leadWorkflowBox leadDirectEnrollmentStep">
-            <div className="workflowHead"><h3>Зарахувати в групу</h3><button onClick={() => { setLeadProcedureTarget(null); setLeadEnrollmentGroupId(""); }}>×</button></div>
-            <p className="softPreferenceHint">Попередні етапи можна пропустити. Для зарахування обов’язково лише обрати групу з вільним місцем.</p>
+            <div className="workflowHead"><h3>Зарахувати учня</h3><button onClick={() => { setLeadProcedureTarget(null); setLeadEnrollmentGroupId(""); }}>×</button></div>
+            <p className="softPreferenceHint">Учень може навчатися в групі або окремо. Група та локація не є обов’язковими.</p>
             <label>Група<select value={leadEnrollmentGroupId} onChange={(e) => setLeadEnrollmentGroupId(e.target.value)}>
               <option value="">Оберіть групу</option>
               {groups.filter((group) => group.members.length < group.capacity).map((group) => <option value={group.id} key={group.id}>{group.name} · {group.schedule} · {group.location} · вільно {group.capacity - group.members.length}</option>)}
             </select></label>
             <button className="search full createGroupInline" onClick={() => openGroupCreation("lead")}>+ Створити нову групу</button>
             {groups.length > 0 && groups.every((group) => group.members.length >= group.capacity) && <div className="emptyState compactEmpty">Немає груп із вільними місцями.</div>}
-            <button className="primary full" disabled={!leadEnrollmentGroupId || leadEnrollmentSaving} onClick={enrollLeadDirectly}>{leadEnrollmentSaving ? "Зараховуємо…" : "Зарахувати дитину"}</button>
+            <button className="primary full" disabled={!leadEnrollmentGroupId || leadEnrollmentSaving} onClick={enrollLeadDirectly}>{leadEnrollmentSaving ? "Зараховуємо…" : "Зарахувати в групу"}</button>
+            <div className="enrollmentOr"><span>або</span></div>
+            <button className="search full enrollWithoutGroup" disabled={leadEnrollmentSaving} onClick={enrollLeadWithoutGroup}>
+              <b>Зарахувати без групи</b>
+              <small>Для індивідуальних або онлайн-занять. Групу й локацію можна додати пізніше.</small>
+            </button>
           </div>}
 
           {selected.trialResult === "no_show" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="resultCard noShowCard">
@@ -3533,7 +3561,7 @@ function App() {
                 {(selected.status === "Зв'язались" || selected.trialResult === "no_show" || selected.trialResult === "cancelled") && <button className="mobileLeadSheetAction" onClick={beginTrialScheduling}><i>◷</i><span><b>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</b><small>Обрати дату, час і локацію</small></span></button>}
                 {selected.status === "Пробне заплановано" && <><button className="mobileLeadSheetAction" onClick={beginTrialResult}><i>✓</i><span><b>Внести результат пробного</b><small>Був / не прийшов / скасували</small></span></button><button className="mobileLeadSheetAction" onClick={beginTrialScheduling}><i>↻</i><span><b>Перенести пробне</b><small>Змінити дату, час або локацію</small></span></button></>}
                 {selected.status === "Після пробного" && <><button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void saveLeadOutcome("waiting_for_group"); }}><i>✓</i><span><b>Готові навчатися</b><small>Перемістити в «Очікує групу»</small></span></button><button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>☎</i><span><b>Ще думають</b><small>Запланувати наступний контакт</small></span></button></>}
-                {selected.status === "Очікує групу" && <button className="mobileLeadSheetAction" onClick={beginLeadEnrollment}><i>→</i><span><b>Зарахувати в групу</b><small>Обрати існуючу або створити нову</small></span></button>}
+                {selected.status === "Очікує групу" && <button className="mobileLeadSheetAction" onClick={beginLeadEnrollment}><i>→</i><span><b>Зарахувати учня</b><small>У групу або без групи</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Пробне заплановано" && <button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>◷</i><span><b>Запланувати дзвінок</b><small>Поставити дату наступного контакту</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Очікує групу" && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void updateStatus(selected.id, "Очікує групу"); }}><i>◎</i><span><b>Очікує групу</b><small>Позначити готовність до підбору групи</small></span></button>}
                 <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); setLeadStatusMenuOpen(true); }}><i>⇄</i><span><b>Перемістити заявку</b><small>Змінити етап вручну</small></span></button>
@@ -3552,7 +3580,7 @@ function App() {
                 <button className={"mobileLeadStageOption stage-trial " + (selected.status === "Пробне заплановано" ? "active" : "")} onClick={beginTrialScheduling}><i></i><span><b>Пробне заплановано</b><small>Спочатку вкажіть дату і час</small></span>{selected.status === "Пробне заплановано" && <strong>✓</strong>}</button>
                 <button className={"mobileLeadStageOption stage-after_trial " + (selected.status === "Після пробного" ? "active" : "")} onClick={beginTrialResult}><i></i><span><b>Після пробного</b><small>Зафіксувати результат заняття</small></span>{selected.status === "Після пробного" && <strong>✓</strong>}</button>
                 <button className={"mobileLeadStageOption stage-waiting " + (selected.status === "Очікує групу" ? "active" : "")} onClick={() => setLeadMobileStatus("Очікує групу")}><i></i><span><b>Очікує групу</b><small>Готові до підбору групи</small></span>{selected.status === "Очікує групу" && <strong>✓</strong>}</button>
-                <button className={"mobileLeadStageOption stage-enrolled " + (selected.status === "Зарахований" ? "active" : "")} onClick={beginLeadEnrollment}><i></i><span><b>Зарахувати в групу</b><small>Потрібно обрати групу</small></span>{selected.status === "Зарахований" && <strong>✓</strong>}</button>
+                <button className={"mobileLeadStageOption stage-enrolled " + (selected.status === "Зарахований" ? "active" : "")} onClick={beginLeadEnrollment}><i></i><span><b>Зарахувати учня</b><small>У групу або без групи</small></span>{selected.status === "Зарахований" && <strong>✓</strong>}</button>
                 <button className="mobileLeadStageOption stage-closed" onClick={beginLeadClose}><i></i><span><b>Закрити заявку</b><small>Зберегти причину закриття</small></span></button>
               </div>
             </section>
@@ -3866,7 +3894,7 @@ function leadPrimaryActionLabel(lead: Lead) {
   if (lead.trialResult === "no_show" || lead.trialResult === "cancelled") return "Перезаписати на пробне";
   if (lead.status === "Пробне заплановано") return "Внести результат пробного";
   if (lead.status === "Після пробного") return "Рішення після пробного";
-  if (lead.status === "Очікує групу") return "Зарахувати в групу";
+  if (lead.status === "Очікує групу") return "Зарахувати учня";
   return "Записати на пробне";
 }
 
@@ -4095,6 +4123,7 @@ function auditEventLabel(type: string) {
     "trial.cancelled": "Пробне скасовано",
     "lead.outcome_updated": "Рішення по заявці",
     "student.enrolled": "Зараховано до групи",
+    "student.enrolled_without_group": "Зараховано без групи",
     "student.transferred": "Переведено в іншу групу",
     "student.status_changed": "Статус учня змінено",
     "payment.created": "Створено нарахування",
