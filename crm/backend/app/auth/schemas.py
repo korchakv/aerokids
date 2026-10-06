@@ -72,6 +72,7 @@ class BootstrapOwnerResult(BaseModel):
 class OrganizationInvitationCreate(BaseModel):
     email: str = Field(min_length=5, max_length=255)
     role: StaffRole
+    can_teach: bool = False
 
     _email = field_validator("email")(normalize_email)
 
@@ -80,6 +81,7 @@ class OrganizationInvitationResult(BaseModel):
     invitation_id: UUID
     email: str
     role: StaffRole
+    can_teach: bool
     invite_token: str
     expires_at: str
 
