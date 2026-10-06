@@ -350,6 +350,7 @@ function App() {
   const [leadEnrollmentSaving, setLeadEnrollmentSaving] = useState(false);
   const [leadActionsOpen, setLeadActionsOpen] = useState(false);
   const [leadStatusMenuOpen, setLeadStatusMenuOpen] = useState(false);
+  const [leadDeleteSaving, setLeadDeleteSaving] = useState(false);
   const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
   const [candidateAgeFilter, setCandidateAgeFilter] = useState<"all" | "8-10" | "11-13">("all");
   const [candidateLevelFilter, setCandidateLevelFilter] = useState("all");
@@ -1400,6 +1401,27 @@ function App() {
     setCloseKind("declined");
     setPostTrialMode("close");
     revealLeadWorkflow("lead-close-workflow");
+  };
+
+  const deleteSelectedLead = async () => {
+    if (!selected || leadDeleteSaving) return;
+    if (!window.confirm(`Видалити заявку «${selected.child}»? Це варто робити тільки для помилково створених заявок. Якщо вже є важлива історія, CRM заблокує видалення.`)) return;
+    setLeadDeleteSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiDelete(`/students/${selected.id}`, session);
+        await syncWorkspace(session);
+      } else {
+        setLeads((items) => items.filter((item) => item.id !== selected.id));
+      }
+      setSelectedId(null);
+      setLeadActionsOpen(false);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося видалити заявку.");
+    } finally {
+      setLeadDeleteSaving(false);
+    }
   };
 
   const handleLeadPrimaryAction = () => {
@@ -4087,15 +4109,14 @@ function App() {
             </div>
           </>}
 
+          {canDeleteStudents && <div className="recordDangerZone">
+            <span>Службова дія</span>
+            <button className="subtleDangerAction" type="button" disabled={studentDeleteSaving} onClick={deleteSelectedStudent}>{studentDeleteSaving ? "Видаляємо…" : "Видалити учня"}</button>
+          </div>}
           {apiEnabled ? <AuditHistory title="Історія учня" events={entityEvents} loading={historyLoading} /> : <div className="history">
             <h3>Історія учня</h3>
             <div><i></i><p><b>Пробне заняття</b><span>{selectedStudent.recommendedLevel ?? "Рівень не вказано"}</span></p></div>
             <div><i></i><p><b>Зараховано</b><span>{studentGroup(selectedStudent.id)?.name ?? "Групу не вказано"}</span></p></div>
-          </div>}
-          {canDeleteStudents && <div className="subtleDeleteRow">
-            <button className="subtleDangerAction" type="button" disabled={studentDeleteSaving} onClick={deleteSelectedStudent}>
-              {studentDeleteSaving ? "Видаляємо…" : "Видалити учня"}
-            </button>
           </div>}
         </aside>
       </div>}
@@ -4394,6 +4415,7 @@ function App() {
                 {leadIsDeferred(selected) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void resumeDeferredLead(); }}><i>↺</i><span><b>Повернути в роботу зараз</b><small>Прибрати відкладене нагадування</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction danger" onClick={beginLeadClose}><i>×</i><span><b>Закрити заявку</b><small>Відмова, немає відповіді або неактуально</small></span></button>}
                 {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); reopenLead(); }}><i>↺</i><span><b>Повернути в роботу</b><small>Відновити активну заявку</small></span></button>}
+                {canDeleteStudents && <button className="mobileLeadSheetAction danger quietDelete" disabled={leadDeleteSaving} onClick={deleteSelectedLead}><i>⌫</i><span><b>{leadDeleteSaving ? "Видаляємо…" : "Видалити заявку"}</b><small>Тільки якщо створена помилково</small></span></button>}
               </div>
             </section>
           </div>}
@@ -4413,6 +4435,10 @@ function App() {
             </section>
           </div>}
 
+          {canDeleteStudents && <div className="recordDangerZone">
+            <span>Службова дія</span>
+            <button className="subtleDangerAction" type="button" disabled={leadDeleteSaving} onClick={deleteSelectedLead}>{leadDeleteSaving ? "Видаляємо…" : "Видалити заявку"}</button>
+          </div>}
           {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} /> : <div className="history">
             <h3>Історія</h3>
             <div><i></i><p><b>Заявка створена</b><span>Джерело: {leadSourceLabel(selected.source)}</span></p></div>
