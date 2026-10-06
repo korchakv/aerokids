@@ -1960,6 +1960,45 @@ def test_auth_membership_returns_organization_locale_settings(client):
     assert membership["organization_locale"] == "cs-CZ"
 
 
+def test_first_intake_accepts_missing_surnames_from_site_and_manual_entry(client):
+    org = create_org(client, "Partial Names", "partial-names")
+    headers = {"X-Organization-Id": org["id"]}
+
+    website = client.post(
+        "/public/intake/partial-names",
+        json={
+            "child_first_name": "Марко",
+            "child_age": 9,
+            "contact_name": "Оксана",
+            "phone": "0671112233",
+            "source": "website",
+        },
+    )
+    assert website.status_code == 201, website.text
+
+    manual = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Софія",
+            "child_age": 10,
+            "contact_name": "Марина",
+            "phone": "0502223344",
+            "source": "phone",
+        },
+    )
+    assert manual.status_code == 201, manual.text
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    rows = {item["first_name"]: item for item in leads.json()}
+
+    assert rows["Марко"]["last_name"] is None
+    assert rows["Марко"]["contact_name"] == "Оксана"
+    assert rows["Софія"]["last_name"] is None
+    assert rows["Софія"]["contact_name"] == "Марина"
+
+
 def test_intake_normalizes_ukrainian_phone_and_deduplicates_repeat(client):
     org = create_org(client, "International School", "international-intake")
 
