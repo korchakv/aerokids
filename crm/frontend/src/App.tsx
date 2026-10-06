@@ -13,6 +13,15 @@ type AvailabilitySlot = {
   note?: string | null;
 };
 
+type AvailabilityWindowDraft = {
+  id: string;
+  weekdays: number[];
+  start_time: string;
+  end_time: string;
+  preference: AvailabilitySlot["preference"];
+  note?: string | null;
+};
+
 type DraftScheduleSlot = { weekday: number; start_time: string; duration_minutes: number };
 
 type LeadKanbanColumnId = "new" | "contacted" | "trial" | "no_show" | "after_trial" | "waiting" | "closed";
@@ -447,7 +456,7 @@ function App() {
   const [closeNote, setCloseNote] = useState("");
   const [preferenceMode, setPreferenceMode] = useState(false);
   const [preferenceLocationId, setPreferenceLocationId] = useState<EntityId | "">("");
-  const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilitySlot[]>([]);
+  const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindowDraft[]>([]);
   const [preferenceSaving, setPreferenceSaving] = useState(false);
   const [trialAt, setTrialAt] = useState("2026-10-05T17:00");
   const [trialLocation, setTrialLocation] = useState("Основна локація");
@@ -1031,7 +1040,7 @@ function App() {
     setCloseReason(lead?.closeReason ?? "schedule");
     setCloseNote(lead?.closeNote ?? "");
     setPreferenceLocationId(lead?.preferredLocationId ?? "");
-    setAvailabilityWindows(lead?.availability ?? []);
+    setAvailabilityWindows(groupAvailabilitySlots(lead?.availability ?? []));
   };
 
   const beginLeadEdit = () => {
@@ -1335,7 +1344,7 @@ function App() {
     try {
       await apiPut(`/students/${selected.id}/preferences`, {
         preferred_location_id: preferenceLocationId || null,
-        availability: availabilityWindows,
+        availability: flattenAvailabilityWindows(availabilityWindows),
       }, session);
       await syncWorkspace(session);
       setPreferenceMode(false);
@@ -3825,7 +3834,7 @@ function App() {
                   {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
                 </select></label>}
             <AvailabilityWindowEditor value={availabilityWindows} onChange={setAvailabilityWindows} />
-            <button className="primary full" disabled={preferenceSaving || availabilityWindows.some((x) => x.end_time <= x.start_time)} onClick={saveStudentPreferences}>{preferenceSaving ? "Зберігаємо…" : "Зберегти побажання"}</button>
+            <button className="primary full" disabled={preferenceSaving || availabilityWindows.some((x) => x.weekdays.length === 0 || x.end_time <= x.start_time)} onClick={saveStudentPreferences}>{preferenceSaving ? "Зберігаємо…" : "Зберегти побажання"}</button>
           </div>}
 
 
@@ -4902,6 +4911,41 @@ function timeToMinutes(value: string) {
   return hours * 60 + minutes;
 }
 
+function groupAvailabilitySlots(slots: AvailabilitySlot[]): AvailabilityWindowDraft[] {
+  const grouped = new Map<string, AvailabilityWindowDraft>();
+  slots.forEach((slot) => {
+    const preference = slot.preference ?? "preferred";
+    const note = slot.note ?? null;
+    const key = [slot.start_time.slice(0, 5), slot.end_time.slice(0, 5), preference, note ?? ""].join("|");
+    const existing = grouped.get(key);
+    if (existing) {
+      if (!existing.weekdays.includes(slot.weekday)) existing.weekdays.push(slot.weekday);
+      return;
+    }
+    grouped.set(key, {
+      id: `availability-${grouped.size + 1}-${slot.weekday}`,
+      weekdays: [slot.weekday],
+      start_time: slot.start_time.slice(0, 5),
+      end_time: slot.end_time.slice(0, 5),
+      preference,
+      note,
+    });
+  });
+  return [...grouped.values()].map((window) => ({ ...window, weekdays: [...window.weekdays].sort((a, b) => a - b) }));
+}
+
+function flattenAvailabilityWindows(windows: AvailabilityWindowDraft[]): AvailabilitySlot[] {
+  return windows.flatMap((window) =>
+    [...new Set(window.weekdays)].sort((a, b) => a - b).map((weekday) => ({
+      weekday,
+      start_time: window.start_time,
+      end_time: window.end_time,
+      preference: window.preference,
+      note: window.note ?? null,
+    }))
+  );
+}
+
 function availabilityLabel(slots: AvailabilitySlot[]) {
   if (!slots.length) return "Не вказано";
   const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
@@ -4940,16 +4984,46 @@ function ScheduleSlotEditor({ value, onChange }: { value: DraftScheduleSlot[]; o
   </div>)}<button type="button" className="search" onClick={() => onChange([...value, { weekday: (value.at(-1)?.weekday ?? -1) + 1 > 6 ? 0 : (value.at(-1)?.weekday ?? -1) + 1, start_time: "17:00", duration_minutes: 60 }])}>+ Додати день</button></fieldset>;
 }
 
-function AvailabilityWindowEditor({ value, onChange }: { value: AvailabilitySlot[]; onChange: (value: AvailabilitySlot[]) => void }) {
-  const update = (index: number, patch: Partial<AvailabilitySlot>) => onChange(value.map((slot, i) => i === index ? { ...slot, ...patch } : slot));
-  return <div className="availabilityEditor">{value.map((slot, index) => <div className="availabilityRow" key={index}>
-    <WeekdayPicker value={slot.weekday} onChange={(weekday) => update(index, { weekday })} />
-    <TimeSelect label="Від" value={slot.start_time} onChange={(start_time) => update(index, { start_time })} />
-    <TimeSelect label="До" value={slot.end_time} onChange={(end_time) => update(index, { end_time })} />
-    <label>Пріоритет<select value={slot.preference ?? "preferred"} onChange={(e) => update(index, { preference: e.target.value as AvailabilitySlot["preference"] })}><option value="preferred">Бажано</option><option value="possible">Можливо</option><option value="avoid">Небажано</option></select></label>
-    <label className="windowNote">Коментар<input value={slot.note ?? ""} onChange={(e) => update(index, { note: e.target.value || null })} placeholder="Необов’язково" /></label>
-    <button type="button" className="link danger" onClick={() => onChange(value.filter((_, i) => i !== index))}>Видалити</button>
-  </div>)}<button type="button" className="search" onClick={() => onChange([...value, { weekday: 0, start_time: "16:30", end_time: "19:00", preference: "preferred", note: null }])}>+ Додати ще варіант</button></div>;
+function AvailabilityWindowEditor({ value, onChange }: { value: AvailabilityWindowDraft[]; onChange: (value: AvailabilityWindowDraft[]) => void }) {
+  const update = (index: number, patch: Partial<AvailabilityWindowDraft>) => onChange(value.map((window, i) => i === index ? { ...window, ...patch } : window));
+  const toggleDay = (index: number, weekday: number) => {
+    const window = value[index];
+    if (!window) return;
+    const weekdays = window.weekdays.includes(weekday)
+      ? window.weekdays.filter((day) => day !== weekday)
+      : [...window.weekdays, weekday].sort((a, b) => a - b);
+    update(index, { weekdays });
+  };
+
+  return <div className="availabilityEditor">
+    {value.map((window, index) => <div className="availabilityRow availabilityWindowRow" key={window.id}>
+      <div className="availabilityWeekdays">
+        <span>Дні</span>
+        <div className="availabilityDayChecks">
+          {DAY_NAMES.map((day, weekday) => <label className={"availabilityDayCheck" + (window.weekdays.includes(weekday) ? " checked" : "")} key={day}>
+            <input type="checkbox" checked={window.weekdays.includes(weekday)} onChange={() => toggleDay(index, weekday)} />
+            <span>{day}</span>
+          </label>)}
+        </div>
+        {window.weekdays.length === 0 && <small className="availabilityDayError">Оберіть хоча б один день</small>}
+      </div>
+      <div className="availabilityTimes">
+        <TimeSelect label="Від" value={window.start_time} onChange={(start_time) => update(index, { start_time })} />
+        <TimeSelect label="До" value={window.end_time} onChange={(end_time) => update(index, { end_time })} />
+      </div>
+      <label>Пріоритет<select value={window.preference ?? "preferred"} onChange={(e) => update(index, { preference: e.target.value as AvailabilitySlot["preference"] })}><option value="preferred">Бажано</option><option value="possible">Можливо</option><option value="avoid">Небажано</option></select></label>
+      <label className="windowNote">Коментар<input value={window.note ?? ""} onChange={(e) => update(index, { note: e.target.value || null })} placeholder="Необов’язково" /></label>
+      <button type="button" className="link danger availabilityDeleteWindow" onClick={() => onChange(value.filter((_, i) => i !== index))}>Видалити</button>
+    </div>)}
+    <button type="button" className="search availabilityAddWindow" onClick={() => onChange([...value, {
+      id: crypto.randomUUID(),
+      weekdays: [],
+      start_time: "17:00",
+      end_time: "19:00",
+      preference: "preferred",
+      note: null,
+    }])}>+ Додати бажаний час</button>
+  </div>;
 }
 
 function DateTimeEditor({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
