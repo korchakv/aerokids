@@ -1587,3 +1587,10 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 .responsibilityToggle b{font-size:12px;color:var(--ak-text)}
 .responsibilityToggle small{font-size:10.5px;line-height:1.35;color:var(--ak-muted)}
 .responsibilityToggle input:disabled{opacity:.65;cursor:not-allowed}
+
+
+.assignmentDisabled{
+  opacity:.48;
+  cursor:not-allowed!important;
+}
+.assignmentDisabled input{cursor:not-allowed!important}
