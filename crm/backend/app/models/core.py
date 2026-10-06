@@ -308,6 +308,7 @@ class StudentSubscription(Base):
     price_minor: Mapped[int] = mapped_column(Integer, nullable=False)
     period_days: Mapped[int | None] = mapped_column(Integer)
     lessons_included: Mapped[int | None] = mapped_column(Integer)
+    lesson_unit_price_minor: Mapped[int | None] = mapped_column(Integer)
     credit_minor: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     discount_minor: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     discount_label: Mapped[str | None] = mapped_column(String(160))
