@@ -21,8 +21,6 @@ def upgrade() -> None:
     op.execute('UPDATE staff SET can_teach = TRUE WHERE role IN (\'OWNER\', \'ADMIN\', \'TEACHER\')')
     op.execute('UPDATE organization_invitations SET can_teach = TRUE WHERE role = \'TEACHER\'')
 
-    op.alter_column("staff", "can_teach", server_default=None)
-    op.alter_column("organization_invitations", "can_teach", server_default=None)
 
 
 def downgrade() -> None:
