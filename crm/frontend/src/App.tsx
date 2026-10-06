@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
@@ -444,6 +444,7 @@ function App() {
   const [scheduleWeekOffset, setScheduleWeekOffset] = useState(0);
   const [scheduleFilterGroupId, setScheduleFilterGroupId] = useState<EntityId | "all">("all");
   const [attendanceWeekOffset, setAttendanceWeekOffset] = useState(0);
+  const workspaceAutoRefreshBusy = useRef(false);
   useEffect(() => {
     setStaffResetLink("");
   }, [selectedStaffId]);
@@ -527,6 +528,38 @@ function App() {
     syncWorkspace(session).catch(() => undefined);
     // Reload whenever the selected organization changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.accessToken, session?.organizationId]);
+
+  useEffect(() => {
+    if (!apiEnabled || !session) return;
+
+    const refreshWorkspaceSnapshot = async () => {
+      if (document.visibilityState !== "visible" || workspaceAutoRefreshBusy.current) return;
+      workspaceAutoRefreshBusy.current = true;
+      try {
+        const bundle = await loadWorkspace(session);
+        applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
+      } catch {
+        // Keep the current UI stable on a transient background refresh failure.
+      } finally {
+        workspaceAutoRefreshBusy.current = false;
+      }
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refreshWorkspaceSnapshot();
+    };
+    const intervalId = window.setInterval(() => void refreshWorkspaceSnapshot(), 15_000);
+
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      workspaceAutoRefreshBusy.current = false;
+    };
   }, [session?.accessToken, session?.organizationId]);
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
