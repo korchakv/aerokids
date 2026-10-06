@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, clearSession, getBootstrapStatus, getInvitationStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, checkIntakeDuplicates, clearSession, getBootstrapStatus, getInvitationStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
@@ -273,7 +273,8 @@ function App() {
     return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
   });
   const [session, setSession] = useState<Session | null>(() => loadSession());
-  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [workspaceLoading, setWorkspaceLoading] = useState(() => Boolean(apiEnabled && loadSession()));
+  const [workspaceRefreshing, setWorkspaceRefreshing] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [overviewReport, setOverviewReport] = useState<OverviewReport | null>(null);
@@ -310,16 +311,18 @@ function App() {
   const [leadPhone, setLeadPhone] = useState("");
   const [leadSource, setLeadSource] = useState("phone");
   const [leadComment, setLeadComment] = useState("");
-  const [leads, setLeads] = useState(initialLeads);
-  const [groups, setGroups] = useState<GroupItem[]>([
+  const [leadDuplicateMatches, setLeadDuplicateMatches] = useState<IntakeDuplicateMatch[]>([]);
+  const [leadDuplicateChecking, setLeadDuplicateChecking] = useState(false);
+  const [leads, setLeads] = useState<Lead[]>(apiEnabled ? [] : initialLeads);
+  const [groups, setGroups] = useState<GroupItem[]>(apiEnabled ? [] : [
     { id: "1", name: "FPV Start 8–10", ages: "8–10", schedule: "Пн / Ср · 17:00", location: "Основна локація", capacity: 8, members: ["8", "9"] },
   ]);
-  const [lessons, setLessons] = useState<LessonItem[]>([
+  const [lessons, setLessons] = useState<LessonItem[]>(apiEnabled ? [] : [
     { id: "1", groupId: "1", startsAt: "2026-09-30T17:00", duration: 60, topic: "FPV: траса в симуляторі" },
     { id: "2", groupId: "1", startsAt: "2026-10-05T17:00", duration: 60, topic: "Whoop: базове керування" },
   ]);
   const [selectedLessonId, setSelectedLessonId] = useState<EntityId>(apiEnabled ? "" : "1");
-  const [attendance, setAttendance] = useState<Record<EntityId, Record<EntityId, AttendanceValue>>>({
+  const [attendance, setAttendance] = useState<Record<EntityId, Record<EntityId, AttendanceValue>>>(apiEnabled ? {} : {
     "1": { "8": "present", "9": "late" },
   });
   const [attendanceNotes, setAttendanceNotes] = useState<Record<EntityId, Record<EntityId, string>>>({});
@@ -337,11 +340,11 @@ function App() {
   const [lessonNotesDraft, setLessonNotesDraft] = useState("");
   const [lessonDetailsSaving, setLessonDetailsSaving] = useState(false);
   const [lessonEditing, setLessonEditing] = useState(true);
-  const [plans, setPlans] = useState<PlanDemo[]>([
+  const [plans, setPlans] = useState<PlanDemo[]>(apiEnabled ? [] : [
     { id: "1", name: "8 занять / 30 днів", price: 1800, lessons: 8 },
     { id: "2", name: "Індивідуальний", price: 0, lessons: null },
   ]);
-  const [payments, setPayments] = useState<PaymentDemo[]>([
+  const [payments, setPayments] = useState<PaymentDemo[]>(apiEnabled ? [] : [
     { id: "1", studentId: "8", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 0, refundedAmount: 0, balanceAmount: 1800, dueDate: "2026-10-05", status: "pending" },
     { id: "2", studentId: "9", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 1800, refundedAmount: 0, balanceAmount: 0, dueDate: "2026-09-28", status: "paid", method: "Картка" },
   ]);
@@ -537,6 +540,7 @@ function App() {
     const refreshWorkspaceSnapshot = async () => {
       if (document.visibilityState !== "visible" || workspaceAutoRefreshBusy.current) return;
       workspaceAutoRefreshBusy.current = true;
+      setWorkspaceRefreshing(true);
       try {
         const bundle = await loadWorkspace(session);
         applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
@@ -544,6 +548,7 @@ function App() {
         // Keep the current UI stable on a transient background refresh failure.
       } finally {
         workspaceAutoRefreshBusy.current = false;
+        setWorkspaceRefreshing(false);
       }
     };
 
@@ -720,6 +725,44 @@ function App() {
     }
   };
 
+  const checkManualLeadDuplicates = async (): Promise<IntakeDuplicateMatch[]> => {
+    if (!apiEnabled || !session) return [];
+    const normalizedPhone = normalizeUaPhone(leadPhone);
+    const normalizedChildPhone = leadChildPhone.trim() ? normalizeUaPhone(leadChildPhone) : null;
+    if (!normalizedPhone || !leadChildName.trim() || leadAge < 3 || leadAge > 25) {
+      setLeadDuplicateMatches([]);
+      return [];
+    }
+    setLeadDuplicateChecking(true);
+    try {
+      const result = await checkIntakeDuplicates({
+        child_first_name: cleanSpaces(leadChildName),
+        child_age: leadAge,
+        phone: normalizedPhone,
+        child_phone: normalizedChildPhone,
+      }, session);
+      setLeadDuplicateMatches(result.matches);
+      return result.matches;
+    } catch {
+      setLeadDuplicateMatches([]);
+      return [];
+    } finally {
+      setLeadDuplicateChecking(false);
+    }
+  };
+
+  const openDuplicateStudent = (match: IntakeDuplicateMatch) => {
+    setShowLeadForm(false);
+    setLeadDuplicateMatches([]);
+    if (match.crm_status === "enrolled") {
+      setActive("Учні");
+      setSelectedStudentId(match.student_id);
+    } else {
+      setActive("Заявки");
+      setSelectedId(match.student_id);
+    }
+  };
+
   const createManualLead = async () => {
     const childNameError = personNameError(leadChildName, "Ім’я дитини");
     const childLastNameError = personNameError(leadChildLastName, "Прізвище дитини");
@@ -734,6 +777,12 @@ function App() {
     const normalizedChildPhone = leadChildPhone.trim() ? normalizeUaPhone(leadChildPhone) : null;
     if (apiEnabled && session) {
       try {
+        const matches = await checkManualLeadDuplicates();
+        const likelyDuplicate = matches.find((item) => item.likely_same_student);
+        if (likelyDuplicate) {
+          setWorkspaceError("");
+          return;
+        }
         await apiPost("/intake", {
           child_first_name: cleanSpaces(leadChildName),
           child_last_name: leadChildLastName.trim() ? cleanSpaces(leadChildLastName) : null,
@@ -746,6 +795,7 @@ function App() {
         }, session);
         await syncWorkspace(session);
         setShowLeadForm(false);
+        setLeadDuplicateMatches([]);
         setActive("Заявки");
         setLeadChildName("");
         setLeadChildLastName("");
@@ -773,6 +823,7 @@ function App() {
       comment: leadComment.trim() || undefined,
     }, ...items]);
     setShowLeadForm(false);
+    setLeadDuplicateMatches([]);
     setActive("Заявки");
   };
 
@@ -2265,9 +2316,9 @@ function App() {
           </div>
         </header>
 
-        {apiEnabled && workspaceLoading && <div className="syncBanner">Завантажуємо дані організації…</div>}
+        {apiEnabled && workspaceLoading && <div className="syncBanner syncing"><span className="syncPulse" />Оновлення даних…</div>}
         {apiEnabled && workspaceError && <div className="syncBanner error">{workspaceError}</div>}
-        {apiEnabled && workspaceLoaded && !workspaceLoading && !workspaceError && <div className="syncStatus">Дані завантажено з CRM API</div>}
+        {apiEnabled && workspaceLoaded && !workspaceLoading && !workspaceError && workspaceRefreshing && <div className="syncStatus refreshing"><span className="syncPulse" />Оновлення даних…</div>}
 
         {active === "Дашборд" && <section className="todayDashboard">
           <div className="todayIntro">
@@ -2929,7 +2980,7 @@ function App() {
 
       {showLeadForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setShowLeadForm(false)}>×</button>
+          <button className="drawerClose" onClick={() => { setShowLeadForm(false); setLeadDuplicateMatches([]); }}>×</button>
           <p className="eyebrow">Нова заявка</p><h2>Додати дитину</h2>
           <div className="formTwo">
             <label>Ім’я дитини *<input className={leadChildName && personNameError(leadChildName, "Ім’я дитини") ? "inputInvalid" : ""} value={leadChildName} maxLength={120} onChange={(e) => setLeadChildName(e.target.value)} placeholder="Максим" />{leadChildName && personNameError(leadChildName, "Ім’я дитини") && <small className="fieldError">{personNameError(leadChildName, "Ім’я дитини")}</small>}</label>
@@ -2937,10 +2988,19 @@ function App() {
           </div>
           <div className="formTwo">
             <label>Вік<input type="number" min={3} max={25} value={leadAge} onChange={(e) => setLeadAge(Number(e.target.value))} /></label>
-            <label>Телефон дитини <small>(необов’язково)</small><input type="tel" inputMode="tel" maxLength={19} className={leadChildPhone && uaPhoneError(leadChildPhone, false) ? "inputInvalid" : ""} value={leadChildPhone} onChange={(e) => setLeadChildPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadChildPhone)) setLeadChildPhone(formatUaPhone(leadChildPhone)); }} placeholder="+380 67 123 45 67" />{leadChildPhone && uaPhoneError(leadChildPhone, false) && <small className="fieldError">{uaPhoneError(leadChildPhone, false)}</small>}</label>
+            <label>Телефон дитини <small>(необов’язково)</small><input type="tel" inputMode="tel" maxLength={19} className={leadChildPhone && uaPhoneError(leadChildPhone, false) ? "inputInvalid" : ""} value={leadChildPhone} onChange={(e) => setLeadChildPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadChildPhone)) setLeadChildPhone(formatUaPhone(leadChildPhone)); void checkManualLeadDuplicates(); }} placeholder="+380 67 123 45 67" />{leadChildPhone && uaPhoneError(leadChildPhone, false) && <small className="fieldError">{uaPhoneError(leadChildPhone, false)}</small>}</label>
           </div>
           <label>Ім’я та прізвище відповідального *<input className={leadContactName && fullNameError(leadContactName, "Відповідальна особа") ? "inputInvalid" : ""} value={leadContactName} maxLength={160} autoComplete="name" onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана Петренко" />{leadContactName && fullNameError(leadContactName, "Відповідальна особа") && <small className="fieldError">{fullNameError(leadContactName, "Відповідальна особа")}</small>}</label>
-          <label>Телефон відповідального *<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={leadPhone && uaPhoneError(leadPhone) ? "inputInvalid" : ""} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadPhone)) setLeadPhone(formatUaPhone(leadPhone)); }} placeholder="+380 67 123 45 67" />{leadPhone && uaPhoneError(leadPhone) && <small className="fieldError">{uaPhoneError(leadPhone)}</small>}</label>
+          <label>Телефон відповідального *<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={leadPhone && uaPhoneError(leadPhone) ? "inputInvalid" : ""} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadPhone)) setLeadPhone(formatUaPhone(leadPhone)); void checkManualLeadDuplicates(); }} placeholder="+380 67 123 45 67" />{leadPhone && uaPhoneError(leadPhone) && <small className="fieldError">{uaPhoneError(leadPhone)}</small>}</label>
+          {leadDuplicateChecking && <div className="duplicateCheck pending"><span className="syncPulse" />Перевіряємо номер у CRM…</div>}
+          {!leadDuplicateChecking && leadDuplicateMatches.length > 0 && <div className={"duplicateCheck " + (leadDuplicateMatches.some((item) => item.likely_same_student) ? "blocked" : "warning")}>
+            <b>{leadDuplicateMatches.some((item) => item.likely_same_student) ? "Такий номер уже зареєстровано" : "Цей номер уже є в CRM"}</b>
+            <small>{leadDuplicateMatches.some((item) => item.likely_same_student) ? "Схоже, це вже існуюча дитина. Перевірте картку, щоб не створювати дубль." : "Можливо, це інша дитина з тієї самої сім’ї. Створення дозволено, але перевірте збіг."}</small>
+            <div className="duplicateMatches">{leadDuplicateMatches.slice(0,4).map((match) => <button type="button" className="duplicateMatch" key={match.student_id} onClick={() => openDuplicateStudent(match)}>
+              <span><b>{match.first_name} {match.last_name ?? ""}</b><small>{match.age ?? "—"} років · {crmStatusLabel(match.crm_status)}</small><small>{match.contact_name ?? "Контакт не вказано"}{match.contact_phone ? " · " + formatUaPhone(match.contact_phone) : ""}</small></span>
+              <strong>Перейти та перевірити →</strong>
+            </button>)}</div>
+          </div>}
           <label>Джерело<select value={leadSource} onChange={(e) => setLeadSource(e.target.value)}>
             <option value="phone">Телефон</option>
             <option value="website">Сайт</option>
@@ -2949,7 +3009,7 @@ function App() {
             <option value="walk-in">Зайшли особисто</option>
           </select></label>
           <label>Коментар<textarea value={leadComment} onChange={(e) => setLeadComment(e.target.value)} placeholder="Що цікавить, бажаний час, примітки…" /></label>
-          <button className="primary full" disabled={Boolean(personNameError(leadChildName, "Ім’я дитини") || personNameError(leadChildLastName, "Прізвище дитини") || uaPhoneError(leadChildPhone, false) || fullNameError(leadContactName, "Відповідальна особа") || uaPhoneError(leadPhone))} onClick={createManualLead}>Створити заявку</button>
+          <button className="primary full" disabled={leadDuplicateChecking || leadDuplicateMatches.some((item) => item.likely_same_student) || Boolean(personNameError(leadChildName, "Ім’я дитини") || personNameError(leadChildLastName, "Прізвище дитини") || uaPhoneError(leadChildPhone, false) || fullNameError(leadContactName, "Відповідальна особа") || uaPhoneError(leadPhone))} onClick={createManualLead}>{leadDuplicateChecking ? "Перевіряємо номер…" : leadDuplicateMatches.some((item) => item.likely_same_student) ? "Перевірте існуючу картку" : "Створити заявку"}</button>
         </div>
       </div>}
 

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, get_org_id, require_org_access_roles, require_org_roles
 from app.models.core import Organization, PaymentStatus, StaffRole, User
-from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeResult, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LessonSessionUpdate, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, BillingRenewalResult, BillingRenewalRun, PaymentAdjustmentCreate, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentReceiptCreate, PaymentRefundCreate, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, PaymentTransactionRead, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentAttendanceHistoryItem, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionAutoRenewUpdate, SubscriptionPauseCreate, SubscriptionPauseRead, SubscriptionResumeCreate, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
+from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleRead, IntakeCreate, IntakeDuplicateCheck, IntakeDuplicateResult, IntakeResult, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LessonSessionUpdate, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, BillingRenewalResult, BillingRenewalRun, PaymentAdjustmentCreate, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentReceiptCreate, PaymentRefundCreate, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, PaymentTransactionRead, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentAttendanceHistoryItem, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionAutoRenewUpdate, SubscriptionPauseCreate, SubscriptionPauseRead, SubscriptionResumeCreate, StudentOverviewItem, SubscriptionPlanCreate, SubscriptionPlanRead, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
 from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
@@ -267,8 +267,24 @@ def public_intake(organization_slug: str, data: IntakeCreate, request: Request, 
         settings.public_intake_window_minutes,
     )
 
-    student, contact = crm.create_intake(db, organization, data)
+    student, contact = crm.create_intake(db, organization, data, record_repeat=True)
     return IntakeResult(student_id=student.id, contact_id=contact.id, crm_status=student.crm_status)
+
+
+@router.post("/intake/duplicate-check", response_model=IntakeDuplicateResult)
+def intake_duplicate_check(
+    data: IntakeDuplicateCheck,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
+    db: Session = Depends(get_db),
+):
+    return IntakeDuplicateResult(matches=crm.find_intake_phone_duplicates(
+        db,
+        access.organization_id,
+        data.child_first_name,
+        data.child_age,
+        data.phone,
+        data.child_phone,
+    ))
 
 
 @router.post("/intake", response_model=IntakeResult, status_code=201)
@@ -277,6 +293,24 @@ def internal_intake(
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
+    matches = crm.find_intake_phone_duplicates(
+        db,
+        access.organization_id,
+        data.child_first_name,
+        data.child_age,
+        data.phone,
+        data.child_phone,
+    )
+    likely_duplicate = next((item for item in matches if item["likely_same_student"]), None)
+    if likely_duplicate is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "duplicate_phone",
+                "message": "Такий номер уже зареєстровано. Перевірте існуючу картку учня.",
+                "student_id": str(likely_duplicate["student_id"]),
+            },
+        )
     organization = crm.require_organization(db, access.organization_id)
     student, contact = crm.create_intake(db, organization, data, access.user_id)
     return IntakeResult(student_id=student.id, contact_id=contact.id, crm_status=student.crm_status)

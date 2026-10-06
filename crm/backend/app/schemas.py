@@ -343,6 +343,40 @@ class IntakeResult(BaseModel):
     crm_status: CrmStatus
 
 
+class IntakeDuplicateCheck(BaseModel):
+    child_first_name: str = Field(min_length=2, max_length=120)
+    child_age: int = Field(ge=3, le=25)
+    phone: str = Field(min_length=8, max_length=40)
+    child_phone: str | None = Field(default=None, max_length=40)
+
+    _child_name = field_validator("child_first_name")(normalize_person_name)
+    _phone = field_validator("phone")(normalize_ua_phone)
+
+    @field_validator("child_phone")
+    @classmethod
+    def valid_child_phone(cls, value: str | None) -> str | None:
+        return normalize_ua_phone(value) if value and value.strip() else None
+
+
+class IntakeDuplicateMatch(BaseModel):
+    student_id: UUID
+    first_name: str
+    last_name: str | None
+    age: int | None
+    crm_status: CrmStatus
+    student_status: StudentStatus
+    student_phone: str | None
+    contact_name: str | None
+    contact_phone: str | None
+    matched_phone: str
+    matched_as: str
+    likely_same_student: bool
+
+
+class IntakeDuplicateResult(BaseModel):
+    matches: list[IntakeDuplicateMatch]
+
+
 class StudentStatusUpdate(BaseModel):
     crm_status: CrmStatus
 
