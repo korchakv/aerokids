@@ -864,6 +864,7 @@ class StaffCreate(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=40)
     role: StaffRole
+    can_teach: bool = False
     notes: str | None = None
     location_ids: list[UUID] = []
 
@@ -884,6 +885,7 @@ class StaffRead(ORMModel):
     email: str | None
     phone: str | None
     role: StaffRole
+    can_teach: bool
     is_active: bool
     notes: str | None
 
@@ -893,6 +895,7 @@ class StaffUpdate(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=40)
     role: StaffRole | None = None
+    can_teach: bool | None = None
     is_active: bool | None = None
     notes: str | None = None
 
