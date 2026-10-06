@@ -2382,3 +2382,29 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 .deferLeadAction{color:var(--ak-muted)}
 .deferLeadAction:hover{color:var(--ak-accent-text)}
 @media(max-width:700px){.deferQuickDates{grid-template-columns:1fr}.deferredLeadNotice>.search{width:100%}}
+
+
+/* Quiet record-level destructive actions */
+.recordDangerZone{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin:12px 0 4px;
+  padding:8px 10px;
+  border-top:1px solid var(--ak-border);
+}
+.recordDangerZone>span{
+  color:var(--ak-muted);
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  opacity:.72;
+}
+.mobileLeadSheetAction.quietDelete{
+  margin-top:6px;
+  opacity:.72;
+}
+.mobileLeadSheetAction.quietDelete:hover{
+  opacity:1;
+}
