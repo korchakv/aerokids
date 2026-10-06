@@ -1,48 +1,72 @@
 services:
   - type: web
-    name: korchakv-aerokids-crm-api
-    runtime: docker
+    name: aerokids-crm-api
+    runtime: python
     plan: free
     region: frankfurt
     branch: crm-v1
-    dockerfilePath: ./crm/backend/Dockerfile
-    dockerContext: ./crm/backend
+    autoDeployTrigger: checksPass
+    buildCommand: cd crm/backend && pip install -r requirements.txt
+    startCommand: cd crm/backend && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /ready
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: korchakv-aerokids-crm-db
-          property: connectionString
+        sync: false
+      - key: MIGRATION_DATABASE_URL
+        sync: false
       - key: ENVIRONMENT
         value: production
       - key: AUTH_REQUIRED
         value: "true"
       - key: JWT_SECRET
-        generateValue: true
+        sync: false
       - key: BOOTSTRAP_SECRET
         sync: false
+      - key: ACCESS_TOKEN_MINUTES
+        value: "480"
       - key: CORS_ORIGINS
-        value: https://korchakv-aerokids-crm.onrender.com
+        value: https://aerokids-crm.onrender.com
+      - key: AUTH_LOGIN_WINDOW_MINUTES
+        value: "15"
+      - key: AUTH_LOGIN_IP_LIMIT
+        value: "30"
+      - key: AUTH_LOGIN_EMAIL_LIMIT
+        value: "10"
+      - key: READ_ONLY_MODE
+        value: "false"
+      - key: RUN_DATABASE_MIGRATION_ON_START
+        value: "false"
 
   - type: web
-    name: korchakv-aerokids-crm
+    name: aerokids-crm
     runtime: static
     branch: crm-v1
-    rootDir: crm/frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
+    autoDeployTrigger: checksPass
+    buildCommand: cd crm/frontend && npm install && npm run build
+    staticPublishPath: crm/frontend/dist
     envVars:
       - key: VITE_API_URL
-        value: https://korchakv-aerokids-crm-api.onrender.com
+        value: https://aerokids-crm-api.onrender.com
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
-
-databases:
-  - name: korchakv-aerokids-crm-db
-    plan: free
-    region: frankfurt
-    postgresMajorVersion: "16"
-    databaseName: schoolcrm
-    ipAllowList: []
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://aerokids-crm-api.onrender.com; font-src 'self' data:;"
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: Permissions-Policy
+        value: "camera=(), microphone=(), geolocation=()"
+      - path: /*
+        name: Strict-Transport-Security
+        value: "max-age=31536000"
