@@ -4,6 +4,8 @@ import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstr
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
 type EntityId = string;
+type UiScale = 1 | 1.1 | 1.25 | 1.4;
+const UI_SCALE_LEVELS: UiScale[] = [1, 1.1, 1.25, 1.4];
 
 type AvailabilitySlot = {
   weekday: number;
@@ -326,6 +328,10 @@ function App() {
     const saved = window.localStorage.getItem("aerokids-crm-theme");
     if (saved === "dark" || saved === "light") return saved;
     return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  });
+  const [uiScale, setUiScale] = useState<UiScale>(() => {
+    const saved = Number(window.localStorage.getItem("aerokids-crm-ui-scale"));
+    return UI_SCALE_LEVELS.includes(saved as UiScale) ? saved as UiScale : 1;
   });
   const [session, setSession] = useState<Session | null>(() => loadSession());
   const [workspaceLoading, setWorkspaceLoading] = useState(() => Boolean(apiEnabled && loadSession()));
@@ -2860,6 +2866,19 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
+    document.documentElement.style.setProperty("--ak-ui-scale", String(uiScale));
+    window.localStorage.setItem("aerokids-crm-ui-scale", String(uiScale));
+  }, [uiScale]);
+
+  const changeUiScale = (direction: -1 | 1) => {
+    setUiScale((current) => {
+      const index = UI_SCALE_LEVELS.indexOf(current);
+      const next = Math.max(0, Math.min(UI_SCALE_LEVELS.length - 1, index + direction));
+      return UI_SCALE_LEVELS[next];
+    });
+  };
+
+  useEffect(() => {
     if (!window.matchMedia("(max-width: 720px)").matches) return;
     const nav = document.querySelector<HTMLElement>(".appNav");
     const activeButton = nav?.querySelector<HTMLElement>("button.active");
@@ -2977,6 +2996,11 @@ function App() {
             <span>Тема</span>
             <span className="themeState">{theme === "dark" ? "Темна" : "Світла"}</span>
           </button>
+          <div className="uiScaleControl" aria-label="Масштаб інтерфейсу">
+            <button type="button" aria-label="Зменшити масштаб" title="Зменшити" disabled={uiScale === UI_SCALE_LEVELS[0]} onClick={() => changeUiScale(-1)}>A−</button>
+            <span><b>Текст</b><small>{Math.round(uiScale * 100)}%</small></span>
+            <button type="button" aria-label="Збільшити масштаб" title="Збільшити" disabled={uiScale === UI_SCALE_LEVELS[UI_SCALE_LEVELS.length - 1]} onClick={() => changeUiScale(1)}>A+</button>
+          </div>
           <small>crm.aerokids.space</small>
         </div>
       </aside>
@@ -2986,6 +3010,7 @@ function App() {
           <div className="headerTitleBar">
             <div><p className="eyebrow">{headerContext}</p><h1>{active}</h1></div>
             <div className="mobileTopIcons">
+              <button className="search iconButton mobileScaleButton" type="button" aria-label="Збільшити масштаб інтерфейсу" title={"Масштаб " + Math.round(uiScale * 100) + "%"} onClick={() => changeUiScale(uiScale === UI_SCALE_LEVELS[UI_SCALE_LEVELS.length - 1] ? -1 : 1)}>A+</button>
               <button className="search iconButton mobileThemeButton" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} title={theme === "dark" ? "Світла тема" : "Темна тема"} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}><UiIcon name="theme" size={19} /></button>
               {session && <button className="search iconButton mobileLogoutButton" aria-label="Вийти" title="Вийти" onClick={() => { clearSession(); setSession(null); }}><UiIcon name="logout" size={19} /></button>}
             </div>
