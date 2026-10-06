@@ -220,7 +220,83 @@ def create_location(db: Session, org_id: UUID, data: LocationCreate) -> Location
 
 
 def list_locations(db: Session, org_id: UUID) -> list[Location]:
-    return list(db.scalars(select(Location).where(Location.organization_id == org_id).order_by(Location.name)))
+    return list(db.scalars(
+        select(Location)
+        .where(Location.organization_id == org_id, Location.is_active.is_(True))
+        .order_by(Location.name)
+    ))
+
+
+def delete_location(
+    db: Session,
+    org_id: UUID,
+    location_id: UUID,
+    actor_user_id: UUID | None = None,
+) -> None:
+    location = scoped_get(db, Location, org_id, location_id)
+
+    active_group = db.scalar(select(Group.id).where(
+        Group.organization_id == org_id,
+        Group.location_id == location.id,
+        Group.is_active.is_(True),
+    ).limit(1))
+    if active_group is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Цю локацію ще використовує активна група. Спочатку змініть локацію в цій групі або видаліть групу.",
+        )
+
+    now = datetime.now(timezone.utc)
+    future_lesson = db.scalar(select(LessonSession.id).where(
+        LessonSession.organization_id == org_id,
+        LessonSession.location_id == location.id,
+        LessonSession.status == LessonStatus.SCHEDULED,
+        LessonSession.starts_at >= now,
+    ).limit(1))
+    if future_lesson is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="На цій локації ще є заплановані заняття. Спочатку перенесіть або скасуйте їх.",
+        )
+
+    future_trial = db.scalar(select(TrialLesson.id).where(
+        TrialLesson.organization_id == org_id,
+        TrialLesson.location_id == location.id,
+        TrialLesson.status == TrialStatus.SCHEDULED,
+        TrialLesson.starts_at >= now,
+    ).limit(1))
+    if future_trial is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="На цій локації ще є заплановані пробні заняття. Спочатку перенесіть або скасуйте їх.",
+        )
+
+    location.is_active = False
+
+    staff_links = list(db.scalars(select(StaffLocation).where(
+        StaffLocation.organization_id == org_id,
+        StaffLocation.location_id == location.id,
+    )))
+    for link in staff_links:
+        db.delete(link)
+
+    students = list(db.scalars(select(Student).where(
+        Student.organization_id == org_id,
+        Student.preferred_location_id == location.id,
+    )))
+    for student in students:
+        student.preferred_location_id = None
+
+    record_audit(
+        db,
+        org_id,
+        "location",
+        location.id,
+        "location.deleted",
+        {"name": location.name},
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
 
 
 def create_contact(db: Session, org_id: UUID, data: ContactCreate) -> Contact:
@@ -404,6 +480,51 @@ def update_group(
     db.commit()
     db.refresh(group)
     return group
+
+
+def delete_group(
+    db: Session,
+    org_id: UUID,
+    group_id: UUID,
+    actor_user_id: UUID | None = None,
+) -> None:
+    group = scoped_get(db, Group, org_id, group_id)
+    active_enrollment = db.scalar(select(Enrollment.id).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.group_id == group.id,
+        Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+    ).limit(1))
+    if active_enrollment is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="У групі ще є активні або призупинені учні. Спочатку переведіть або завершіть їх зарахування, а потім видаліть групу.",
+        )
+
+    group.is_active = False
+    schedules = list(db.scalars(select(GroupSchedule).where(
+        GroupSchedule.organization_id == org_id,
+        GroupSchedule.group_id == group.id,
+    )))
+    for schedule in schedules:
+        schedule.is_active = False
+
+    assignments = list(db.scalars(select(GroupStaff).where(
+        GroupStaff.organization_id == org_id,
+        GroupStaff.group_id == group.id,
+    )))
+    for assignment in assignments:
+        db.delete(assignment)
+
+    record_audit(
+        db,
+        org_id,
+        "group",
+        group.id,
+        "group.deleted",
+        {"name": group.name},
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
 
 
 def list_groups(db: Session, org_id: UUID) -> list[Group]:
