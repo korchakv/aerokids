@@ -257,6 +257,7 @@ export type ApiStaff = {
   email: string | null;
   phone: string | null;
   role: "owner" | "admin" | "manager" | "teacher" | "accountant";
+  can_teach: boolean;
   is_active: boolean;
   notes: string | null;
 };
