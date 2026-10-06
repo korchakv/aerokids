@@ -9,6 +9,8 @@ on:
       - "package.json"
       - ".gitignore"
       - ".github/workflows/crm-ci.yml"
+      - ".github/dependabot.yml"
+      - ".github/CODEOWNERS"
   pull_request:
     paths:
       - "crm/**"
@@ -16,6 +18,8 @@ on:
       - "package.json"
       - ".gitignore"
       - ".github/workflows/crm-ci.yml"
+      - ".github/dependabot.yml"
+      - ".github/CODEOWNERS"
 
 concurrency:
   group: crm-ci-${{ github.ref }}
@@ -243,3 +247,17 @@ jobs:
         run: |
           npm install
           npm audit --audit-level=high
+
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan git history for leaked secrets
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
