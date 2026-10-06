@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     app_name: str = "School CRM API"
     environment: str = "development"
     database_url: str = "sqlite:///./schoolcrm.db"
+    migration_database_url: str | None = None
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 480
@@ -35,6 +36,8 @@ class Settings(BaseSettings):
                 raise ValueError("Production JWT_SECRET must be a strong value of at least 32 characters")
             if not self.database_url.startswith("postgresql"):
                 raise ValueError("Production DATABASE_URL must use PostgreSQL")
+            if self.migration_database_url and not self.migration_database_url.startswith("postgresql"):
+                raise ValueError("Production MIGRATION_DATABASE_URL must use PostgreSQL")
             if not self.bootstrap_secret or len(self.bootstrap_secret) < 16:
                 raise ValueError("Production BOOTSTRAP_SECRET must contain at least 16 characters")
             origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
