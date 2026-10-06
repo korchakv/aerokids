@@ -3347,7 +3347,7 @@ function App() {
           <p className="eyebrow">Нова заявка</p><h2>Додати дитину</h2>
           <div className="formTwo">
             <label>Ім’я дитини *<input className={leadChildName && personNameError(leadChildName, "Ім’я дитини") ? "inputInvalid" : ""} value={leadChildName} maxLength={120} onChange={(e) => setLeadChildName(e.target.value)} placeholder="Максим" />{leadChildName && personNameError(leadChildName, "Ім’я дитини") && <small className="fieldError">{personNameError(leadChildName, "Ім’я дитини")}</small>}</label>
-            <label>Прізвище дитини<input className={leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") ? "inputInvalid" : ""} value={leadChildLastName} maxLength={120} onChange={(e) => setLeadChildLastName(e.target.value)} placeholder="Коваль" />{leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") && <small className="fieldError">{personNameError(leadChildLastName, "Прізвище дитини")}</small>}</label>
+            <label>Прізвище дитини <small>(необов’язково, можна дописати пізніше)</small><input className={leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") ? "inputInvalid" : ""} value={leadChildLastName} maxLength={120} onChange={(e) => setLeadChildLastName(e.target.value)} placeholder="Коваль" />{leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") && <small className="fieldError">{personNameError(leadChildLastName, "Прізвище дитини")}</small>}</label>
           </div>
           <div className="formTwo">
             <label>Вік<input type="number" min={3} max={25} value={leadAge} onChange={(e) => setLeadAge(Number(e.target.value))} /></label>
