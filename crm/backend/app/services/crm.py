@@ -1072,11 +1072,15 @@ def update_lead_outcome(db: Session, org_id: UUID, student_id: UUID, data, actor
     student = scoped_get(db, Student, org_id, student_id)
     student.crm_status = data.crm_status
     student.next_contact_at = data.next_contact_at
+    student.follow_up_reason = data.follow_up_reason if data.next_contact_at else None
+    student.follow_up_note = data.follow_up_note if data.next_contact_at else None
 
     if data.crm_status in {CrmStatus.DECLINED, CrmStatus.NO_RESPONSE, CrmStatus.NOT_RELEVANT}:
         student.lead_close_reason = data.close_reason
         student.lead_close_note = data.close_note
         student.next_contact_at = None
+        student.follow_up_reason = None
+        student.follow_up_note = None
     else:
         student.lead_close_reason = None
         student.lead_close_note = None
@@ -1090,6 +1094,8 @@ def update_lead_outcome(db: Session, org_id: UUID, student_id: UUID, data, actor
         {
             "crm_status": data.crm_status.value,
             "next_contact_at": data.next_contact_at.isoformat() if data.next_contact_at else None,
+            "follow_up_reason": data.follow_up_reason,
+            "follow_up_note": data.follow_up_note,
             "close_reason": data.close_reason,
             "close_note": data.close_note,
         },
@@ -3650,6 +3656,8 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             "recommended_level": trial.recommended_level if trial else None,
             "teacher_notes": trial.teacher_notes if trial else None,
             "next_contact_at": student.next_contact_at,
+            "follow_up_reason": student.follow_up_reason,
+            "follow_up_note": student.follow_up_note,
             "close_reason": student.lead_close_reason,
             "close_note": student.lead_close_note,
         })
