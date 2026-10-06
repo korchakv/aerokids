@@ -449,6 +449,26 @@ class GroupFormationScheduleSlot(BaseModel):
         return value
 
 
+class GroupUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    location_id: UUID | None = None
+    capacity: int = Field(ge=1, le=100)
+    min_age: int | None = Field(default=None, ge=3, le=30)
+    max_age: int | None = Field(default=None, ge=3, le=30)
+    schedule_slots: list[GroupFormationScheduleSlot] = Field(default_factory=list)
+
+    _name = field_validator("name")(normalize_required_text)
+
+    @model_validator(mode="after")
+    def validate_group_update(self):
+        if self.min_age is not None and self.max_age is not None and self.min_age > self.max_age:
+            raise ValueError("min_age cannot be greater than max_age")
+        keys = [(slot.weekday, slot.start_time) for slot in self.schedule_slots]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Duplicate group schedule slots are not allowed")
+        return self
+
+
 class GroupFormationCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     location_id: UUID | None = None
