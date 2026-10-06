@@ -8,6 +8,7 @@ on:
       - "neon.ts"
       - "package.json"
       - ".gitignore"
+      - ".python-version"
       - "render.yaml"
       - ".github/workflows/crm-ci.yml"
       - ".github/dependabot.yml"
@@ -18,10 +19,14 @@ on:
       - "neon.ts"
       - "package.json"
       - ".gitignore"
+      - ".python-version"
       - "render.yaml"
       - ".github/workflows/crm-ci.yml"
       - ".github/dependabot.yml"
       - ".github/CODEOWNERS"
+
+permissions:
+  contents: read
 
 concurrency:
   group: crm-ci-${{ github.ref }}
@@ -35,6 +40,11 @@ jobs:
         working-directory: crm/backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify production Python runtime lock
+        working-directory: .
+        run: test "$(cat .python-version)" = "3.12.11"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -54,6 +64,8 @@ jobs:
         working-directory: crm/frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -67,6 +79,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Validate compose
         working-directory: crm
         run: docker compose config
@@ -100,6 +114,8 @@ jobs:
       DATABASE_URL: postgresql+psycopg://schoolcrm:schoolcrm@localhost:5432/schoolcrm_ci
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -206,6 +222,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Build and start full CRM stack
         working-directory: crm
         run: docker compose up -d --build
@@ -225,6 +243,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
@@ -258,6 +278,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: Scan git history for leaked secrets
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
