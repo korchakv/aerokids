@@ -2203,7 +2203,7 @@ function App() {
           setActive(item);
         }} className={active === item ? "active" : ""} key={item}><UiIcon name={navigationIcon(item)} size={17} /><span className="navLabel">{item}</span></button>)}</nav>
         <div className="asideFooter">
-          <small>MVP 1 · crm-v1</small>
+          <small>Production · crm.aerokids.space</small>
         </div>
       </aside>
 
