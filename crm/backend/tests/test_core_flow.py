@@ -1841,6 +1841,118 @@ def test_public_intake_honeypot_blocks_bot_submission(client):
     assert leads.json() == []
 
 
+def test_repeat_website_intake_keeps_student_and_appends_comment(client):
+    org = create_org(client, "Repeat Website", "repeat-website")
+    headers = {"X-Organization-Id": org["id"]}
+    first = client.post(
+        "/public/intake/repeat-website",
+        json={
+            "child_first_name": "Максим",
+            "child_age": 10,
+            "contact_name": "Оксана Петренко",
+            "phone": "0671234567",
+            "source": "website",
+            "comment": "Перше звернення",
+        },
+    )
+    assert first.status_code == 201, first.text
+
+    repeated = client.post(
+        "/public/intake/repeat-website",
+        json={
+            "child_first_name": "Максим",
+            "child_age": 10,
+            "contact_name": "Оксана Петренко",
+            "phone": "+380 67 123 45 67",
+            "source": "website",
+            "comment": "Хочемо записатися ще раз",
+        },
+    )
+    assert repeated.status_code == 201, repeated.text
+    assert repeated.json()["student_id"] == first.json()["student_id"]
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    assert len(leads.json()) == 1
+    comment = leads.json()[0]["comment"]
+    assert "Перше звернення" in comment
+    assert "Повторне звернення через сайт" in comment
+    assert "Хочемо записатися ще раз" in comment
+
+
+def test_manual_intake_blocks_same_child_but_allows_sibling_same_parent_phone(client):
+    org = create_org(client, "Duplicate Phone", "duplicate-phone")
+    headers = {"X-Organization-Id": org["id"]}
+    original = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Марко",
+            "child_age": 9,
+            "contact_name": "Олена Коваль",
+            "phone": "0675554433",
+            "source": "phone",
+        },
+    )
+    assert original.status_code == 201, original.text
+    student_id = original.json()["student_id"]
+
+    duplicate_check = client.post(
+        "/intake/duplicate-check",
+        headers=headers,
+        json={
+            "child_first_name": "Марко",
+            "child_age": 9,
+            "phone": "+380675554433",
+        },
+    )
+    assert duplicate_check.status_code == 200, duplicate_check.text
+    assert duplicate_check.json()["matches"][0]["student_id"] == student_id
+    assert duplicate_check.json()["matches"][0]["likely_same_student"] is True
+
+    blocked = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Марко",
+            "child_age": 9,
+            "contact_name": "Олена Коваль",
+            "phone": "0675554433",
+            "source": "phone",
+        },
+    )
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()["detail"]["code"] == "duplicate_phone"
+    assert blocked.json()["detail"]["student_id"] == student_id
+
+    sibling_check = client.post(
+        "/intake/duplicate-check",
+        headers=headers,
+        json={
+            "child_first_name": "Софія",
+            "child_age": 11,
+            "phone": "0675554433",
+        },
+    )
+    assert sibling_check.status_code == 200, sibling_check.text
+    assert sibling_check.json()["matches"]
+    assert all(item["likely_same_student"] is False for item in sibling_check.json()["matches"])
+
+    sibling = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Софія",
+            "child_age": 11,
+            "contact_name": "Олена Коваль",
+            "phone": "0675554433",
+            "source": "phone",
+        },
+    )
+    assert sibling.status_code == 201, sibling.text
+    assert sibling.json()["student_id"] != student_id
+
+
 def test_public_intake_rate_limits_repeated_phone(client):
     create_org(client, "Rate Limit School", "rate-limit-school")
     payload = {
