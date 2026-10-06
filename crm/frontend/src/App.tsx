@@ -1218,17 +1218,6 @@ function App() {
     setGroupSchedule([{ weekday: 0, start_time: "17:00", duration_minutes: 60 }]);
     setGroupCreateError("");
     setWorkspaceError("");
-
-    if (activeLocations.length === 0) {
-      setGroupLocationId("");
-      setLocationName("");
-      setLocationAddress("");
-      setLocationReturnToGroup(true);
-      setShowGroupForm(false);
-      setShowLocationForm(true);
-      return;
-    }
-
     if (activeLocations.length === 1) {
       setGroupLocationId(activeLocations[0].id);
     } else if (!activeLocations.some((location) => location.id === groupLocationId)) {
@@ -1249,10 +1238,6 @@ function App() {
   const createGroupFromCandidates = async () => {
     const normalizedGroupName = groupName.trim();
     if (!normalizedGroupName || hasDuplicateSlots(groupSchedule) || selectedCandidates.length > groupCapacity) return;
-    if (!groupLocationId) {
-      setGroupCreateError("Спочатку оберіть або створіть локацію.");
-      return;
-    }
     const duplicateName = groups.find((group) => group.name.trim().toLocaleLowerCase("uk-UA") === normalizedGroupName.toLocaleLowerCase("uk-UA"));
     if (duplicateName) {
       setGroupCreateError("Група з такою назвою вже існує. Відкрийте її або виберіть іншу назву.");
@@ -3349,15 +3334,18 @@ function App() {
           <div className="formTwo">
             <label>Місткість<input type="number" min={1} max={100} value={groupCapacity} onChange={(e) => setGroupCapacity(Number(e.target.value))} /></label>
             {activeLocations.length === 0
-              ? <div className="groupLocationRequired">
-                  <b>Потрібна локація</b>
-                  <small>Група має бути прив’язана до місця проведення занять.</small>
+              ? <div className="groupLocationOptional">
+                  <b>Локація <small>(необов’язково)</small></b>
+                  <small>Групу можна створити без локації та вказати її пізніше.</small>
                   <button className="search" type="button" onClick={createLocationFromGroup}>+ Створити локацію</button>
                 </div>
               : activeLocations.length === 1
-                ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label>
-                : <label>Локація<select value={groupLocationId} onChange={(e) => { setGroupLocationId(e.target.value); setGroupCreateError(""); }}>
-                    <option value="">Оберіть локацію</option>
+                ? <label>Локація <small>(необов’язково)</small><select value={groupLocationId} onChange={(e) => setGroupLocationId(e.target.value)}>
+                    <option value="">Без локації</option>
+                    <option value={activeLocations[0].id}>{activeLocations[0].name}</option>
+                  </select></label>
+                : <label>Локація <small>(необов’язково)</small><select value={groupLocationId} onChange={(e) => { setGroupLocationId(e.target.value); setGroupCreateError(""); }}>
+                    <option value="">Без локації</option>
                     {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
                   </select></label>}
           </div>
@@ -3374,8 +3362,8 @@ function App() {
             </span>;
           })}</div>}
           {groupCreateError && <div className="groupCreateError">{groupCreateError}</div>}
-          <button className="primary full" disabled={!groupName.trim() || !groupLocationId || selectedCandidates.length > groupCapacity || hasDuplicateSlots(groupSchedule)} onClick={createGroupFromCandidates}>
-            {!groupName.trim() ? "Вкажіть назву групи" : !groupLocationId ? "Оберіть або створіть локацію" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
+          <button className="primary full" disabled={!groupName.trim() || selectedCandidates.length > groupCapacity || hasDuplicateSlots(groupSchedule)} onClick={createGroupFromCandidates}>
+            {!groupName.trim() ? "Вкажіть назву групи" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
           </button>
         </div>
       </div>}
