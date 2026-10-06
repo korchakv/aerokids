@@ -236,6 +236,9 @@ class StudentRead(ORMModel):
     crm_status: CrmStatus
     student_status: StudentStatus
     next_contact_at: datetime | None
+    deferred_until: datetime | None
+    deferred_reason: str | None
+    deferred_note: str | None
     lead_close_reason: str | None
     lead_close_note: str | None
     notes: str | None
@@ -439,6 +442,21 @@ class LeadOutcomeUpdate(BaseModel):
         if self.crm_status not in {CrmStatus.DECLINED, CrmStatus.NO_RESPONSE, CrmStatus.NOT_RELEVANT}:
             self.close_reason = None
             self.close_note = None
+        return self
+
+
+class LeadDeferUpdate(BaseModel):
+    deferred_until: datetime | None = None
+    reason: str | None = Field(default=None, max_length=80)
+    note: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_defer(self):
+        if self.deferred_until is not None and not self.reason:
+            raise ValueError("reason is required when lead is deferred")
+        if self.deferred_until is None:
+            self.reason = None
+            self.note = None
         return self
 
 
@@ -1175,6 +1193,9 @@ class LeadListItem(BaseModel):
     recommended_level: str | None
     teacher_notes: str | None
     next_contact_at: datetime | None
+    deferred_until: datetime | None
+    deferred_reason: str | None
+    deferred_note: str | None
     close_reason: str | None
     close_note: str | None
 
