@@ -2241,43 +2241,153 @@ function App() {
     }
   };
 
-  const createPlan = async () => {
+  const openPlanCreate = () => {
+    setPlanEditId(null);
+    setPlanName("");
+    setPlanPrice("");
+    setPlanDays("30");
+    setPlanLessons("8");
+    setPlanActive(true);
+    setPlanHistory([]);
+    setPlanHistoryOpen(false);
+    setWorkspaceError("");
+    setShowPlanForm(true);
+  };
+
+  const openPlanEdit = async (plan: PlanDemo) => {
+    setPlanEditId(plan.id);
+    setPlanName(plan.name);
+    setPlanPrice(String(plan.price));
+    setPlanDays(plan.days ? String(plan.days) : "");
+    setPlanLessons(plan.lessons ? String(plan.lessons) : "");
+    setPlanActive(plan.isActive);
+    setPlanHistory([]);
+    setPlanHistoryOpen(false);
+    setWorkspaceError("");
+    setShowPlanForm(true);
+  };
+
+  const loadPlanHistory = async () => {
+    if (!session || !planEditId || planHistoryLoading) return;
+    setPlanHistoryLoading(true);
+    try {
+      setPlanHistory(await loadAuditEvents("subscription_plan", planEditId, session));
+      setPlanHistoryOpen(true);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити історію тарифу.");
+    } finally {
+      setPlanHistoryLoading(false);
+    }
+  };
+
+  const savePlan = async () => {
     const parsedPrice = planPrice === "" ? Number.NaN : Number(planPrice);
+    const parsedDays = planDays === "" ? null : Number(planDays);
     const parsedLessons = planLessons === "" ? null : Number(planLessons);
     if (!planName.trim() || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
       setWorkspaceError("Вкажіть назву та коректну ціну тарифу.");
       return;
     }
-    if (parsedLessons !== null && (!Number.isInteger(parsedLessons) || parsedLessons < 0)) {
-      setWorkspaceError("Кількість занять має бути цілим числом.");
+    if (parsedDays !== null && (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 366)) {
+      setWorkspaceError("Кількість днів має бути цілим числом від 1 до 366.");
       return;
     }
-    if (apiEnabled && session) {
-      try {
-        setWorkspaceError("");
-        await apiPost("/subscription-plans", {
+    if (parsedLessons !== null && (!Number.isInteger(parsedLessons) || parsedLessons < 1 || parsedLessons > 365)) {
+      setWorkspaceError("Кількість відвідувань має бути цілим числом від 1 до 365.");
+      return;
+    }
+    if (parsedDays === null && parsedLessons === null) {
+      setWorkspaceError("Вкажіть дні, відвідування або обидва значення.");
+      return;
+    }
+    if (planSaving) return;
+    setPlanSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        const payload = {
           name: planName.trim(),
           price_minor: Math.round(parsedPrice * 100),
-          period_days: 30,
-          lessons_included: parsedLessons && parsedLessons > 0 ? parsedLessons : null,
-        }, session);
+          period_days: parsedDays,
+          lessons_included: parsedLessons,
+          ...(planEditId ? { is_active: planActive } : {}),
+        };
+        if (planEditId) {
+          await apiPut(`/subscription-plans/${planEditId}`, payload, session);
+        } else {
+          await apiPost("/subscription-plans", payload, session);
+        }
         await syncWorkspace(session);
-        setPlanPrice("");
-        setShowPlanForm(false);
-        return;
-      } catch (error) {
-        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити тариф.");
-        return;
+      } else if (planEditId) {
+        setPlans((items) => items.map((item) => item.id === planEditId ? {
+          ...item,
+          name: planName.trim(),
+          price: parsedPrice,
+          days: parsedDays,
+          lessons: parsedLessons,
+          isActive: planActive,
+        } : item));
+      } else {
+        setPlans((items) => [...items, {
+          id: crypto.randomUUID(),
+          name: planName.trim(),
+          price: parsedPrice,
+          days: parsedDays,
+          lessons: parsedLessons,
+          isActive: true,
+        }]);
       }
+      setShowPlanForm(false);
+      setPlanEditId(null);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти тариф.");
+    } finally {
+      setPlanSaving(false);
     }
-    setPlans((items) => [...items, {
-      id: crypto.randomUUID(),
-      name: planName.trim(),
-      price: parsedPrice,
-      lessons: parsedLessons && parsedLessons > 0 ? parsedLessons : null,
-    }]);
-    setPlanPrice("");
-    setShowPlanForm(false);
+  };
+
+  const openPlanChange = (subscriptionId: EntityId) => {
+    const subscription = subscriptions.find((item) => item.id === subscriptionId);
+    if (!subscription) return;
+    const nextPlan = plans.find((plan) => plan.isActive && plan.id !== subscription.plan_id);
+    if (!nextPlan) {
+      setWorkspaceError("Немає іншого активного тарифу для переходу.");
+      return;
+    }
+    setPlanChangeSubscriptionId(subscriptionId);
+    setPlanChangePlanId(nextPlan.id);
+    setPlanChangeReason("");
+    setPlanChangeResult("");
+  };
+
+  const submitPlanChange = async () => {
+    if (!session || !planChangeSubscriptionId || !planChangePlanId || !planChangeReason.trim() || planChangeSaving) return;
+    setPlanChangeSaving(true);
+    setWorkspaceError("");
+    try {
+      const result = await apiPost<{
+        current_period_charge_minor: number;
+        credit_minor: number;
+        debt_minor: number;
+        used_lessons: number;
+        old_unit_price_minor: number | null;
+        new_unit_price_minor: number | null;
+      }>(`/student-subscriptions/${planChangeSubscriptionId}/change-plan`, {
+        plan_id: planChangePlanId,
+        reason: planChangeReason.trim(),
+      }, session);
+      await syncWorkspace(session);
+      const details = result.credit_minor > 0
+        ? `Кредит на балансі: ${money(result.credit_minor / 100)}. Він автоматично піде в наступний період.`
+        : result.debt_minor > 0
+          ? `До доплати: ${money(result.debt_minor / 100)}.`
+          : "Баланс закритий без переплати чи боргу.";
+      setPlanChangeResult(`Тариф змінено. Поточний період: ${money(result.current_period_charge_minor / 100)}. ${details}`);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося змінити тариф.");
+    } finally {
+      setPlanChangeSaving(false);
+    }
   };
 
   const paymentTotals = {
