@@ -1766,6 +1766,7 @@ def _renew_after_last_lesson(db: Session, org_id: UUID, subscription: StudentSub
         organization_id=org_id, student_id=subscription.student_id, plan_id=plan.id, group_id=subscription.group_id,
         status=SubscriptionStatus.ACTIVE, starts_on=next_start, ends_on=_subscription_end_date(next_start, plan.period_days),
         price_minor=plan.price_minor, period_days=plan.period_days, lessons_included=plan.lessons_included,
+        lesson_unit_price_minor=_lesson_unit_price(plan.price_minor, plan.lessons_included),
         credit_minor=carry_credit, discount_minor=0, discount_label=None, auto_renew=True, renewal_of_id=subscription.id,
     )
     db.add(next_subscription)
@@ -2004,6 +2005,12 @@ def _subscription_end_date(starts_on: date, period_days: int | None) -> date | N
     return starts_on + timedelta(days=period_days - 1) if period_days is not None else None
 
 
+def _lesson_unit_price(price_minor: int, lessons_included: int | None) -> int | None:
+    if lessons_included is None or lessons_included <= 0:
+        return None
+    return int(round(price_minor / lessons_included))
+
+
 def _first_planned_lesson_date(
     db: Session,
     org_id: UUID,
@@ -2136,6 +2143,7 @@ def create_student_subscription(db: Session, org_id: UUID, data) -> StudentSubsc
         price_minor=price_minor,
         period_days=plan.period_days,
         lessons_included=plan.lessons_included,
+        lesson_unit_price_minor=_lesson_unit_price(max(0, price_minor - data.discount_minor), plan.lessons_included),
         credit_minor=0,
         discount_minor=data.discount_minor,
         discount_label=data.discount_label,
@@ -2456,6 +2464,7 @@ def run_billing_renewals(
                 price_minor=plan.price_minor,
                 period_days=plan.period_days,
                 lessons_included=plan.lessons_included,
+                lesson_unit_price_minor=_lesson_unit_price(plan.price_minor, plan.lessons_included),
                 credit_minor=carry_credit,
                 discount_minor=0,
                 discount_label=None,
@@ -2547,6 +2556,7 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
         price_minor=plan.price_minor,
         period_days=plan.period_days,
         lessons_included=plan.lessons_included,
+        lesson_unit_price_minor=_lesson_unit_price(amount_minor, plan.lessons_included),
         credit_minor=0,
         discount_minor=data.discount_minor,
         discount_label=data.discount_label,
