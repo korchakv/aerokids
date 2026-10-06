@@ -3826,7 +3826,7 @@ function App() {
 
           {preferenceMode && <div className="workflowBox">
             <div className="workflowHead"><h3>Побажання щодо графіка</h3><button onClick={() => setPreferenceMode(false)}>×</button></div>
-            <p className="softPreferenceHint">Це орієнтовні побажання сім’ї. Фінальний графік узгоджується під час формування групи.</p>
+            <p className="softPreferenceHint">В одному записі можна вибрати кілька днів і один часовий проміжок, наприклад Пн / Ср / Пт · 17:00–19:00. Для іншого дня або іншого часу додайте ще один запис.</p>
             {activeLocations.length === 1
               ? <label>Бажана локація<div className="singleLocationField">{activeLocations[0].name}</div></label>
               : <label>Бажана локація<select value={preferenceLocationId} onChange={(e) => setPreferenceLocationId(e.target.value)}>
