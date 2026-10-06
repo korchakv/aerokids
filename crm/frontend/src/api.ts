@@ -431,6 +431,8 @@ export type WorkspaceLead = {
   recommended_level: string | null;
   teacher_notes: string | null;
   next_contact_at: string | null;
+  follow_up_reason: string | null;
+  follow_up_note: string | null;
   close_reason: string | null;
   close_note: string | null;
 };
