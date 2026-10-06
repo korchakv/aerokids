@@ -289,6 +289,7 @@ function App() {
   const [workspaceLoading, setWorkspaceLoading] = useState(() => Boolean(apiEnabled && loadSession()));
   const [workspaceRefreshing, setWorkspaceRefreshing] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
+  const [saveToastTick, setSaveToastTick] = useState(0);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [overviewReport, setOverviewReport] = useState<OverviewReport | null>(null);
   const [entityEvents, setEntityEvents] = useState<ApiAuditEvent[]>([]);
@@ -497,6 +498,18 @@ function App() {
     const timer = window.setTimeout(() => setLessonSaveNotice(""), 2200);
     return () => window.clearTimeout(timer);
   }, [lessonSaveNotice]);
+
+  useEffect(() => {
+    const handleSaved = () => setSaveToastTick((value) => value + 1);
+    window.addEventListener("crm:saved", handleSaved);
+    return () => window.removeEventListener("crm:saved", handleSaved);
+  }, []);
+
+  useEffect(() => {
+    if (!saveToastTick) return;
+    const timer = window.setTimeout(() => setSaveToastTick(0), 1900);
+    return () => window.clearTimeout(timer);
+  }, [saveToastTick]);
 
   useEffect(() => {
     if (!apiEnabled || !session) return;
@@ -2691,6 +2704,7 @@ function App() {
         {apiEnabled && workspaceLoading && <div className="syncBanner syncing"><span className="syncPulse" />Оновлення даних…</div>}
         {apiEnabled && workspaceError && <div className="syncBanner error">{workspaceError}</div>}
         {apiEnabled && workspaceLoaded && !workspaceLoading && !workspaceError && workspaceRefreshing && <div className="syncStatus refreshing"><span className="syncPulse" />Оновлення даних…</div>}
+        {saveToastTick > 0 && <div className="saveToast" role="status" aria-live="polite"><span>✓</span><b>Збережено</b></div>}
 
         {active === "Дашборд" && <section className="todayDashboard">
           <div className="todayIntro">
@@ -2749,7 +2763,7 @@ function App() {
                   : lead.parent + " · " + formatUaPhone(lead.phone);
                 return <button className="todayActionRow" key={"lead-" + lead.id} onClick={() => openLead(lead.id)}>
                   <span className={"todayActionType lead action-" + leadActionMeta(lead).type}>{leadActionMeta(lead).icon} {leadActionMeta(lead).label}</span>
-                  <span className="todayActionText"><b>{lead.child}</b><small>{kind} · {detail}</small></span>
+                  <span className="todayActionText"><b>{lead.child}, {lead.age} років</b><small>{kind} · {detail}</small></span>
                   <span className="todayActionArrow">→</span>
                 </button>;
               })}
@@ -3351,18 +3365,18 @@ function App() {
       </main>
 
       {showLeadForm && <div className="modalBackdrop">
-        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
+        <div className="groupModal leadCreateModal" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => { setShowLeadForm(false); setLeadDuplicateMatches([]); }}>×</button>
           <p className="eyebrow">Нова заявка</p><h2>Додати дитину</h2>
-          <div className="formTwo">
+          <div className="formTwo leadCreatePair">
             <label>Ім’я дитини *<input className={leadChildName && personNameError(leadChildName, "Ім’я дитини") ? "inputInvalid" : ""} value={leadChildName} maxLength={120} onChange={(e) => setLeadChildName(e.target.value)} placeholder="Максим" />{leadChildName && personNameError(leadChildName, "Ім’я дитини") && <small className="fieldError">{personNameError(leadChildName, "Ім’я дитини")}</small>}</label>
-            <label>Прізвище дитини <small>(необов’язково, можна дописати пізніше)</small><input className={leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") ? "inputInvalid" : ""} value={leadChildLastName} maxLength={120} onChange={(e) => setLeadChildLastName(e.target.value)} placeholder="Коваль" />{leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") && <small className="fieldError">{personNameError(leadChildLastName, "Прізвище дитини")}</small>}</label>
+            <label>Прізвище дитини<input className={leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") ? "inputInvalid" : ""} value={leadChildLastName} maxLength={120} onChange={(e) => setLeadChildLastName(e.target.value)} placeholder="Коваль" /><small className="leadFormHint">Необов’язково · можна дописати пізніше</small>{leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") && <small className="fieldError">{personNameError(leadChildLastName, "Прізвище дитини")}</small>}</label>
           </div>
-          <div className="formTwo">
+          <div className="formTwo leadCreatePair">
             <label>Вік<input type="number" min={3} max={25} value={leadAge} onChange={(e) => setLeadAge(Number(e.target.value))} /></label>
-            <label>Телефон дитини <small>(необов’язково)</small><input type="tel" inputMode="tel" maxLength={19} className={leadChildPhone && uaPhoneError(leadChildPhone, false) ? "inputInvalid" : ""} value={leadChildPhone} onChange={(e) => setLeadChildPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadChildPhone)) setLeadChildPhone(formatUaPhone(leadChildPhone)); void checkManualLeadDuplicates(); }} placeholder="+380 67 123 45 67" />{leadChildPhone && uaPhoneError(leadChildPhone, false) && <small className="fieldError">{uaPhoneError(leadChildPhone, false)}</small>}</label>
+            <label>Телефон дитини<input type="tel" inputMode="tel" maxLength={19} className={leadChildPhone && uaPhoneError(leadChildPhone, false) ? "inputInvalid" : ""} value={leadChildPhone} onChange={(e) => setLeadChildPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadChildPhone)) setLeadChildPhone(formatUaPhone(leadChildPhone)); void checkManualLeadDuplicates(); }} placeholder="+380 67 123 45 67" /><small className="leadFormHint">Необов’язково</small>{leadChildPhone && uaPhoneError(leadChildPhone, false) && <small className="fieldError">{uaPhoneError(leadChildPhone, false)}</small>}</label>
           </div>
-          <label>Ім’я відповідальної особи * <small>(прізвище можна дописати пізніше)</small><input className={leadContactName && personNameError(leadContactName, "Відповідальна особа") ? "inputInvalid" : ""} value={leadContactName} maxLength={160} autoComplete="name" onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана або Оксана Петренко" />{leadContactName && personNameError(leadContactName, "Відповідальна особа") && <small className="fieldError">{personNameError(leadContactName, "Відповідальна особа")}</small>}</label>
+          <label>Ім’я відповідальної особи *<input className={leadContactName && personNameError(leadContactName, "Відповідальна особа") ? "inputInvalid" : ""} value={leadContactName} maxLength={160} autoComplete="name" onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана або Оксана Петренко" /><small className="leadFormHint">Прізвище можна дописати пізніше</small>{leadContactName && personNameError(leadContactName, "Відповідальна особа") && <small className="fieldError">{personNameError(leadContactName, "Відповідальна особа")}</small>}</label>
           <label>Телефон відповідального *<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={leadPhone && uaPhoneError(leadPhone) ? "inputInvalid" : ""} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadPhone)) setLeadPhone(formatUaPhone(leadPhone)); void checkManualLeadDuplicates(); }} placeholder="+380 67 123 45 67" />{leadPhone && uaPhoneError(leadPhone) && <small className="fieldError">{uaPhoneError(leadPhone)}</small>}</label>
           {leadDuplicateChecking && <div className="duplicateCheck pending"><span className="syncPulse" />Перевіряємо номер у CRM…</div>}
           {!leadDuplicateChecking && leadDuplicateMatches.length > 0 && <div className={"duplicateCheck " + (leadDuplicateMatches.some((item) => item.likely_same_student) ? "blocked" : "warning")}>
@@ -3425,7 +3439,7 @@ function App() {
         </div>
       </div>}
 
-      {selectedGroupId && <div className="drawerBackdrop groupPageBackdrop">
+      {selectedGroupId && <div className="drawerBackdrop groupPageBackdrop" onClick={closeGroupDetail}>
         <aside className="drawer groupDetailDrawer" onClick={(e) => e.stopPropagation()}>
           <div className="groupPageTopbar">
             <button className="groupBackButton" aria-label="До списку груп" title="До списку груп" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); setGroupTeacherEditing(false); }}><UiIcon name="back" size={16} /><span>До списку груп</span></button>
@@ -3753,7 +3767,7 @@ function App() {
         </div>
       </div>}
 
-      {selected && <div className="drawerBackdrop leadDrawerBackdrop">
+      {selected && <div className="drawerBackdrop leadDrawerBackdrop" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>
         <aside className="drawer leadDrawer" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>×</button>
           <p className="eyebrow">Картка заявки</p>
