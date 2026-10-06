@@ -1966,24 +1966,119 @@ def _attach_payment_financials(db: Session, org_id: UUID, payment: Payment) -> P
     return payment
 
 
-def create_subscription_plan(db: Session, org_id: UUID, data) -> SubscriptionPlan:
+def _subscription_end_date(starts_on: date, period_days: int | None) -> date | None:
+    return starts_on + timedelta(days=period_days - 1) if period_days is not None else None
+
+
+def _first_planned_lesson_date(
+    db: Session,
+    org_id: UUID,
+    group_id: UUID | None,
+    not_before: date,
+) -> date:
+    if group_id is None:
+        return not_before
+    materialize_recurring_lesson_sessions(db, org_id)
+    organization = require_organization(db, org_id)
+    try:
+        tz = ZoneInfo(organization.timezone)
+    except Exception:
+        tz = timezone.utc
+    candidates = list(db.scalars(
+        select(LessonSession).where(
+            LessonSession.organization_id == org_id,
+            LessonSession.group_id == group_id,
+            LessonSession.status != LessonStatus.CANCELLED,
+        ).order_by(LessonSession.starts_at)
+    ))
+    for lesson in candidates:
+        local_date = _comparable_dt(lesson.starts_at, organization.timezone).date()
+        if local_date >= not_before:
+            return local_date
+    return not_before
+
+
+def create_subscription_plan(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> SubscriptionPlan:
     require_organization(db, org_id)
     item = SubscriptionPlan(organization_id=org_id, **data.model_dump())
     db.add(item)
+    db.flush()
+    record_audit(
+        db,
+        org_id,
+        "subscription_plan",
+        item.id,
+        "subscription_plan.created",
+        {
+            "name": item.name,
+            "price_minor": item.price_minor,
+            "period_days": item.period_days,
+            "lessons_included": item.lessons_included,
+            "is_active": item.is_active,
+        },
+        actor_user_id=actor_user_id,
+    )
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Subscription plan name already exists") from exc
+        raise HTTPException(status_code=409, detail="Тариф із такою назвою вже існує") from exc
     db.refresh(item)
     return item
+
+
+def update_subscription_plan(
+    db: Session,
+    org_id: UUID,
+    plan_id: UUID,
+    data,
+    actor_user_id: UUID | None = None,
+) -> SubscriptionPlan:
+    plan = scoped_get(db, SubscriptionPlan, org_id, plan_id)
+    before = {
+        "name": plan.name,
+        "price_minor": plan.price_minor,
+        "period_days": plan.period_days,
+        "lessons_included": plan.lessons_included,
+        "is_active": plan.is_active,
+    }
+    plan.name = data.name
+    plan.price_minor = data.price_minor
+    plan.period_days = data.period_days
+    plan.lessons_included = data.lessons_included
+    plan.is_active = data.is_active
+    after = {
+        "name": plan.name,
+        "price_minor": plan.price_minor,
+        "period_days": plan.period_days,
+        "lessons_included": plan.lessons_included,
+        "is_active": plan.is_active,
+    }
+    changed_fields = [key for key in after if before[key] != after[key]]
+    if changed_fields:
+        record_audit(
+            db,
+            org_id,
+            "subscription_plan",
+            plan.id,
+            "subscription_plan.updated",
+            {"before": before, "after": after, "changed_fields": changed_fields},
+            actor_user_id=actor_user_id,
+        )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Тариф із такою назвою вже існує") from exc
+    db.refresh(plan)
+    return plan
 
 
 def list_subscription_plans(db: Session, org_id: UUID) -> list[SubscriptionPlan]:
     return list(db.scalars(
         select(SubscriptionPlan)
-        .where(SubscriptionPlan.organization_id == org_id, SubscriptionPlan.is_active.is_(True))
-        .order_by(SubscriptionPlan.name)
+        .where(SubscriptionPlan.organization_id == org_id)
+        .order_by(SubscriptionPlan.is_active.desc(), SubscriptionPlan.name)
     ))
 
 
