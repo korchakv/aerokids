@@ -779,6 +779,41 @@ def form_group(db: Session, org_id: UUID, data, actor_user_id: UUID | None = Non
     return group, [student.id for student in students]
 
 
+def enroll_student_without_group(
+    db: Session,
+    org_id: UUID,
+    student_id: UUID,
+    actor_user_id: UUID | None = None,
+) -> Student:
+    student = scoped_get(db, Student, org_id, student_id)
+
+    active_enrollment = db.scalar(select(Enrollment).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.student_id == student.id,
+        Enrollment.status == EnrollmentStatus.ACTIVE,
+    ))
+    if active_enrollment is not None:
+        raise HTTPException(status_code=409, detail="Student is already enrolled in a group")
+
+    student.crm_status = CrmStatus.ENROLLED
+    student.student_status = StudentStatus.ACTIVE
+    student.next_contact_at = None
+    student.lead_close_reason = None
+    student.lead_close_note = None
+    record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        "student.enrolled_without_group",
+        {"group_id": None, "location_id": None},
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(student)
+    return student
+
+
 def student_profile(db: Session, org_id: UUID, student_id: UUID):
     student, contacts, trials = student_detail(db, org_id, student_id)
     rows = db.execute(
