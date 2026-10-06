@@ -2578,11 +2578,11 @@ def set_staff_locations(db: Session, org_id: UUID, staff_id: UUID, location_ids:
 
 def assign_staff_to_group(db: Session, org_id: UUID, staff_id: UUID, group_id: UUID, is_primary: bool = False) -> GroupStaff:
     staff = scoped_get(db, Staff, org_id, staff_id)
+    scoped_get(db, Group, org_id, group_id)
     if not staff.is_active:
         raise HTTPException(status_code=409, detail="Inactive staff member cannot be assigned")
     if not staff.can_teach:
         raise HTTPException(status_code=409, detail="Staff member is not marked as able to teach")
-    scoped_get(db, Group, org_id, group_id)
 
     existing = db.scalar(select(GroupStaff).where(
         GroupStaff.organization_id == org_id,
