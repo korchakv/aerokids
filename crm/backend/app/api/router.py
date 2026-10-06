@@ -86,12 +86,13 @@ def create_organization_invitation(
     if data.role == StaffRole.OWNER and access.role != StaffRole.OWNER:
         raise HTTPException(status_code=403, detail="Only an owner can invite another owner")
     invitation, raw_token = auth_service.create_invitation(
-        db, access.organization_id, user.id, data.email, data.role
+        db, access.organization_id, user.id, data.email, data.role, data.can_teach
     )
     return OrganizationInvitationResult(
         invitation_id=invitation.id,
         email=invitation.email,
         role=invitation.role,
+        can_teach=invitation.can_teach,
         invite_token=raw_token,
         expires_at=invitation.expires_at.isoformat(),
     )
@@ -363,6 +364,15 @@ def form_group(data: GroupFormationCreate, access: OrgAccess = Depends(require_o
 @router.post("/groups/match-preview", response_model=GroupMatchPreviewResponse)
 def preview_group_matches(data: GroupMatchPreviewRequest, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return {"students": crm.preview_group_matches(db, org_id, data)}
+
+
+@router.post("/students/{student_id}/enroll-without-group", response_model=StudentRead)
+def enroll_student_without_group(
+    student_id: UUID,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER)),
+    db: Session = Depends(get_db),
+):
+    return crm.enroll_student_without_group(db, access.organization_id, student_id, access.user_id)
 
 
 @router.get("/students/{student_id}/profile", response_model=StudentProfile)

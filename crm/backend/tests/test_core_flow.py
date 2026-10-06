@@ -1141,6 +1141,98 @@ def test_teacher_has_admin_level_operational_access(client):
     assert owner_invite.status_code == 403
 
 
+def test_admin_can_teach_when_responsibility_is_enabled(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKids",
+            "organization_slug": "admin-teaches",
+            "full_name": "Owner",
+            "email": "owner-admin-teaches@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+    owner_headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+
+    group = client.post(
+        "/groups/form",
+        headers=owner_headers,
+        json={"name": "FPV Admin Group", "capacity": 6, "location_id": None, "student_ids": [], "schedule_slots": []},
+    )
+    assert group.status_code == 201, group.text
+
+    invite = client.post(
+        "/organization-invitations",
+        headers=owner_headers,
+        json={"email": "teaching-admin@example.com", "role": "admin", "can_teach": True},
+    )
+    assert invite.status_code == 201, invite.text
+    assert invite.json()["can_teach"] is True
+
+    accepted = client.post(
+        "/auth/accept-invite",
+        json={
+            "invite_token": invite.json()["invite_token"],
+            "full_name": "Teaching Admin",
+            "password": "admin-secure-password",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    staff = client.get("/staff", headers=owner_headers)
+    assert staff.status_code == 200, staff.text
+    admin = next(item for item in staff.json() if item["email"] == "teaching-admin@example.com")
+    assert admin["role"] == "admin"
+    assert admin["can_teach"] is True
+
+    assigned = client.post(
+        f"/staff/{admin['id']}/groups",
+        headers=owner_headers,
+        json={"group_id": group.json()["group"]["id"], "is_primary": True},
+    )
+    assert assigned.status_code == 201, assigned.text
+
+
+def test_non_teaching_staff_cannot_be_assigned_as_teacher(client):
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKids",
+            "organization_slug": "non-teaching-staff",
+            "full_name": "Owner",
+            "email": "owner-nonteaching@example.com",
+            "password": "very-secure-password",
+        },
+    )
+    owner_headers = {
+        "Authorization": f"Bearer {bootstrap.json()['access_token']}",
+        "X-Organization-Id": bootstrap.json()["organization_id"],
+    }
+    group = client.post(
+        "/groups/form",
+        headers=owner_headers,
+        json={"name": "Manager Group", "capacity": 6, "location_id": None, "student_ids": [], "schedule_slots": []},
+    ).json()
+    manager = client.post(
+        "/staff",
+        headers=owner_headers,
+        json={"full_name": "Office Manager", "role": "manager", "can_teach": False},
+    )
+    assert manager.status_code == 201, manager.text
+    assert manager.json()["can_teach"] is False
+
+    denied = client.post(
+        f"/staff/{manager.json()['id']}/groups",
+        headers=owner_headers,
+        json={"group_id": group["group"]["id"], "is_primary": True},
+    )
+    assert denied.status_code == 409, denied.text
+
+
 def test_invitation_is_single_use(client):
     bootstrap = client.post(
         "/auth/bootstrap",
@@ -2733,6 +2825,66 @@ def test_completed_trial_candidate_can_join_existing_group(client):
     detail = client.get(f"/groups/{group['id']}/detail", headers=headers)
     assert detail.status_code == 200
     assert [member["student_id"] for member in detail.json()["members"]] == [student["id"]]
+
+
+def test_student_can_be_active_without_group_or_location(client):
+    org = create_org(client, "Independent Student", "independent-student")
+    headers = {"X-Organization-Id": org["id"]}
+
+    intake = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Ірина",
+            "child_age": 12,
+            "contact_name": "Олена Коваль",
+            "phone": "0674443322",
+            "source": "phone",
+        },
+    )
+    assert intake.status_code == 201, intake.text
+    student_id = intake.json()["student_id"]
+
+    activated = client.post(f"/students/{student_id}/enroll-without-group", headers=headers, json={})
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["crm_status"] == "enrolled"
+    assert activated.json()["student_status"] == "active"
+
+    students = client.get("/workspace/students", headers=headers)
+    assert students.status_code == 200, students.text
+    row = next(item for item in students.json() if item["student_id"] == student_id)
+    assert row["group_id"] is None
+    assert row["group_name"] is None
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    assert all(item["student_id"] != student_id for item in leads.json())
+
+    group = client.post(
+        "/groups/form",
+        headers=headers,
+        json={
+            "name": "Online Later Group",
+            "capacity": 6,
+            "location_id": None,
+            "student_ids": [],
+            "schedule_slots": [],
+        },
+    )
+    assert group.status_code == 201, group.text
+    assert group.json()["group"]["location_id"] is None
+    assert group.json()["enrolled_student_ids"] == []
+
+    enrolled = client.post(
+        "/enrollments",
+        headers=headers,
+        json={"student_id": student_id, "group_id": group.json()["group"]["id"]},
+    )
+    assert enrolled.status_code == 201, enrolled.text
+
+    students_after = client.get("/workspace/students", headers=headers).json()
+    row_after = next(item for item in students_after if item["student_id"] == student_id)
+    assert row_after["group_id"] == group.json()["group"]["id"]
 
 
 def test_candidate_without_completed_trial_can_join_existing_group(client):

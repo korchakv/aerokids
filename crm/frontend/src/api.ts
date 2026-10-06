@@ -26,8 +26,38 @@ const STORAGE_KEY = "school-crm-session";
 
 export const apiEnabled = Boolean(API_URL);
 
+function humanizeApiDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item) => {
+      if (!item || typeof item !== "object") return String(item);
+      const row = item as { msg?: unknown; loc?: unknown[] };
+      const field = Array.isArray(row.loc) ? row.loc.filter((part) => part !== "body").join(" → ") : "";
+      const msg = typeof row.msg === "string" ? row.msg : JSON.stringify(item);
+      return field ? `${field}: ${msg}` : msg;
+    }).filter(Boolean);
+    return messages.length ? messages.join("; ") : fallback;
+  }
+  if (detail && typeof detail === "object") {
+    const row = detail as { message?: unknown; code?: unknown };
+    if (typeof row.message === "string" && row.message.trim()) return row.message;
+    if (typeof row.code === "string" && row.code.trim()) return row.code;
+    try { return JSON.stringify(detail); } catch { return fallback; }
+  }
+  return fallback;
+}
+
+async function responseError(response: Response, fallback = "Не вдалося виконати дію"): Promise<Error> {
+  try {
+    const body = await response.json();
+    return new Error(humanizeApiDetail(body?.detail, fallback));
+  } catch {
+    return new Error(fallback);
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}, session?: Session): Promise<T> {
-  if (!API_URL) throw new Error("API URL is not configured");
+  if (!API_URL) throw new Error("API URL не налаштовано");
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (session) {
@@ -36,23 +66,7 @@ async function request<T>(path: string, init: RequestInit = {}, session?: Sessio
   }
 
   const response = await fetch(`${API_URL}${path}`, { ...init, headers });
-  if (!response.ok) {
-    let message = "Request failed";
-    try {
-      const body = await response.json();
-      const detail = body?.detail;
-      if (typeof detail === "string") {
-        message = detail;
-      } else if (Array.isArray(detail)) {
-        message = detail
-          .map((item) => typeof item?.msg === "string" ? item.msg : JSON.stringify(item))
-          .join("; ");
-      } else if (detail && typeof detail === "object") {
-        message = typeof detail.message === "string" ? detail.message : JSON.stringify(detail);
-      }
-    } catch {}
-    throw new Error(message);
-  }
+  if (!response.ok) throw await responseError(response);
   return response.json() as Promise<T>;
 }
 
@@ -257,6 +271,7 @@ export type ApiStaff = {
   email: string | null;
   phone: string | null;
   role: "owner" | "admin" | "manager" | "teacher" | "accountant";
+  can_teach: boolean;
   is_active: boolean;
   notes: string | null;
 };
@@ -392,14 +407,7 @@ export async function apiDelete(path: string, session: Session): Promise<void> {
       "X-Organization-Id": session.organizationId,
     },
   });
-  if (!response.ok) {
-    let message = "Request failed";
-    try {
-      const body = await response.json();
-      message = body.detail ?? message;
-    } catch {}
-    throw new Error(message);
-  }
+  if (!response.ok) throw await responseError(response);
 }
 
 

@@ -120,6 +120,7 @@ type StaffDemo = {
   id: EntityId;
   fullName: string;
   role: StaffRoleDemo;
+  canTeach: boolean;
   email: string;
   phone: string;
   locationIds: EntityId[];
@@ -379,8 +380,8 @@ function App() {
     { id: "1", name: "Основна локація", address: "Івано-Франківськ", isActive: true },
   ]);
   const [staff, setStaff] = useState<StaffDemo[]>([
-    { id: "1", fullName: "Іван Викладач", role: "Викладач", email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: ["1"], groupIds: ["1"], isActive: true },
-    { id: "2", fullName: "Адміністратор AeroKids", role: "Адміністратор", email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: ["1"], groupIds: [], isActive: true },
+    { id: "1", fullName: "Іван Викладач", role: "Викладач", canTeach: true, email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: ["1"], groupIds: ["1"], isActive: true },
+    { id: "2", fullName: "Адміністратор AeroKids", role: "Адміністратор", canTeach: true, email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: ["1"], groupIds: [], isActive: true },
   ]);
   const [selectedStaffId, setSelectedStaffId] = useState<EntityId | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<EntityId | null>(null);
@@ -398,11 +399,13 @@ function App() {
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<StaffRoleDemo>("Викладач");
+  const [inviteCanTeach, setInviteCanTeach] = useState(true);
   const [inviteLink, setInviteLink] = useState("");
   const [staffResetLink, setStaffResetLink] = useState("");
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [staffName, setStaffName] = useState("");
   const [staffRole, setStaffRole] = useState<StaffRoleDemo>("Викладач");
+  const [staffCanTeach, setStaffCanTeach] = useState(true);
   const [staffEmail, setStaffEmail] = useState("");
   const [staffPhone, setStaffPhone] = useState("");
   const [locationName, setLocationName] = useState("");
@@ -435,6 +438,8 @@ function App() {
   const [groupCapacity, setGroupCapacity] = useState(8);
   const [groupLocationId, setGroupLocationId] = useState<EntityId | "">("");
   const [showGroupForm, setShowGroupForm] = useState(false);
+  const [groupCreateError, setGroupCreateError] = useState("");
+  const [locationReturnToGroup, setLocationReturnToGroup] = useState(false);
   const [groupCreateContext, setGroupCreateContext] = useState<"groups" | "candidates" | "lead">("groups");
   const [newGroupTeacherId, setNewGroupTeacherId] = useState<EntityId | "">("");
   const [newLessonGroupId, setNewLessonGroupId] = useState<EntityId>("1");
@@ -1185,6 +1190,29 @@ function App() {
     }
   };
 
+  const enrollLeadWithoutGroup = async () => {
+    if (!selected || leadEnrollmentSaving) return;
+    setLeadEnrollmentSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiPost(`/students/${selected.id}/enroll-without-group`, {}, session);
+        await syncWorkspace(session);
+      } else {
+        setLeads((items) => items.map((lead) => lead.id === selected.id ? { ...lead, status: "Зарахований" } : lead));
+        setStudentStates((items) => ({ ...items, [selected.id]: "Активний" }));
+      }
+      setLeadProcedureTarget(null);
+      setSelectedId(null);
+      setSelectedStudentId(selected.id);
+      setActive("Учні");
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зарахувати учня без групи.");
+    } finally {
+      setLeadEnrollmentSaving(false);
+    }
+  };
+
   const toggleCandidate = (id: EntityId) => {
     setSelectedCandidates((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   };
@@ -1214,18 +1242,39 @@ function App() {
     setGroupCapacity(8);
     setNewGroupTeacherId("");
     setGroupSchedule([{ weekday: 0, start_time: "17:00", duration_minutes: 60 }]);
-    if (activeLocations.length === 1) setGroupLocationId(activeLocations[0].id);
+    setGroupCreateError("");
     setWorkspaceError("");
+    if (activeLocations.length === 1) {
+      setGroupLocationId(activeLocations[0].id);
+    } else if (!activeLocations.some((location) => location.id === groupLocationId)) {
+      setGroupLocationId("");
+    }
     setShowGroupForm(true);
   };
 
+  const createLocationFromGroup = () => {
+    setGroupCreateError("");
+    setLocationName("");
+    setLocationAddress("");
+    setLocationReturnToGroup(true);
+    setShowGroupForm(false);
+    setShowLocationForm(true);
+  };
+
   const createGroupFromCandidates = async () => {
-    if (!groupName.trim() || hasDuplicateSlots(groupSchedule) || selectedCandidates.length > groupCapacity) return;
+    const normalizedGroupName = groupName.trim();
+    if (!normalizedGroupName || hasDuplicateSlots(groupSchedule) || selectedCandidates.length > groupCapacity) return;
+    const duplicateName = groups.find((group) => group.name.trim().toLocaleLowerCase("uk-UA") === normalizedGroupName.toLocaleLowerCase("uk-UA"));
+    if (duplicateName) {
+      setGroupCreateError("Група з такою назвою вже існує. Відкрийте її або виберіть іншу назву.");
+      return;
+    }
+    setGroupCreateError("");
     if (apiEnabled && session) {
       try {
         setWorkspaceError("");
         const created = await apiPost<{ group: { id: EntityId }; enrolled_student_ids: EntityId[] }>("/groups/form", {
-          name: groupName.trim(),
+          name: normalizedGroupName,
           capacity: groupCapacity,
           location_id: groupLocationId || null,
           min_age: null,
@@ -1245,14 +1294,14 @@ function App() {
         setShowGroupForm(false);
         return;
       } catch (error) {
-        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити групу.");
+        setGroupCreateError(error instanceof Error ? error.message : "Не вдалося створити групу.");
         return;
       }
     }
     const nextId = crypto.randomUUID();
     setGroups((items) => [...items, {
       id: nextId,
-      name: groupName.trim(),
+      name: normalizedGroupName,
       ages: "—",
       schedule: scheduleDraftLabel(groupSchedule),
       location: locations.find((location) => location.id === groupLocationId)?.name ?? "Локацію не вказано",
@@ -1964,7 +2013,7 @@ function App() {
 
   const selectedStaff = staff.find((item) => item.id === selectedStaffId) ?? null;
   const selectedGroup = groups.find((item) => item.id === selectedGroupId) ?? null;
-  const activeTeachers = staff.filter((member) => member.role === "Викладач" && member.isActive);
+  const activeTeachers = staff.filter((member) => member.canTeach && member.isActive);
   const groupTeacher = (groupId: EntityId) => activeTeachers.find((member) => member.groupIds.includes(groupId));
   const selectedTeacher = selectedGroupId ? groupTeacher(selectedGroupId) : undefined;
   const existingGroupCandidates = useMemo(() => {
@@ -1996,6 +2045,7 @@ function App() {
         await apiPost("/staff", {
           full_name: cleanSpaces(staffName),
           role: staffRoleValue(staffRole),
+          can_teach: staffCanTeach || staffRole === "Викладач",
           email: staffEmail.trim().toLowerCase() || null,
           phone: normalizedStaffPhone,
           location_ids: locations[0] ? [locations[0].id] : [],
@@ -2004,6 +2054,7 @@ function App() {
         setStaffName("");
         setStaffEmail("");
         setStaffPhone("");
+        setStaffCanTeach(true);
         setShowStaffForm(false);
         return;
       } catch (error) {
@@ -2016,6 +2067,7 @@ function App() {
       id: nextId,
       fullName: cleanSpaces(staffName),
       role: staffRole,
+      canTeach: staffCanTeach || staffRole === "Викладач",
       email: staffEmail.trim().toLowerCase(),
       phone: normalizedStaffPhone ? formatUaPhone(normalizedStaffPhone) : "",
       locationIds: locations[0] ? [locations[0].id] : [],
@@ -2025,6 +2077,7 @@ function App() {
     setStaffName("");
     setStaffEmail("");
     setStaffPhone("");
+    setStaffCanTeach(true);
     setShowStaffForm(false);
   };
 
@@ -2054,6 +2107,7 @@ function App() {
       const result = await apiPost<{ invite_token: string }>("/organization-invitations", {
         email: inviteEmail.trim().toLowerCase(),
         role: staffRoleValue(inviteRole),
+        can_teach: inviteCanTeach || inviteRole === "Викладач",
       }, session);
       const url = new URL(window.location.href);
       url.searchParams.set("invite", result.invite_token);
@@ -2068,7 +2122,8 @@ function App() {
     if (!locationName.trim()) return;
     if (apiEnabled && session) {
       try {
-        await apiPost("/locations", {
+        setWorkspaceError("");
+        const created = await apiPost<{ id: EntityId; name: string }>("/locations", {
           name: locationName.trim(),
           address: locationAddress.trim() || null,
         }, session);
@@ -2076,8 +2131,14 @@ function App() {
         setLocationName("");
         setLocationAddress("");
         setShowLocationForm(false);
+        if (locationReturnToGroup) {
+          setGroupLocationId(created.id);
+          setLocationReturnToGroup(false);
+          setShowGroupForm(true);
+        }
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося створити локацію.");
         return;
       }
     }
@@ -2091,6 +2152,11 @@ function App() {
     setLocationName("");
     setLocationAddress("");
     setShowLocationForm(false);
+    if (locationReturnToGroup) {
+      setGroupLocationId(nextId);
+      setLocationReturnToGroup(false);
+      setShowGroupForm(true);
+    }
   };
 
   const toggleStaffLocation = async (staffId: EntityId, locationId: EntityId) => {
@@ -3019,7 +3085,8 @@ function App() {
           <p className="eyebrow">Доступ до CRM</p><h2>Запросити працівника</h2>
           {!inviteLink ? <>
             <label>Email *<input type="email" autoComplete="email" maxLength={255} className={inviteEmail && emailError(inviteEmail, true) ? "inputInvalid" : ""} value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="teacher@example.com" />{inviteEmail && emailError(inviteEmail, true) && <small className="fieldError">{emailError(inviteEmail, true)}</small>}</label>
-            <label>Роль<select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as StaffRoleDemo)}>{["Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+            <label>Роль<select value={inviteRole} onChange={(e) => { const role = e.target.value as StaffRoleDemo; setInviteRole(role); if (role === "Викладач") setInviteCanTeach(true); }}>{["Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+            <label className="toggleRow responsibilityToggle"><input type="checkbox" checked={inviteCanTeach || inviteRole === "Викладач"} disabled={inviteRole === "Викладач"} onChange={(e) => setInviteCanTeach(e.target.checked)} /><span><b>Може викладати</b><small>Дозволяє призначати цього працівника викладачем груп незалежно від його ролі в CRM.</small></span></label>
             <button className="primary full" disabled={Boolean(emailError(inviteEmail, true))} onClick={createInvitation}>Створити запрошення</button>
           </> : <>
             <div className="inviteSuccess"><b>Запрошення готове</b><p>Надішліть це посилання працівнику. Воно одноразове та діє 7 днів.</p><code>{inviteLink}</code></div>
@@ -3033,7 +3100,8 @@ function App() {
           <button className="drawerClose" onClick={() => setShowStaffForm(false)}>×</button>
           <p className="eyebrow">Команда</p><h2>Новий працівник</h2>
           <label>Ім’я та прізвище *<input autoComplete="name" maxLength={160} className={staffName && personNameError(staffName, "Ім’я та прізвище") ? "inputInvalid" : ""} value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="Іван Петренко" />{staffName && personNameError(staffName, "Ім’я та прізвище") && <small className="fieldError">{personNameError(staffName, "Ім’я та прізвище")}</small>}</label>
-          <label>Роль<select value={staffRole} onChange={(e) => setStaffRole(e.target.value as StaffRoleDemo)}>{["Власник","Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+          <label>Роль<select value={staffRole} onChange={(e) => { const role = e.target.value as StaffRoleDemo; setStaffRole(role); if (role === "Викладач") setStaffCanTeach(true); }}>{["Власник","Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+          <label className="toggleRow responsibilityToggle"><input type="checkbox" checked={staffCanTeach || staffRole === "Викладач"} disabled={staffRole === "Викладач"} onChange={(e) => setStaffCanTeach(e.target.checked)} /><span><b>Може викладати</b><small>Працівника можна буде призначати викладачем груп.</small></span></label>
           <div className="formTwo"><label>Email<input type="email" autoComplete="email" maxLength={255} className={staffEmail && emailError(staffEmail) ? "inputInvalid" : ""} value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} />{staffEmail && emailError(staffEmail) && <small className="fieldError">{emailError(staffEmail)}</small>}</label><label>Телефон<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={staffPhone && uaPhoneError(staffPhone, false) ? "inputInvalid" : ""} value={staffPhone} onChange={(e) => setStaffPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(staffPhone)) setStaffPhone(formatUaPhone(staffPhone)); }} placeholder="+380 67 123 45 67" />{staffPhone && uaPhoneError(staffPhone, false) && <small className="fieldError">{uaPhoneError(staffPhone, false)}</small>}</label></div><div className="formNotice">Для працівника потрібно вказати хоча б email або телефон.</div>
           <button className="primary full" disabled={Boolean(personNameError(staffName, "Ім’я та прізвище") || emailError(staffEmail) || uaPhoneError(staffPhone, false) || (!staffEmail.trim() && !staffPhone.trim()))} onClick={createStaffMember}>Додати працівника</button>
         </div>
@@ -3041,8 +3109,9 @@ function App() {
 
       {showLocationForm && <div className="modalBackdrop">
         <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setShowLocationForm(false)}>×</button>
+          <button className="drawerClose" onClick={() => { setShowLocationForm(false); if (locationReturnToGroup) { setLocationReturnToGroup(false); setShowGroupForm(true); } }}>×</button>
           <p className="eyebrow">Мережа</p><h2>Нова локація</h2>
+          {locationReturnToGroup && <p className="modalIntro">Після збереження повернемо вас до створення групи й виберемо нову локацію автоматично.</p>}
           <label>Назва<input value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="AeroKids Центр" /></label>
           <label>Адреса<input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="Івано-Франківськ" /></label>
           <button className="primary full" disabled={!locationName.trim()} onClick={createLocationDemo}>Створити локацію</button>
@@ -3165,10 +3234,23 @@ function App() {
         <aside className="drawer studentDrawer" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setSelectedStaffId(null)}>×</button>
           <p className="eyebrow">Працівник</p>
-          <div className="studentHero"><span>{selectedStaff.fullName[0]}</span><div><h2>{selectedStaff.fullName}</h2><p>{selectedStaff.role}</p></div></div>
+          <div className="studentHero"><span>{selectedStaff.fullName[0]}</span><div><h2>{selectedStaff.fullName}</h2><p>{selectedStaff.role}{selectedStaff.canTeach ? " · Викладає" : ""}</p></div></div>
           <div className="contactCard"><span>Контакти</span><b>{selectedStaff.email || "Email не вказано"}</b><a href={"tel:" + selectedStaff.phone.replace(/\s/g,"")}>{selectedStaff.phone || "Телефон не вказано"}</a></div>
+          <div className="studentSection"><h3>Обов’язки</h3><label className="toggleRow responsibilityToggle"><input type="checkbox" checked={selectedStaff.canTeach || selectedStaff.role === "Викладач"} disabled={selectedStaff.role === "Викладач"} onChange={async (e) => {
+            const next = e.target.checked;
+            if (apiEnabled && session) {
+              try {
+                await apiPatch(`/staff/${selectedStaff.id}`, { can_teach: next }, session);
+                await syncWorkspace(session);
+              } catch (error) {
+                setWorkspaceError(error instanceof Error ? error.message : "Не вдалося змінити обов’язки працівника.");
+              }
+              return;
+            }
+            setStaff((items) => items.map((item) => item.id === selectedStaff.id ? { ...item, canTeach: next } : item));
+          }} /><span><b>Може викладати</b><small>Можна призначати викладачем груп незалежно від ролі доступу.</small></span></label></div>
           <div className="studentSection"><h3>Локації</h3><div className="assignmentList">{locations.map((location) => <label key={location.id}><input type="checkbox" checked={selectedStaff.locationIds.includes(location.id)} onChange={() => toggleStaffLocation(selectedStaff.id, location.id)} /><span>{location.name}<small>{location.address}</small></span></label>)}</div></div>
-          <div className="studentSection"><h3>Групи</h3><div className="assignmentList">{groups.map((group) => <label key={group.id}><input type="checkbox" checked={selectedStaff.groupIds.includes(group.id)} onChange={() => toggleStaffGroup(selectedStaff.id, group.id)} /><span>{group.name}<small>{group.schedule}</small></span></label>)}</div></div>
+          <div className="studentSection"><h3>Групи</h3>{!selectedStaff.canTeach && selectedStaff.role !== "Викладач" && <div className="formNotice">Щоб призначати групи, увімкніть обов’язок «Може викладати».</div>}<div className="assignmentList">{groups.map((group) => <label key={group.id} className={!selectedStaff.canTeach && selectedStaff.role !== "Викладач" ? "assignmentDisabled" : ""}><input type="checkbox" disabled={!selectedStaff.canTeach && selectedStaff.role !== "Викладач"} checked={selectedStaff.groupIds.includes(group.id)} onChange={() => toggleStaffGroup(selectedStaff.id, group.id)} /><span>{group.name}<small>{group.schedule}</small></span></label>)}</div></div>
           <div className="studentSection"><h3>Статус</h3><button className="search full" onClick={async () => {
             if (apiEnabled && session) {
               try {
@@ -3214,7 +3296,7 @@ function App() {
           <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.filter((plan) => plan.price > 0).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {money(plan.price)}</option>)}</select></label>
           <label>Оплатити до<input type="date" value={paymentDueDate} min={localDateInput(new Date())} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
           <label className="toggleRow"><input type="checkbox" checked={paymentAutoRenew} onChange={(e) => setPaymentAutoRenew(e.target.checked)} /><span><b>Автопродовження</b><small>Наступне нарахування створиться автоматично перед завершенням цього періоду.</small></span></label>
-          {activeStudents.length === 0 && <div className="formNotice">Спочатку зарахуйте хоча б одного учня до групи.</div>}
+          {activeStudents.length === 0 && <div className="formNotice">Спочатку зарахуйте хоча б одного учня.</div>}
           {!plans.some((plan) => plan.price > 0) && <div className="formNotice">Створіть тариф із ціною, щоб зробити нарахування.</div>}
           <button className="primary full" disabled={paymentSaving || !paymentStudentId || !paymentPlanId || !plans.some((plan) => plan.id === paymentPlanId && plan.price > 0)} onClick={createPayment}>{paymentSaving ? "Створюємо…" : "Створити нарахування"}</button>
         </div>
@@ -3256,7 +3338,7 @@ function App() {
           </div>
           <div className="studentInfoGrid">
             <div><span>Група</span><b>{studentGroup(selectedStudent.id)?.name ?? "Без групи"}</b><small>{studentGroup(selectedStudent.id)?.schedule ?? "Розклад не задано"}</small></div>
-            <div><span>Локація</span><b>{studentGroup(selectedStudent.id)?.location ?? "—"}</b></div>
+            <div><span>Локація</span><b>{studentGroup(selectedStudent.id)?.location ?? "Без локації"}</b></div>
           </div>
           <div className="contactCard"><span>Контакт</span><b>{selectedStudent.parent}</b><a href={"tel:" + selectedStudent.phone.replace(/\s/g, "")}>{selectedStudent.phone}</a></div>
 
@@ -3269,12 +3351,12 @@ function App() {
             </div>
 
             <div className="studentSection">
-              <h3>Перевести в іншу групу</h3>
+              <h3>{studentGroup(selectedStudent.id) ? "Перевести в іншу групу" : "Додати до групи"}</h3>
               <select className="transferSelect" value={transferGroupId ?? ""} onChange={(e) => setTransferGroupId(e.target.value || null)}>
                 <option value="">Оберіть групу</option>
                 {groups.map((group) => <option value={group.id} key={group.id}>{group.name} · {group.members.length}/{group.capacity}</option>)}
               </select>
-              <button className="primary full" disabled={transferGroupId === null || transferGroupId === studentGroup(selectedStudent.id)?.id} onClick={transferStudent}>Перевести учня</button>
+              <button className="primary full" disabled={transferGroupId === null || transferGroupId === studentGroup(selectedStudent.id)?.id} onClick={transferStudent}>{studentGroup(selectedStudent.id) ? "Перевести учня" : "Додати учня до групи"}</button>
             </div>
           </>}
 
@@ -3297,12 +3379,21 @@ function App() {
           <label>Назва групи<input autoFocus value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Наприклад: FPV Start 8–10" /></label>
           <div className="formTwo">
             <label>Місткість<input type="number" min={1} max={100} value={groupCapacity} onChange={(e) => setGroupCapacity(Number(e.target.value))} /></label>
-            {activeLocations.length === 1
-              ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label>
-              : <label>Локація<select value={groupLocationId} onChange={(e) => setGroupLocationId(e.target.value)}>
-                  <option value="">Без локації</option>
-                  {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
-                </select></label>}
+            {activeLocations.length === 0
+              ? <div className="groupLocationOptional">
+                  <b>Локація <small>(необов’язково)</small></b>
+                  <small>Групу можна створити без локації та вказати її пізніше.</small>
+                  <button className="search" type="button" onClick={createLocationFromGroup}>+ Створити локацію</button>
+                </div>
+              : activeLocations.length === 1
+                ? <label>Локація <small>(необов’язково)</small><select value={groupLocationId} onChange={(e) => setGroupLocationId(e.target.value)}>
+                    <option value="">Без локації</option>
+                    <option value={activeLocations[0].id}>{activeLocations[0].name}</option>
+                  </select></label>
+                : <label>Локація <small>(необов’язково)</small><select value={groupLocationId} onChange={(e) => { setGroupLocationId(e.target.value); setGroupCreateError(""); }}>
+                    <option value="">Без локації</option>
+                    {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+                  </select></label>}
           </div>
           {canManageStaff && <label>Викладач <small>(необов’язково)</small><select value={newGroupTeacherId} onChange={(e) => setNewGroupTeacherId(e.target.value)}>
             <option value="">Призначити пізніше</option>
@@ -3316,6 +3407,7 @@ function App() {
               <b>{x.child} · {x.age}</b><small>{compatibility.icon} {compatibility.label}</small><small>{compatibility.detail}</small>
             </span>;
           })}</div>}
+          {groupCreateError && <div className="groupCreateError">{groupCreateError}</div>}
           <button className="primary full" disabled={!groupName.trim() || selectedCandidates.length > groupCapacity || hasDuplicateSlots(groupSchedule)} onClick={createGroupFromCandidates}>
             {!groupName.trim() ? "Вкажіть назву групи" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
           </button>
@@ -3400,19 +3492,24 @@ function App() {
                 <button className="search dangerSoft" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Не хочуть продовжувати</button>
               </div>
             </>}
-            {selected.status === "Очікує групу" && <small>Готові навчатися · потрібно підібрати групу.</small>}
+            {selected.status === "Очікує групу" && <small>Готові навчатися · можна зарахувати в групу або без групи.</small>}
           </div>}
 
           {leadProcedureTarget === "waiting" && <div id="lead-enrollment-workflow" className="workflowBox leadWorkflowBox leadDirectEnrollmentStep">
-            <div className="workflowHead"><h3>Зарахувати в групу</h3><button onClick={() => { setLeadProcedureTarget(null); setLeadEnrollmentGroupId(""); }}>×</button></div>
-            <p className="softPreferenceHint">Попередні етапи можна пропустити. Для зарахування обов’язково лише обрати групу з вільним місцем.</p>
+            <div className="workflowHead"><h3>Зарахувати учня</h3><button onClick={() => { setLeadProcedureTarget(null); setLeadEnrollmentGroupId(""); }}>×</button></div>
+            <p className="softPreferenceHint">Учень може навчатися в групі або окремо. Група та локація не є обов’язковими.</p>
             <label>Група<select value={leadEnrollmentGroupId} onChange={(e) => setLeadEnrollmentGroupId(e.target.value)}>
               <option value="">Оберіть групу</option>
               {groups.filter((group) => group.members.length < group.capacity).map((group) => <option value={group.id} key={group.id}>{group.name} · {group.schedule} · {group.location} · вільно {group.capacity - group.members.length}</option>)}
             </select></label>
             <button className="search full createGroupInline" onClick={() => openGroupCreation("lead")}>+ Створити нову групу</button>
             {groups.length > 0 && groups.every((group) => group.members.length >= group.capacity) && <div className="emptyState compactEmpty">Немає груп із вільними місцями.</div>}
-            <button className="primary full" disabled={!leadEnrollmentGroupId || leadEnrollmentSaving} onClick={enrollLeadDirectly}>{leadEnrollmentSaving ? "Зараховуємо…" : "Зарахувати дитину"}</button>
+            <button className="primary full" disabled={!leadEnrollmentGroupId || leadEnrollmentSaving} onClick={enrollLeadDirectly}>{leadEnrollmentSaving ? "Зараховуємо…" : "Зарахувати в групу"}</button>
+            <div className="enrollmentOr"><span>або</span></div>
+            <button className="search full enrollWithoutGroup" disabled={leadEnrollmentSaving} onClick={enrollLeadWithoutGroup}>
+              <b>Зарахувати без групи</b>
+              <small>Для індивідуальних або онлайн-занять. Групу й локацію можна додати пізніше.</small>
+            </button>
           </div>}
 
           {selected.trialResult === "no_show" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="resultCard noShowCard">
@@ -3487,7 +3584,7 @@ function App() {
                 {(selected.status === "Зв'язались" || selected.trialResult === "no_show" || selected.trialResult === "cancelled") && <button className="mobileLeadSheetAction" onClick={beginTrialScheduling}><i>◷</i><span><b>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</b><small>Обрати дату, час і локацію</small></span></button>}
                 {selected.status === "Пробне заплановано" && <><button className="mobileLeadSheetAction" onClick={beginTrialResult}><i>✓</i><span><b>Внести результат пробного</b><small>Був / не прийшов / скасували</small></span></button><button className="mobileLeadSheetAction" onClick={beginTrialScheduling}><i>↻</i><span><b>Перенести пробне</b><small>Змінити дату, час або локацію</small></span></button></>}
                 {selected.status === "Після пробного" && <><button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void saveLeadOutcome("waiting_for_group"); }}><i>✓</i><span><b>Готові навчатися</b><small>Перемістити в «Очікує групу»</small></span></button><button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>☎</i><span><b>Ще думають</b><small>Запланувати наступний контакт</small></span></button></>}
-                {selected.status === "Очікує групу" && <button className="mobileLeadSheetAction" onClick={beginLeadEnrollment}><i>→</i><span><b>Зарахувати в групу</b><small>Обрати існуючу або створити нову</small></span></button>}
+                {selected.status === "Очікує групу" && <button className="mobileLeadSheetAction" onClick={beginLeadEnrollment}><i>→</i><span><b>Зарахувати учня</b><small>У групу або без групи</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Пробне заплановано" && <button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>◷</i><span><b>Запланувати дзвінок</b><small>Поставити дату наступного контакту</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Очікує групу" && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void updateStatus(selected.id, "Очікує групу"); }}><i>◎</i><span><b>Очікує групу</b><small>Позначити готовність до підбору групи</small></span></button>}
                 <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); setLeadStatusMenuOpen(true); }}><i>⇄</i><span><b>Перемістити заявку</b><small>Змінити етап вручну</small></span></button>
@@ -3506,7 +3603,7 @@ function App() {
                 <button className={"mobileLeadStageOption stage-trial " + (selected.status === "Пробне заплановано" ? "active" : "")} onClick={beginTrialScheduling}><i></i><span><b>Пробне заплановано</b><small>Спочатку вкажіть дату і час</small></span>{selected.status === "Пробне заплановано" && <strong>✓</strong>}</button>
                 <button className={"mobileLeadStageOption stage-after_trial " + (selected.status === "Після пробного" ? "active" : "")} onClick={beginTrialResult}><i></i><span><b>Після пробного</b><small>Зафіксувати результат заняття</small></span>{selected.status === "Після пробного" && <strong>✓</strong>}</button>
                 <button className={"mobileLeadStageOption stage-waiting " + (selected.status === "Очікує групу" ? "active" : "")} onClick={() => setLeadMobileStatus("Очікує групу")}><i></i><span><b>Очікує групу</b><small>Готові до підбору групи</small></span>{selected.status === "Очікує групу" && <strong>✓</strong>}</button>
-                <button className={"mobileLeadStageOption stage-enrolled " + (selected.status === "Зарахований" ? "active" : "")} onClick={beginLeadEnrollment}><i></i><span><b>Зарахувати в групу</b><small>Потрібно обрати групу</small></span>{selected.status === "Зарахований" && <strong>✓</strong>}</button>
+                <button className={"mobileLeadStageOption stage-enrolled " + (selected.status === "Зарахований" ? "active" : "")} onClick={beginLeadEnrollment}><i></i><span><b>Зарахувати учня</b><small>У групу або без групи</small></span>{selected.status === "Зарахований" && <strong>✓</strong>}</button>
                 <button className="mobileLeadStageOption stage-closed" onClick={beginLeadClose}><i></i><span><b>Закрити заявку</b><small>Зберегти причину закриття</small></span></button>
               </div>
             </section>
@@ -3723,6 +3820,7 @@ function applyOperations(
     id: item.id,
     fullName: item.full_name,
     role: staffRoleLabel(item.role),
+    canTeach: item.can_teach,
     email: item.email ?? "",
     phone: item.phone ?? "",
     locationIds: item.assignments.location_ids,
@@ -3820,7 +3918,7 @@ function leadPrimaryActionLabel(lead: Lead) {
   if (lead.trialResult === "no_show" || lead.trialResult === "cancelled") return "Перезаписати на пробне";
   if (lead.status === "Пробне заплановано") return "Внести результат пробного";
   if (lead.status === "Після пробного") return "Рішення після пробного";
-  if (lead.status === "Очікує групу") return "Зарахувати в групу";
+  if (lead.status === "Очікує групу") return "Зарахувати учня";
   return "Записати на пробне";
 }
 
@@ -4049,6 +4147,7 @@ function auditEventLabel(type: string) {
     "trial.cancelled": "Пробне скасовано",
     "lead.outcome_updated": "Рішення по заявці",
     "student.enrolled": "Зараховано до групи",
+    "student.enrolled_without_group": "Зараховано без групи",
     "student.transferred": "Переведено в іншу групу",
     "student.status_changed": "Статус учня змінено",
     "payment.created": "Створено нарахування",

@@ -161,7 +161,7 @@ class OrganizationRead(ORMModel):
 
 
 class LocationCreate(BaseModel):
-    name: str = Field(min_length=2, max_length=160)
+    name: str = Field(min_length=1, max_length=160)
     address: str | None = Field(default=None, max_length=300)
 
     _name = field_validator("name")(normalize_required_text)
@@ -267,7 +267,7 @@ class TrialLessonRead(ORMModel):
 
 
 class GroupCreate(BaseModel):
-    name: str = Field(min_length=2, max_length=160)
+    name: str = Field(min_length=1, max_length=160)
     location_id: UUID | None = None
     capacity: int | None = Field(default=None, ge=1, le=100)
     min_age: int | None = Field(default=None, ge=3, le=30)
@@ -450,7 +450,7 @@ class GroupFormationScheduleSlot(BaseModel):
 
 
 class GroupFormationCreate(BaseModel):
-    name: str = Field(min_length=2, max_length=160)
+    name: str = Field(min_length=1, max_length=160)
     location_id: UUID | None = None
     capacity: int = Field(default=8, ge=1, le=100)
     min_age: int | None = Field(default=None, ge=3, le=30)
@@ -864,6 +864,7 @@ class StaffCreate(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=40)
     role: StaffRole
+    can_teach: bool = False
     notes: str | None = None
     location_ids: list[UUID] = []
 
@@ -884,6 +885,7 @@ class StaffRead(ORMModel):
     email: str | None
     phone: str | None
     role: StaffRole
+    can_teach: bool
     is_active: bool
     notes: str | None
 
@@ -893,6 +895,7 @@ class StaffUpdate(BaseModel):
     email: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=40)
     role: StaffRole | None = None
+    can_teach: bool | None = None
     is_active: bool | None = None
     notes: str | None = None
 
@@ -951,7 +954,7 @@ class OrganizationMembershipRead(BaseModel):
 
 
 class LocationUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=2, max_length=160)
+    name: str | None = Field(default=None, min_length=1, max_length=160)
     address: str | None = Field(default=None, max_length=300)
     is_active: bool | None = None
 
