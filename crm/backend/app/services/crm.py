@@ -2355,12 +2355,13 @@ def run_billing_renewals(
     today = date.today()
     horizon = through_date or (today + timedelta(days=7))
     if horizon < today:
-        raise HTTPException(status_code=422, detail="through_date cannot be in the past")
+        raise HTTPException(status_code=422, detail="Дата перевірки не може бути в минулому")
 
     resumed = _resume_due_pauses(db, org_id, today, actor_user_id)
     expired_rows = list(db.scalars(select(StudentSubscription).where(
         StudentSubscription.organization_id == org_id,
         StudentSubscription.status == SubscriptionStatus.ACTIVE,
+        StudentSubscription.ends_on.is_not(None),
         StudentSubscription.ends_on < today,
     )))
     for expired in expired_rows:
@@ -2382,12 +2383,18 @@ def run_billing_renewals(
         StudentSubscription.organization_id == org_id,
         StudentSubscription.auto_renew.is_(True),
         StudentSubscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED]),
+        StudentSubscription.ends_on.is_not(None),
         StudentSubscription.ends_on <= horizon,
     ).order_by(StudentSubscription.ends_on, StudentSubscription.created_at)))
 
     for original in candidates:
         current = original
-        while current.auto_renew and current.status in {SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED} and current.ends_on <= horizon:
+        while (
+            current.auto_renew
+            and current.status in {SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED}
+            and current.ends_on is not None
+            and current.ends_on <= horizon
+        ):
             open_pause = db.scalar(select(SubscriptionPause.id).where(
                 SubscriptionPause.organization_id == org_id,
                 SubscriptionPause.subscription_id == current.id,
@@ -2417,18 +2424,39 @@ def run_billing_renewals(
                 break
 
             plan = scoped_get(db, SubscriptionPlan, org_id, current.plan_id)
-            if current.ends_on < today - timedelta(days=plan.period_days):
+            # An inactive tariff remains valid for the already-paid/current
+            # period, but it must not be sold again automatically.
+            if not plan.is_active:
+                break
+
+            current_period_days = current.period_days or plan.period_days or 30
+            if current.ends_on < today - timedelta(days=current_period_days):
                 skipped_stale_subscriptions += 1
                 break
-            next_start = current.ends_on + timedelta(days=1)
+
+            next_start = _first_planned_lesson_date(
+                db,
+                org_id,
+                current.group_id,
+                current.ends_on + timedelta(days=1),
+            )
+            available_credit = max(0, current.credit_minor)
+            applied_credit = min(available_credit, plan.price_minor)
+            carry_credit = max(0, available_credit - applied_credit)
+            amount_due = max(0, plan.price_minor - applied_credit)
+
             next_subscription = StudentSubscription(
                 organization_id=org_id,
                 student_id=student.id,
                 plan_id=plan.id,
+                group_id=current.group_id,
                 status=SubscriptionStatus.ACTIVE,
                 starts_on=next_start,
-                ends_on=next_start + timedelta(days=plan.period_days - 1),
+                ends_on=_subscription_end_date(next_start, plan.period_days),
                 price_minor=plan.price_minor,
+                period_days=plan.period_days,
+                lessons_included=plan.lessons_included,
+                credit_minor=carry_credit,
                 discount_minor=0,
                 discount_label=None,
                 auto_renew=True,
@@ -2440,13 +2468,16 @@ def run_billing_renewals(
                 organization_id=org_id,
                 student_id=student.id,
                 subscription_id=next_subscription.id,
-                amount_minor=plan.price_minor,
+                amount_minor=amount_due,
                 currency=organization.currency,
                 due_date=next_start,
                 note=f"{plan.name} · автоматичне продовження",
+                status=PaymentStatus.PAID if amount_due == 0 else PaymentStatus.PENDING,
+                paid_at=datetime.now(timezone.utc) if amount_due == 0 else None,
             )
             db.add(payment)
             db.flush()
+            current.credit_minor = 0
             if current.ends_on < today:
                 current.status = SubscriptionStatus.EXPIRED
             record_audit(
@@ -2460,7 +2491,10 @@ def run_billing_renewals(
                     "subscription_id": str(next_subscription.id),
                     "payment_id": str(payment.id),
                     "starts_on": next_start.isoformat(),
-                    "amount_minor": plan.price_minor,
+                    "tariff_price_minor": plan.price_minor,
+                    "credit_applied_minor": applied_credit,
+                    "amount_due_minor": amount_due,
+                    "credit_carried_minor": carry_credit,
                 },
                 actor_user_id=actor_user_id,
             )
@@ -2468,7 +2502,7 @@ def run_billing_renewals(
             created_subscriptions += 1
             current = next_subscription
 
-    if created_subscriptions:
+    if created_subscriptions or expired_rows:
         db.commit()
     return {
         "resumed_subscriptions": resumed,
@@ -2476,7 +2510,6 @@ def run_billing_renewals(
         "skipped_stale_subscriptions": skipped_stale_subscriptions,
         "created_payment_ids": created_payment_ids,
     }
-
 
 def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: UUID | None = None) -> tuple[StudentSubscription, Payment]:
     organization = require_organization(db, org_id)
