@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.core import Attendance, AttendanceStatus, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule, GroupStaff, LessonSession, LessonStatus, Location, Organization, OrganizationMembership, Payment, PaymentMethod, PaymentReminder, PaymentStatus, PaymentTransaction, PublicIntakeThrottle, Staff, StaffLocation, StaffRole, Student, StudentAvailability, StudentContact, StudentStatus, StudentSubscription, SubscriptionPause, SubscriptionPlan, SubscriptionStatus, SubscriptionUsage, MakeupCredit, TrialLesson, TrialStatus, User
-from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
+from app.schemas import ContactCreate, EnrollmentCreate, GroupCreate, GroupUpdate, IntakeCreate, LocationCreate, OrganizationCreate, StudentCreate, TrialLessonCreate
 from app.services.schedule_matching import enrollment_schedule_note, evaluate_schedule_match
 
 def record_audit(
@@ -321,6 +321,89 @@ def create_group(db: Session, org_id: UUID, data: GroupCreate) -> Group:
     db.commit()
     db.refresh(item)
     return item
+
+
+def update_group(
+    db: Session,
+    org_id: UUID,
+    group_id: UUID,
+    data: GroupUpdate,
+    actor_user_id: UUID | None = None,
+) -> Group:
+    group = scoped_get(db, Group, org_id, group_id)
+    if data.location_id is not None:
+        scoped_get(db, Location, org_id, data.location_id)
+
+    enrolled_count = len(list(db.scalars(select(Enrollment.id).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.group_id == group.id,
+        Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+    ))))
+    if data.capacity < enrolled_count:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Місткість групи не може бути меншою за кількість учасників ({enrolled_count}).",
+        )
+
+    group.name = data.name
+    group.location_id = data.location_id
+    group.capacity = data.capacity
+    group.min_age = data.min_age
+    group.max_age = data.max_age
+
+    existing_schedules = list(db.scalars(select(GroupSchedule).where(
+        GroupSchedule.organization_id == org_id,
+        GroupSchedule.group_id == group.id,
+    )))
+    schedules_by_key = {(item.weekday, item.start_time): item for item in existing_schedules}
+    desired_keys: set[tuple[int, time]] = set()
+
+    for slot in data.schedule_slots:
+        slot_time = time.fromisoformat(slot.start_time)
+        key = (slot.weekday, slot_time)
+        desired_keys.add(key)
+        existing = schedules_by_key.get(key)
+        if existing is None:
+            db.add(GroupSchedule(
+                organization_id=org_id,
+                group_id=group.id,
+                weekday=slot.weekday,
+                start_time=slot_time,
+                duration_minutes=slot.duration_minutes,
+                is_active=True,
+            ))
+        else:
+            existing.duration_minutes = slot.duration_minutes
+            existing.is_active = True
+
+    for existing in existing_schedules:
+        if (existing.weekday, existing.start_time) not in desired_keys:
+            existing.is_active = False
+
+    record_audit(
+        db,
+        org_id,
+        "group",
+        group.id,
+        "group.updated",
+        {
+            "name": group.name,
+            "location_id": str(group.location_id) if group.location_id else None,
+            "capacity": group.capacity,
+            "schedule_slots": [
+                {
+                    "weekday": slot.weekday,
+                    "start_time": slot.start_time,
+                    "duration_minutes": slot.duration_minutes,
+                }
+                for slot in data.schedule_slots
+            ],
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(group)
+    return group
 
 
 def list_groups(db: Session, org_id: UUID) -> list[Group]:
