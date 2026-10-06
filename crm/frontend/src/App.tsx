@@ -1623,6 +1623,10 @@ function App() {
 
   const saveAttendance = async () => {
     if (!selectedLesson) return;
+    if (lessonStudents.length === 0) {
+      setWorkspaceError("У цій групі немає активних учнів, тому відвідування зберігати не потрібно. Додайте учнів до групи або відкрийте інше заняття.");
+      return;
+    }
     const lessonMarks = attendance[selectedLesson.id] ?? {};
     const unmarked = lessonStudents.filter((student) => !lessonMarks[student.id]);
     if (unmarked.length) {
@@ -2842,13 +2846,13 @@ function App() {
                       {(value === "absent" || value === "excused") && <input className="attendanceReasonInput" value={attendanceNotes[selectedLesson.id]?.[student.id] ?? ""} onChange={(e) => setAttendanceNote(student.id, e.target.value)} maxLength={300} placeholder={value === "excused" ? "Причина / коментар (за потреби)" : "Причина відсутності (за потреби)"} />}
                     </div>;
                   })}
-                  {lessonStudents.length === 0 && <div className="emptyState">У цій групі поки немає активних учнів.</div>}
+                  {lessonStudents.length === 0 && <div className="emptyState">У цій групі поки немає активних учнів. Додайте учнів до групи, щоб відмічати відвідування.</div>}
                 </div>
                 <div className="attendanceFooter">
                   <span>{attendanceLoading ? "Завантажуємо…" : <>Позначено: <b>{Object.keys(attendance[selectedLesson.id] ?? {}).length}/{lessonStudents.length}</b>{lessonStudents.length > Object.keys(attendance[selectedLesson.id] ?? {}).length && <small> · ще {lessonStudents.length - Object.keys(attendance[selectedLesson.id] ?? {}).length}</small>}</>}</span>
                   <div className="attendanceFooterActions">
                     {selectedLesson.status === "completed" && <button className="search" onClick={() => setLessonEditing(false)}>Скасувати</button>}
-                    <button className="primary" disabled={attendanceSaving || attendanceLoading || Object.keys(attendance[selectedLesson.id] ?? {}).length !== lessonStudents.length} onClick={saveAttendance}>{attendanceSaving ? "Зберігаємо…" : selectedLesson.status === "completed" ? "Зберегти зміни" : "Зберегти відвідування"}</button>
+                    <button className="primary" disabled={attendanceSaving || attendanceLoading || lessonStudents.length === 0 || Object.keys(attendance[selectedLesson.id] ?? {}).length !== lessonStudents.length} onClick={saveAttendance}>{attendanceSaving ? "Зберігаємо…" : lessonStudents.length === 0 ? "Немає учнів для відмітки" : selectedLesson.status === "completed" ? "Зберегти зміни" : "Зберегти відвідування"}</button>
                   </div>
                 </div>
               </> : <div className="lessonProtocol">
