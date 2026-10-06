@@ -719,6 +719,10 @@ def create_enrollment(
     db.add(item)
     student.crm_status = CrmStatus.ENROLLED
     student.student_status = StudentStatus.ACTIVE
+    student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
     record_audit(
         db,
         org_id,
@@ -1014,6 +1018,9 @@ def update_lead_details(
 def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, status, actor_user_id: UUID | None = None) -> Student:
     student = scoped_get(db, Student, org_id, student_id)
     student.crm_status = status
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
     record_audit(db, org_id, "student", student.id, "student.crm_status_changed", {"crm_status": status.value if hasattr(status, "value") else str(status)}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(student)
@@ -1236,6 +1243,10 @@ def form_group(db: Session, org_id: UUID, data, actor_user_id: UUID | None = Non
             ))
             student.crm_status = CrmStatus.ENROLLED
             student.student_status = StudentStatus.ACTIVE
+            student.next_contact_at = None
+            student.deferred_until = None
+            student.deferred_reason = None
+            student.deferred_note = None
             record_audit(db, org_id, "student", student.id, "student.enrolled", {
                 "group_id": str(group.id), "group_name": group.name,
                 "schedule_match": match.status, "schedule_note": note,
@@ -1370,6 +1381,10 @@ def transfer_student(db: Session, org_id: UUID, student_id: UUID, to_group_id: U
 
     student.crm_status = CrmStatus.ENROLLED
     student.student_status = StudentStatus.ACTIVE
+    student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
     record_audit(db, org_id, "student", student.id, "student.transferred", {"to_group_id": str(target.id), "to_group_name": target.name}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(enrollment)
