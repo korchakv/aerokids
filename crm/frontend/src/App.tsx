@@ -289,6 +289,7 @@ function App() {
   const [workspaceLoading, setWorkspaceLoading] = useState(() => Boolean(apiEnabled && loadSession()));
   const [workspaceRefreshing, setWorkspaceRefreshing] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
+  const [saveToastTick, setSaveToastTick] = useState(0);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [overviewReport, setOverviewReport] = useState<OverviewReport | null>(null);
   const [entityEvents, setEntityEvents] = useState<ApiAuditEvent[]>([]);
@@ -497,6 +498,18 @@ function App() {
     const timer = window.setTimeout(() => setLessonSaveNotice(""), 2200);
     return () => window.clearTimeout(timer);
   }, [lessonSaveNotice]);
+
+  useEffect(() => {
+    const handleSaved = () => setSaveToastTick((value) => value + 1);
+    window.addEventListener("crm:saved", handleSaved);
+    return () => window.removeEventListener("crm:saved", handleSaved);
+  }, []);
+
+  useEffect(() => {
+    if (!saveToastTick) return;
+    const timer = window.setTimeout(() => setSaveToastTick(0), 1900);
+    return () => window.clearTimeout(timer);
+  }, [saveToastTick]);
 
   useEffect(() => {
     if (!apiEnabled || !session) return;
@@ -2691,6 +2704,7 @@ function App() {
         {apiEnabled && workspaceLoading && <div className="syncBanner syncing"><span className="syncPulse" />Оновлення даних…</div>}
         {apiEnabled && workspaceError && <div className="syncBanner error">{workspaceError}</div>}
         {apiEnabled && workspaceLoaded && !workspaceLoading && !workspaceError && workspaceRefreshing && <div className="syncStatus refreshing"><span className="syncPulse" />Оновлення даних…</div>}
+        {saveToastTick > 0 && <div className="saveToast" role="status" aria-live="polite"><span>✓</span><b>Збережено</b></div>}
 
         {active === "Дашборд" && <section className="todayDashboard">
           <div className="todayIntro">
@@ -3425,7 +3439,7 @@ function App() {
         </div>
       </div>}
 
-      {selectedGroupId && <div className="drawerBackdrop groupPageBackdrop">
+      {selectedGroupId && <div className="drawerBackdrop groupPageBackdrop" onClick={closeGroupDetail}>
         <aside className="drawer groupDetailDrawer" onClick={(e) => e.stopPropagation()}>
           <div className="groupPageTopbar">
             <button className="groupBackButton" aria-label="До списку груп" title="До списку груп" onClick={() => { setSelectedGroupId(null); setGroupDetail(null); setShowGroupCandidatePicker(false); setGroupCandidateId(""); setGroupTeacherEditing(false); }}><UiIcon name="back" size={16} /><span>До списку груп</span></button>
@@ -3753,7 +3767,7 @@ function App() {
         </div>
       </div>}
 
-      {selected && <div className="drawerBackdrop leadDrawerBackdrop">
+      {selected && <div className="drawerBackdrop leadDrawerBackdrop" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>
         <aside className="drawer leadDrawer" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>×</button>
           <p className="eyebrow">Картка заявки</p>
