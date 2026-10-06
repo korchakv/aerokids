@@ -2735,6 +2735,66 @@ def test_completed_trial_candidate_can_join_existing_group(client):
     assert [member["student_id"] for member in detail.json()["members"]] == [student["id"]]
 
 
+def test_student_can_be_active_without_group_or_location(client):
+    org = create_org(client, "Independent Student", "independent-student")
+    headers = {"X-Organization-Id": org["id"]}
+
+    intake = client.post(
+        "/intake",
+        headers=headers,
+        json={
+            "child_first_name": "Ірина",
+            "child_age": 12,
+            "contact_name": "Олена Коваль",
+            "phone": "0674443322",
+            "source": "phone",
+        },
+    )
+    assert intake.status_code == 201, intake.text
+    student_id = intake.json()["student_id"]
+
+    activated = client.post(f"/students/{student_id}/enroll-without-group", headers=headers, json={})
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["crm_status"] == "enrolled"
+    assert activated.json()["student_status"] == "active"
+
+    students = client.get("/workspace/students", headers=headers)
+    assert students.status_code == 200, students.text
+    row = next(item for item in students.json() if item["student_id"] == student_id)
+    assert row["group_id"] is None
+    assert row["group_name"] is None
+
+    leads = client.get("/workspace/leads", headers=headers)
+    assert leads.status_code == 200, leads.text
+    assert all(item["student_id"] != student_id for item in leads.json())
+
+    group = client.post(
+        "/groups/form",
+        headers=headers,
+        json={
+            "name": "Online Later Group",
+            "capacity": 6,
+            "location_id": None,
+            "student_ids": [],
+            "schedule_slots": [],
+        },
+    )
+    assert group.status_code == 201, group.text
+    assert group.json()["group"]["location_id"] is None
+    assert group.json()["enrolled_student_ids"] == []
+
+    enrolled = client.post(
+        "/enrollments",
+        headers=headers,
+        json={"student_id": student_id, "group_id": group.json()["group"]["id"]},
+    )
+    assert enrolled.status_code == 201, enrolled.text
+
+    students_after = client.get("/workspace/students", headers=headers).json()
+    row_after = next(item for item in students_after if item["student_id"] == student_id)
+    assert row_after["group_id"] == group.json()["group"]["id"]
+
+
 def test_candidate_without_completed_trial_can_join_existing_group(client):
     org = create_org(client, "Existing Group Direct", "existing-group-direct")
     headers = {"X-Organization-Id": org["id"]}
