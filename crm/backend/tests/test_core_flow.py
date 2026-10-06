@@ -429,7 +429,7 @@ def test_group_delete_is_blocked_while_students_are_enrolled(client):
 
     deleted = client.delete(f"/groups/{formed.json()['group']['id']}", headers=headers)
     assert deleted.status_code == 409, deleted.text
-    assert "активні" in deleted.json()["detail"].lower()
+    assert "учні" in deleted.json()["detail"].lower()
 
 
 def test_location_can_be_edited_and_deleted_when_unused(client):
