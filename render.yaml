@@ -34,8 +34,6 @@ services:
         value: "10"
       - key: READ_ONLY_MODE
         value: "false"
-      - key: RUN_DATABASE_MIGRATION_ON_START
-        value: "false"
 
   - type: web
     name: aerokids-crm
