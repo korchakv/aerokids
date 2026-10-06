@@ -3321,8 +3321,8 @@ function App() {
                   const statusLabel = payment.status === "paid" ? "Сплачено" : payment.status === "overdue" ? "Прострочено" : payment.status === "refunded" ? "Повернено" : payment.status === "cancelled" ? "Скасовано" : "Очікується";
                   return <div id={"payment-" + payment.id} className={"paymentRow " + (focusedPaymentId === payment.id ? "paymentFocused" : "")} key={payment.id}>
                     <span className="paymentIdentity"><b>{student?.child ?? "Учень"}</b><small>Дитина{student?.childPhone ? " · " + formatUaPhone(student.childPhone) : ""}</small><small><strong>Відповідальний:</strong> {student?.parent ?? "Не вказано"}{student?.phone ? " · " + formatUaPhone(student.phone) : ""}</small></span>
-                    <span className="paymentPlanCell"><b>{plan?.name ?? "—"}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}</span>
-                    <span className="paymentAmountCell"><b>{money(payment.adjustedAmount)}</b><small>{payment.balanceAmount > 0 ? <>Залишок: {money(payment.balanceAmount)}</> : <>Внесено: {money(Math.max(0, payment.paidAmount - payment.refundedAmount))}</>}{payment.refundedAmount > 0 ? " · повернено " + money(payment.refundedAmount) : ""}</small></span>
+                    <span className="paymentPlanCell"><b>{plan?.name ?? "—"}{plan && !plan.isActive ? <em className="inactivePlanInline">Неактивний</em> : null}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}</span>
+                    <span className="paymentAmountCell"><b>{money(payment.adjustedAmount)}</b><small>{payment.balanceAmount > 0 ? <>Залишок: {money(payment.balanceAmount)}</> : payment.creditAmount > 0 ? <>Кредит: {money(payment.creditAmount)}</> : <>Внесено: {money(Math.max(0, payment.paidAmount - payment.refundedAmount))}</>}{payment.refundedAmount > 0 ? " · повернено " + money(payment.refundedAmount) : ""}</small>{payment.creditAmount > 0 && <em className="paymentCreditHint">Буде враховано в наступному періоді</em>}</span>
                     <span>{payment.dueDate ? new Date(payment.dueDate + "T00:00:00").toLocaleDateString("uk-UA") : "—"}</span>
                     <span className={"paymentStatus " + payment.status}>{statusLabel}</span>
                     <span className="paymentActions">
@@ -3331,6 +3331,7 @@ function App() {
                       {payment.paidAmount - payment.refundedAmount > 0 && payment.status !== "cancelled" && <button className="link" onClick={() => openPaymentAction(payment, "refund")}>Повернення</button>}
                       {payment.status !== "cancelled" && <button className="link" onClick={() => openPaymentAction(payment, "adjustment")}>Коригувати</button>}
                       {subscription && subscription.status !== "cancelled" && <button className="link" onClick={() => toggleAutoRenew(subscription.id, !subscription.auto_renew)}>{subscription.auto_renew ? "Вимкнути авто" : "Увімкнути авто"}</button>}
+                      {subscription && ["active","paused"].includes(subscription.status) && plans.some((item) => item.isActive && item.id !== subscription.plan_id) && <button className="link" onClick={() => openPlanChange(subscription.id)}>Змінити тариф зараз</button>}
                       {subscription?.status === "paused" ? <button className="link" onClick={() => resumeSubscriptionNow(subscription.id)}>Відновити</button> : subscription && subscription.status === "active" ? <button className="link" onClick={() => openPauseSubscription(subscription.id)}>Пауза</button> : null}
                     </span>
                   </div>;
@@ -3339,9 +3340,22 @@ function App() {
             </article>
           </div>
           <aside className="paymentsSide">
-            <article className="panel">
-              <div className="panelHead"><div><p className="eyebrow">Тарифи</p><h2>Абонементи</h2></div><div className="miniActions"><span className="counter">{plans.length}</span><button className="link" onClick={() => setShowPlanForm(true)}>+ Тариф</button></div></div>
-              <div className="planCards">{plans.map((plan) => <div className="planCard" key={plan.id}><div><b>{plan.name}</b><span>{plan.lessons ? plan.lessons + " занять" : "Гнучкі умови"}</span></div><strong>{plan.price ? money(plan.price) : "Індивідуально"}</strong></div>)}</div>
+            <article className="panel tariffPanel">
+              <div className="panelHead"><div><p className="eyebrow">Тарифи</p><h2>Абонементи</h2></div><div className="miniActions"><span className="counter">{plans.filter((plan) => plan.isActive).length}</span>{canManagePlans && <button className="link" onClick={openPlanCreate}>+ Тариф</button>}</div></div>
+              <div className="planCards">
+                {plans.filter((plan) => plan.isActive).map((plan) => <div className="planCard tariffCard" key={plan.id}>
+                  <div><b>{plan.name}</b><span>{[plan.days ? plan.days + " днів" : "", plan.lessons ? plan.lessons + " відвідувань" : ""].filter(Boolean).join(" · ")}</span></div>
+                  <div className="tariffCardRight"><strong>{plan.price ? money(plan.price) : "Індивідуально"}</strong>{canManagePlans && <button className="tariffEditButton" type="button" title="Редагувати тариф" aria-label={"Редагувати " + plan.name} onClick={() => void openPlanEdit(plan)}><UiIcon name="edit" size={13} /></button>}</div>
+                </div>)}
+                {plans.filter((plan) => plan.isActive).length === 0 && <div className="emptyState compactEmpty">Активних тарифів немає.</div>}
+              </div>
+              {plans.some((plan) => !plan.isActive) && <div className="inactiveTariffs">
+                <button className="inactiveTariffsToggle" type="button" onClick={() => setShowInactivePlans((value) => !value)}><span>Неактивні</span><small>{plans.filter((plan) => !plan.isActive).length}</small><i>{showInactivePlans ? "↑" : "↓"}</i></button>
+                {showInactivePlans && <div className="planCards inactivePlanCards">{plans.filter((plan) => !plan.isActive).map((plan) => <div className="planCard tariffCard inactive" key={plan.id}>
+                  <div><b>{plan.name}<em>Неактивний</em></b><span>{[plan.days ? plan.days + " днів" : "", plan.lessons ? plan.lessons + " відвідувань" : ""].filter(Boolean).join(" · ")}</span></div>
+                  <div className="tariffCardRight"><strong>{plan.price ? money(plan.price) : "Індивідуально"}</strong>{canManagePlans && <button className="tariffEditButton" type="button" title="Редагувати тариф" aria-label={"Редагувати " + plan.name} onClick={() => void openPlanEdit(plan)}><UiIcon name="edit" size={13} /></button>}</div>
+                </div>)}</div>}
+              </div>}
             </article>
             <article className="panel financeHint"><p className="eyebrow">MVP</p><h2>Що вже враховано</h2><p>Оплата зберігається окремо від абонемента. Це дозволить пізніше підключити LiqPay, WayForPay чи інший еквайринг без зміни ядра.</p></article>
           </aside>
