@@ -236,6 +236,8 @@ class StudentRead(ORMModel):
     crm_status: CrmStatus
     student_status: StudentStatus
     next_contact_at: datetime | None
+    follow_up_reason: str | None
+    follow_up_note: str | None
     lead_close_reason: str | None
     lead_close_note: str | None
     notes: str | None
@@ -419,6 +421,8 @@ class StudentStatusUpdate(BaseModel):
 class LeadOutcomeUpdate(BaseModel):
     crm_status: CrmStatus
     next_contact_at: datetime | None = None
+    follow_up_reason: str | None = Field(default=None, max_length=80)
+    follow_up_note: str | None = Field(default=None, max_length=500)
     close_reason: str | None = Field(default=None, max_length=80)
     close_note: str | None = Field(default=None, max_length=500)
 
@@ -439,6 +443,9 @@ class LeadOutcomeUpdate(BaseModel):
         if self.crm_status not in {CrmStatus.DECLINED, CrmStatus.NO_RESPONSE, CrmStatus.NOT_RELEVANT}:
             self.close_reason = None
             self.close_note = None
+        if self.next_contact_at is None:
+            self.follow_up_reason = None
+            self.follow_up_note = None
         return self
 
 
@@ -1175,6 +1182,8 @@ class LeadListItem(BaseModel):
     recommended_level: str | None
     teacher_notes: str | None
     next_contact_at: datetime | None
+    follow_up_reason: str | None
+    follow_up_note: str | None
     close_reason: str | None
     close_note: str | None
 
