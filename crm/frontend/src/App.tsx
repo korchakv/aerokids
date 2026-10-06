@@ -129,7 +129,7 @@ type StaffDemo = {
 
 const allNav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти", "Налаштування"];
 
-type UiIconName = "home" | "leads" | "student" | "groups" | "calendar" | "attendance" | "wallet" | "staff" | "location" | "reports" | "settings" | "search" | "logout" | "login" | "plus" | "sun" | "moon" | "x" | "back";
+type UiIconName = "home" | "leads" | "student" | "groups" | "calendar" | "attendance" | "wallet" | "staff" | "location" | "reports" | "settings" | "search" | "logout" | "login" | "plus" | "sun" | "moon" | "theme" | "x" | "back";
 
 function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -151,6 +151,7 @@ function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number }) {
     case "plus": return <svg {...common}><path d="M12 5v14M5 12h14"/></svg>;
     case "sun": return <svg {...common}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>;
     case "moon": return <svg {...common}><path d="M20 15.5A8 8 0 1 1 8.5 4 6.5 6.5 0 0 0 20 15.5Z"/></svg>;
+    case "theme": return <svg {...common}><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg>;
     case "x": return <svg {...common}><path d="m6 6 12 12M18 6 6 18"/></svg>;
     case "back": return <svg {...common}><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg>;
   }
@@ -2105,7 +2106,7 @@ function App() {
 
 
   if (apiEnabled && !session) {
-    return <LoginView onAuthenticated={setSession} />;
+    return <LoginView onAuthenticated={setSession} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} />;
   }
 
   const currentMembership = session?.user.memberships.find((item) => item.organization_id === session.organizationId);
@@ -2203,7 +2204,12 @@ function App() {
           setActive(item);
         }} className={active === item ? "active" : ""} key={item}><UiIcon name={navigationIcon(item)} size={17} /><span className="navLabel">{item}</span></button>)}</nav>
         <div className="asideFooter">
-          <small>Production · crm.aerokids.space</small>
+          <button className="themeToggle asideThemeToggle" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}>
+            <UiIcon name="theme" size={18} />
+            <span>Тема</span>
+            <span className="themeState">{theme === "dark" ? "Темна" : "Світла"}</span>
+          </button>
+          <small>crm.aerokids.space</small>
         </div>
       </aside>
 
@@ -2212,7 +2218,7 @@ function App() {
           <div className="headerTitleBar">
             <div><p className="eyebrow">{headerContext}</p><h1>{active}</h1></div>
             <div className="mobileTopIcons">
-              <button className="search iconButton mobileThemeButton" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} title={theme === "dark" ? "Світла тема" : "Темна тема"} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}><UiIcon name={theme === "dark" ? "sun" : "moon"} size={19} /></button>
+              <button className="search iconButton mobileThemeButton" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} title={theme === "dark" ? "Світла тема" : "Темна тема"} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}><UiIcon name="theme" size={19} /></button>
               {session && <button className="search iconButton mobileLogoutButton" aria-label="Вийти" title="Вийти" onClick={() => { clearSession(); setSession(null); }}><UiIcon name="logout" size={19} /></button>}
             </div>
           </div>
@@ -2254,7 +2260,7 @@ function App() {
               </> : <button className="search globalSearchTrigger" aria-label="Пошук" title="Пошук" onClick={() => { setSearchQuery(""); setShowSearch(true); }}><UiIcon name="search" size={17} /><span>Пошук</span></button>}
             </div>
             {canManageLeads && <button className="primary headerPrimaryAction" onClick={() => setShowLeadForm(true)}><UiIcon name="plus" size={17} /><span>Нова заявка</span></button>}
-            <button className="search iconButton headerThemeButton" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} title={theme === "dark" ? "Світла тема" : "Темна тема"} onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")}><UiIcon name={theme === "dark" ? "sun" : "moon"} size={18} /></button>
+            
             {session && <button className="search iconButton logoutButton" aria-label="Вийти" title="Вийти" onClick={() => { clearSession(); setSession(null); }}><UiIcon name="logout" size={18} /></button>}
           </div>
         </header>
@@ -4014,7 +4020,7 @@ function auditEventDetail(event: ApiAuditEvent) {
   return "CRM";
 }
 
-function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
+function LoginView({ onAuthenticated, theme, onToggleTheme }: { onAuthenticated: (session: Session) => void; theme: "dark" | "light"; onToggleTheme: () => void }) {
   const params = new URLSearchParams(window.location.search);
   const inviteToken = params.get("invite");
   const resetToken = params.get("reset");
@@ -4029,6 +4035,11 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
   const [organizationSlug, setOrganizationSlug] = useState("aerokids");
   const [ownerName, setOwnerName] = useState("");
   const [bootstrapSecret, setBootstrapSecret] = useState("");
+
+  useEffect(() => {
+    document.body.classList.add("crmLoginActive");
+    return () => document.body.classList.remove("crmLoginActive");
+  }, []);
 
   useEffect(() => {
     if (inviteToken || resetToken) {
@@ -4113,6 +4124,7 @@ function LoginView({ onAuthenticated }: { onAuthenticated: (session: Session) =>
   };
 
   return <div className="loginScreen">
+    <button className="loginThemeToggle" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} title={theme === "dark" ? "Світла тема" : "Темна тема"} onClick={onToggleTheme}><UiIcon name="theme" size={18} /><span>Тема</span></button>
     <div className="loginCard">
       <div className="loginBrand"><img className="brandLogo brandLogoLarge" src="/aerokids-logo-master-v1.png" alt="AeroKids" /><div><b>AeroKids CRM</b><small>Керування школою в одному місці</small></div></div>
 
