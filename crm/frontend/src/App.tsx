@@ -120,6 +120,7 @@ type StaffDemo = {
   id: EntityId;
   fullName: string;
   role: StaffRoleDemo;
+  canTeach: boolean;
   email: string;
   phone: string;
   locationIds: EntityId[];
@@ -379,8 +380,8 @@ function App() {
     { id: "1", name: "Основна локація", address: "Івано-Франківськ", isActive: true },
   ]);
   const [staff, setStaff] = useState<StaffDemo[]>([
-    { id: "1", fullName: "Іван Викладач", role: "Викладач", email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: ["1"], groupIds: ["1"], isActive: true },
-    { id: "2", fullName: "Адміністратор AeroKids", role: "Адміністратор", email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: ["1"], groupIds: [], isActive: true },
+    { id: "1", fullName: "Іван Викладач", role: "Викладач", canTeach: true, email: "ivan@aerokids.example", phone: "+380 67 111 22 33", locationIds: ["1"], groupIds: ["1"], isActive: true },
+    { id: "2", fullName: "Адміністратор AeroKids", role: "Адміністратор", canTeach: true, email: "admin@aerokids.example", phone: "+380 67 444 55 66", locationIds: ["1"], groupIds: [], isActive: true },
   ]);
   const [selectedStaffId, setSelectedStaffId] = useState<EntityId | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<EntityId | null>(null);
@@ -398,11 +399,13 @@ function App() {
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<StaffRoleDemo>("Викладач");
+  const [inviteCanTeach, setInviteCanTeach] = useState(true);
   const [inviteLink, setInviteLink] = useState("");
   const [staffResetLink, setStaffResetLink] = useState("");
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [staffName, setStaffName] = useState("");
   const [staffRole, setStaffRole] = useState<StaffRoleDemo>("Викладач");
+  const [staffCanTeach, setStaffCanTeach] = useState(true);
   const [staffEmail, setStaffEmail] = useState("");
   const [staffPhone, setStaffPhone] = useState("");
   const [locationName, setLocationName] = useState("");
@@ -2010,7 +2013,7 @@ function App() {
 
   const selectedStaff = staff.find((item) => item.id === selectedStaffId) ?? null;
   const selectedGroup = groups.find((item) => item.id === selectedGroupId) ?? null;
-  const activeTeachers = staff.filter((member) => member.role === "Викладач" && member.isActive);
+  const activeTeachers = staff.filter((member) => member.canTeach && member.isActive);
   const groupTeacher = (groupId: EntityId) => activeTeachers.find((member) => member.groupIds.includes(groupId));
   const selectedTeacher = selectedGroupId ? groupTeacher(selectedGroupId) : undefined;
   const existingGroupCandidates = useMemo(() => {
@@ -2042,6 +2045,7 @@ function App() {
         await apiPost("/staff", {
           full_name: cleanSpaces(staffName),
           role: staffRoleValue(staffRole),
+          can_teach: staffCanTeach || staffRole === "Викладач",
           email: staffEmail.trim().toLowerCase() || null,
           phone: normalizedStaffPhone,
           location_ids: locations[0] ? [locations[0].id] : [],
@@ -2050,6 +2054,7 @@ function App() {
         setStaffName("");
         setStaffEmail("");
         setStaffPhone("");
+        setStaffCanTeach(true);
         setShowStaffForm(false);
         return;
       } catch (error) {
@@ -2062,6 +2067,7 @@ function App() {
       id: nextId,
       fullName: cleanSpaces(staffName),
       role: staffRole,
+      canTeach: staffCanTeach || staffRole === "Викладач",
       email: staffEmail.trim().toLowerCase(),
       phone: normalizedStaffPhone ? formatUaPhone(normalizedStaffPhone) : "",
       locationIds: locations[0] ? [locations[0].id] : [],
@@ -2071,6 +2077,7 @@ function App() {
     setStaffName("");
     setStaffEmail("");
     setStaffPhone("");
+    setStaffCanTeach(true);
     setShowStaffForm(false);
   };
 
@@ -2100,6 +2107,7 @@ function App() {
       const result = await apiPost<{ invite_token: string }>("/organization-invitations", {
         email: inviteEmail.trim().toLowerCase(),
         role: staffRoleValue(inviteRole),
+        can_teach: inviteCanTeach || inviteRole === "Викладач",
       }, session);
       const url = new URL(window.location.href);
       url.searchParams.set("invite", result.invite_token);
@@ -3077,7 +3085,8 @@ function App() {
           <p className="eyebrow">Доступ до CRM</p><h2>Запросити працівника</h2>
           {!inviteLink ? <>
             <label>Email *<input type="email" autoComplete="email" maxLength={255} className={inviteEmail && emailError(inviteEmail, true) ? "inputInvalid" : ""} value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="teacher@example.com" />{inviteEmail && emailError(inviteEmail, true) && <small className="fieldError">{emailError(inviteEmail, true)}</small>}</label>
-            <label>Роль<select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as StaffRoleDemo)}>{["Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+            <label>Роль<select value={inviteRole} onChange={(e) => { const role = e.target.value as StaffRoleDemo; setInviteRole(role); if (role === "Викладач") setInviteCanTeach(true); }}>{["Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+            <label className="toggleRow responsibilityToggle"><input type="checkbox" checked={inviteCanTeach || inviteRole === "Викладач"} disabled={inviteRole === "Викладач"} onChange={(e) => setInviteCanTeach(e.target.checked)} /><span><b>Може викладати</b><small>Дозволяє призначати цього працівника викладачем груп незалежно від його ролі в CRM.</small></span></label>
             <button className="primary full" disabled={Boolean(emailError(inviteEmail, true))} onClick={createInvitation}>Створити запрошення</button>
           </> : <>
             <div className="inviteSuccess"><b>Запрошення готове</b><p>Надішліть це посилання працівнику. Воно одноразове та діє 7 днів.</p><code>{inviteLink}</code></div>
@@ -3091,7 +3100,8 @@ function App() {
           <button className="drawerClose" onClick={() => setShowStaffForm(false)}>×</button>
           <p className="eyebrow">Команда</p><h2>Новий працівник</h2>
           <label>Ім’я та прізвище *<input autoComplete="name" maxLength={160} className={staffName && personNameError(staffName, "Ім’я та прізвище") ? "inputInvalid" : ""} value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="Іван Петренко" />{staffName && personNameError(staffName, "Ім’я та прізвище") && <small className="fieldError">{personNameError(staffName, "Ім’я та прізвище")}</small>}</label>
-          <label>Роль<select value={staffRole} onChange={(e) => setStaffRole(e.target.value as StaffRoleDemo)}>{["Власник","Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+          <label>Роль<select value={staffRole} onChange={(e) => { const role = e.target.value as StaffRoleDemo; setStaffRole(role); if (role === "Викладач") setStaffCanTeach(true); }}>{["Власник","Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
+          <label className="toggleRow responsibilityToggle"><input type="checkbox" checked={staffCanTeach || staffRole === "Викладач"} disabled={staffRole === "Викладач"} onChange={(e) => setStaffCanTeach(e.target.checked)} /><span><b>Може викладати</b><small>Працівника можна буде призначати викладачем груп.</small></span></label>
           <div className="formTwo"><label>Email<input type="email" autoComplete="email" maxLength={255} className={staffEmail && emailError(staffEmail) ? "inputInvalid" : ""} value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} />{staffEmail && emailError(staffEmail) && <small className="fieldError">{emailError(staffEmail)}</small>}</label><label>Телефон<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={staffPhone && uaPhoneError(staffPhone, false) ? "inputInvalid" : ""} value={staffPhone} onChange={(e) => setStaffPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(staffPhone)) setStaffPhone(formatUaPhone(staffPhone)); }} placeholder="+380 67 123 45 67" />{staffPhone && uaPhoneError(staffPhone, false) && <small className="fieldError">{uaPhoneError(staffPhone, false)}</small>}</label></div><div className="formNotice">Для працівника потрібно вказати хоча б email або телефон.</div>
           <button className="primary full" disabled={Boolean(personNameError(staffName, "Ім’я та прізвище") || emailError(staffEmail) || uaPhoneError(staffPhone, false) || (!staffEmail.trim() && !staffPhone.trim()))} onClick={createStaffMember}>Додати працівника</button>
         </div>
@@ -3224,8 +3234,21 @@ function App() {
         <aside className="drawer studentDrawer" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" onClick={() => setSelectedStaffId(null)}>×</button>
           <p className="eyebrow">Працівник</p>
-          <div className="studentHero"><span>{selectedStaff.fullName[0]}</span><div><h2>{selectedStaff.fullName}</h2><p>{selectedStaff.role}</p></div></div>
+          <div className="studentHero"><span>{selectedStaff.fullName[0]}</span><div><h2>{selectedStaff.fullName}</h2><p>{selectedStaff.role}{selectedStaff.canTeach ? " · Викладає" : ""}</p></div></div>
           <div className="contactCard"><span>Контакти</span><b>{selectedStaff.email || "Email не вказано"}</b><a href={"tel:" + selectedStaff.phone.replace(/\s/g,"")}>{selectedStaff.phone || "Телефон не вказано"}</a></div>
+          <div className="studentSection"><h3>Обов’язки</h3><label className="toggleRow responsibilityToggle"><input type="checkbox" checked={selectedStaff.canTeach} onChange={async (e) => {
+            const next = e.target.checked;
+            if (apiEnabled && session) {
+              try {
+                await apiPatch(`/staff/${selectedStaff.id}`, { can_teach: next }, session);
+                await syncWorkspace(session);
+              } catch (error) {
+                setWorkspaceError(error instanceof Error ? error.message : "Не вдалося змінити обов’язки працівника.");
+              }
+              return;
+            }
+            setStaff((items) => items.map((item) => item.id === selectedStaff.id ? { ...item, canTeach: next } : item));
+          }} /><span><b>Може викладати</b><small>Можна призначати викладачем груп незалежно від ролі доступу.</small></span></label></div>
           <div className="studentSection"><h3>Локації</h3><div className="assignmentList">{locations.map((location) => <label key={location.id}><input type="checkbox" checked={selectedStaff.locationIds.includes(location.id)} onChange={() => toggleStaffLocation(selectedStaff.id, location.id)} /><span>{location.name}<small>{location.address}</small></span></label>)}</div></div>
           <div className="studentSection"><h3>Групи</h3><div className="assignmentList">{groups.map((group) => <label key={group.id}><input type="checkbox" checked={selectedStaff.groupIds.includes(group.id)} onChange={() => toggleStaffGroup(selectedStaff.id, group.id)} /><span>{group.name}<small>{group.schedule}</small></span></label>)}</div></div>
           <div className="studentSection"><h3>Статус</h3><button className="search full" onClick={async () => {
@@ -3797,6 +3820,7 @@ function applyOperations(
     id: item.id,
     fullName: item.full_name,
     role: staffRoleLabel(item.role),
+    canTeach: item.can_teach,
     email: item.email ?? "",
     phone: item.phone ?? "",
     locationIds: item.assignments.location_ids,
