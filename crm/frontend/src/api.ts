@@ -272,6 +272,15 @@ async function responseError(response: Response, path: string, method = "GET"): 
   }
 }
 
+function emitMutationSaved(path: string, method: string) {
+  if (method === "GET") return;
+  if (path.startsWith("/auth/")) return;
+  if (path === "/billing/renewals/run") return;
+  if (path === "/intake/duplicate-check") return;
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("crm:saved", { detail: { path, method } }));
+}
+
 async function request<T>(path: string, init: RequestInit = {}, session?: Session): Promise<T> {
   if (!API_URL) throw new Error("CRM не підключена до сервера. Перевірте налаштування API.");
   const headers = new Headers(init.headers);
@@ -289,6 +298,7 @@ async function request<T>(path: string, init: RequestInit = {}, session?: Sessio
     throw new Error("Не вдалося з’єднатися із сервером CRM. Перевірте інтернет-з’єднання та спробуйте ще раз.");
   }
   if (!response.ok) throw await responseError(response, path, method);
+  emitMutationSaved(path, method);
   return response.json() as Promise<T>;
 }
 
@@ -635,6 +645,7 @@ export async function apiDelete(path: string, session: Session): Promise<void> {
     throw new Error("Не вдалося з’єднатися із сервером CRM. Перевірте інтернет-з’єднання та спробуйте ще раз.");
   }
   if (!response.ok) throw await responseError(response, path, "DELETE");
+  emitMutationSaved(path, "DELETE");
 }
 
 
