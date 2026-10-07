@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     read_only_mode: bool = False
     strict_rbac: bool = False
     maintenance_secret: str | None = None
+    maintenance_oidc_audience: str = "aerokids-crm-maintenance"
+    maintenance_github_repository: str = "korchakv/aerokids"
+    maintenance_github_ref: str = "refs/heads/main"
     transactional_email_enabled: bool = False
     smtp_host: str | None = None
     smtp_port: int = 587
