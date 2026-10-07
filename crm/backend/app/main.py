@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.reconciliation_router import router as reconciliation_router
 from app.api.hardening_router import router as hardening_router
 from app.api.router import router
 from app.core.config import settings
@@ -79,8 +80,8 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
-# Hardened routes are registered first so they become the canonical handlers
-# for legacy paths while older endpoints remain available for non-overridden
-# compatibility routes.
+# Most specific reconciliation handlers go first; the hardening compatibility
+# overlay comes next, then all remaining legacy routes.
+app.include_router(reconciliation_router)
 app.include_router(hardening_router)
 app.include_router(router)
