@@ -2,60 +2,21 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import { UiIcon, navigationIcon } from "./components/UiIcon";
 import { AuditHistory } from "./components/AuditHistory";
 import { LoginView } from "./features/auth/LoginView";
+import { LeadKanban, LeadTable } from "./features/leads/LeadBoard";
+import { canonicalLeadSource, leadActionMeta, leadActionPriority, leadDisplayStatus, leadIsDeferred, leadKanbanColumn, leadMissingDetails, leadPrimaryActionLabel, leadSourceLabel, type EntityId, type Lead, type LeadKanbanColumnId, type LeadStatus } from "./features/leads/model";
 import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
 import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
-type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
-type EntityId = string;
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
 const UI_SCALE_LEVELS: UiScale[] = [1, 1.1, 1.25, 1.4];
 
-type LeadKanbanColumnId = "new" | "contacted" | "trial" | "no_show" | "after_trial" | "waiting" | "deferred" | "closed";
 
-const leadKanbanColumns: Array<{ id: LeadKanbanColumnId; title: string; hint: string }> = [
-  { id: "new", title: "Нові", hint: "Перший контакт" },
-  { id: "contacted", title: "Зв’язались", hint: "В роботі" },
-  { id: "trial", title: "Пробне", hint: "Заплановано" },
-  { id: "no_show", title: "Не прийшов", hint: "Потрібна дія" },
-  { id: "after_trial", title: "Після пробного", hint: "Очікуємо рішення" },
-  { id: "waiting", title: "Очікує групу", hint: "Готовий до набору" },
-  { id: "deferred", title: "Повернутись пізніше", hint: "Нагадування на майбутнє" },
-  { id: "closed", title: "Закриті", hint: "Відмова / неактуально" },
-];
 
-type Lead = {
-  id: EntityId;
-  createdAt?: string;
-  firstName?: string;
-  lastName?: string;
-  child: string;
-  age: number;
-  parent: string;
-  phone: string;
-  childPhone?: string;
-  source: string;
-  status: LeadStatus;
-  comment?: string;
-  preferredLocationId?: string;
-  preferredLocationName?: string;
-  availability?: AvailabilitySlot[];
-  trialId?: string;
-  trialAt?: string;
-  trialLocationId?: string;
-  trialLocation?: string;
-  trialResult?: "scheduled" | "completed" | "no_show" | "cancelled";
-  recommendedLevel?: string;
-  teacherNotes?: string;
-  nextContactAt?: string;
-  deferredUntil?: string;
-  deferredReason?: string;
-  deferredNote?: string;
-  closeReason?: string;
-  closeNote?: string;
-};
+
+
 
 type GroupItem = {
   id: EntityId;
@@ -4372,10 +4333,6 @@ function App() {
   );
 }
 
-function leadIsDeferred(lead: Lead): boolean {
-  return Boolean(lead.deferredUntil && dateValue(lead.deferredUntil) > Date.now());
-}
-
 function deferReasonLabel(reason: string | null | undefined): string {
   const labels: Record<string, string> = {
     later: "Зараз не можуть, хочуть пізніше",
@@ -4389,160 +4346,6 @@ function deferReasonLabel(reason: string | null | undefined): string {
   return reason ? (labels[reason] ?? reason) : "Причину не вказано";
 }
 
-function leadKanbanColumn(lead: Lead): LeadKanbanColumnId {
-  if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return "closed";
-  if (leadIsDeferred(lead)) return "deferred";
-  if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "no_show";
-  if (lead.status === "Після пробного") return "after_trial";
-  if (lead.status === "Пробне заплановано") return "trial";
-  if (lead.status === "Очікує групу") return "waiting";
-  if (lead.status === "Нова") return "new";
-  return "contacted";
-}
-
-function leadUrgency(lead: Lead): "overdue" | "today" | "planned" | "none" {
-  const now = new Date();
-  if (lead.nextContactAt) {
-    const action = new Date(lead.nextContactAt);
-    if (action.getTime() < now.getTime()) return "overdue";
-    if (action.toDateString() === now.toDateString()) return "today";
-    return "planned";
-  }
-  if (lead.trialResult === "no_show" || lead.status === "Після пробного" || lead.status === "Нова") return "today";
-  if (lead.status === "Пробне заплановано") return "planned";
-  return "none";
-}
-
-function LeadKanban({
-  leads,
-  onOpen,
-  onMove,
-  movingId,
-}: {
-  leads: Lead[];
-  onOpen: (id: EntityId) => void;
-  onMove: (lead: Lead, target: LeadKanbanColumnId) => void;
-  movingId: EntityId | null;
-}) {
-  const [draggedId, setDraggedId] = useState<EntityId | null>(null);
-  const [overColumn, setOverColumn] = useState<LeadKanbanColumnId | null>(null);
-  const [deferredExpanded, setDeferredExpanded] = useState(false);
-  const [closedExpanded, setClosedExpanded] = useState(false);
-  const activeColumns = leadKanbanColumns.filter((column) => column.id !== "closed" && column.id !== "deferred");
-  const deferredColumn = leadKanbanColumns.find((column) => column.id === "deferred")!;
-  const closedColumn = leadKanbanColumns.find((column) => column.id === "closed")!;
-  const deferredItems = leads.filter((lead) => leadKanbanColumn(lead) === "deferred").sort((a, b) => dateValue(a.deferredUntil) - dateValue(b.deferredUntil));
-  const closedItems = leads.filter((lead) => leadKanbanColumn(lead) === "closed");
-
-  const renderColumn = (column: (typeof leadKanbanColumns)[number], items: Lead[], compact = false) => <section
-    className={"kanbanColumn column-" + column.id + (compact ? " closedKanbanColumn" : "") + (overColumn === column.id ? " dragOver" : "")}
-    key={column.id}
-    onDragOver={(event) => { event.preventDefault(); setOverColumn(column.id); }}
-    onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
-    onDrop={(event) => {
-      event.preventDefault();
-      const id = event.dataTransfer.getData("text/lead-id") || draggedId;
-      const lead = leads.find((item) => item.id === id);
-      setDraggedId(null);
-      setOverColumn(null);
-      if (lead) void onMove(lead, column.id);
-    }}
-  >
-    <header className="kanbanColumnHead">
-      <div><i></i><b>{column.title}</b><span>{column.hint}</span></div>
-      <strong>{items.length}</strong>
-    </header>
-    <div className="kanbanCards">
-      {items.length === 0 && <div className="kanbanEmpty">Перетягніть сюди заявку</div>}
-      {items.map((lead) => {
-        const urgency = leadUrgency(lead);
-        const missingDetails = leadMissingDetails(lead);
-        return <article
-          key={lead.id}
-          draggable={movingId !== lead.id}
-          className={"leadKanbanCard urgency-" + urgency + (movingId === lead.id ? " saving" : "")}
-          onDragStart={(event) => {
-            setDraggedId(lead.id);
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/lead-id", lead.id);
-          }}
-          onDragEnd={() => { setDraggedId(null); setOverColumn(null); }}
-          onClick={() => onOpen(lead.id)}
-        >
-          <div className="kanbanCardTop">
-            <span className="leadMiniAvatar">{lead.child.slice(0, 1)}</span>
-            <div><b>{lead.child}</b><small>{lead.age ? lead.age + " років" : "Вік не вказано"}</small></div>
-            <button className="kanbanMore" aria-label="Відкрити заявку" onClick={(event) => { event.stopPropagation(); onOpen(lead.id); }}>•••</button>
-          </div>
-          <div className="kanbanMeta">
-            <span className="sourceBadge">{leadSourceLabel(lead.source)}</span>
-            {lead.preferredLocationName && <span className="locationBadge">{lead.preferredLocationName}</span>}
-            {lead.recommendedLevel && <span className="levelBadge">{lead.recommendedLevel}</span>}
-            {missingDetails.length > 0 && <span className="incompleteDataBadge" title={"Не заповнено: " + missingDetails.join(", ")}>! Доповнити дані</span>}
-          </div>
-          {(() => { const action = leadActionMeta(lead); return <div className={"kanbanNextAction action-" + action.type + " " + urgency}><i>{urgency === "overdue" ? "!" : action.icon}</i><span><b>{urgency === "overdue" ? "Прострочено" : action.label}</b><small>{leadNextAction(lead)}</small></span></div>; })()}
-          {(lead.parent || lead.phone) && <div className="kanbanContact">
-            {lead.parent && <b>{lead.parent}</b>}
-            {lead.phone && <small>{formatUaPhone(lead.phone)}</small>}
-          </div>}
-          {movingId === lead.id && <div className="kanbanSaving">Оновлюємо…</div>}
-        </article>;
-      })}
-    </div>
-  </section>;
-
-  return <div className="kanbanBoard">
-    <div className="leadKanban">{activeColumns.map((column) => renderColumn(column, leads.filter((lead) => leadKanbanColumn(lead) === column.id)))}</div>
-    <div
-      className={"closedKanbanDock deferredKanbanDock " + (deferredExpanded ? "expanded " : "") + (overColumn === "deferred" ? "dragOver" : "")}
-      onDragOver={(event) => { event.preventDefault(); setOverColumn("deferred"); }}
-      onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
-      onDrop={(event) => {
-        event.preventDefault();
-        const id = event.dataTransfer.getData("text/lead-id") || draggedId;
-        const lead = leads.find((item) => item.id === id);
-        setDraggedId(null);
-        setOverColumn(null);
-        if (lead) void onMove(lead, "deferred");
-      }}
-    >
-      <button className="closedKanbanToggle" onClick={() => setDeferredExpanded((value) => !value)}>
-        <span><i></i><b>{deferredColumn.title}</b><small>{deferredColumn.hint}</small></span>
-        <span><strong>{deferredItems.length}</strong><em>{deferredExpanded ? "Згорнути ↑" : "Розгорнути ↓"}</em></span>
-      </button>
-      {deferredExpanded && <div className="closedKanbanContent">{renderColumn(deferredColumn, deferredItems, true)}</div>}
-    </div>
-    <div
-      className={"closedKanbanDock " + (closedExpanded ? "expanded " : "") + (overColumn === "closed" ? "dragOver" : "")}
-      onDragOver={(event) => { event.preventDefault(); setOverColumn("closed"); }}
-      onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
-      onDrop={(event) => {
-        event.preventDefault();
-        const id = event.dataTransfer.getData("text/lead-id") || draggedId;
-        const lead = leads.find((item) => item.id === id);
-        setDraggedId(null);
-        setOverColumn(null);
-        if (lead) void onMove(lead, "closed");
-      }}
-    >
-      <button className="closedKanbanToggle" onClick={() => setClosedExpanded((value) => !value)}>
-        <span><i></i><b>{closedColumn.title}</b><small>{closedColumn.hint}</small></span>
-        <span><strong>{closedItems.length}</strong><em>{closedExpanded ? "Згорнути ↑" : "Розгорнути ↓"}</em></span>
-      </button>
-      {closedExpanded && <div className="closedKanbanContent">{renderColumn(closedColumn, closedItems, true)}</div>}
-    </div>
-  </div>;
-}
-
-function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) => void }) {
-  return <div className="table leadTable">
-    <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span><span>Наступна дія</span></div>
-    {leads.length === 0 && <div className="emptyState">За цим фільтром заявок немає.</div>}
-    {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}>
-      <b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{leadSourceLabel(lead.source)}</span><span className="pill">{leadDisplayStatus(lead)}</span>{(() => { const action = leadActionMeta(lead); const overdue = Boolean(lead.nextContactAt && dateValue(lead.nextContactAt) < Date.now()); return <span className={"nextAction actionTag action-" + action.type + (overdue ? " overdue" : "")}><i>{overdue ? "!" : action.icon}</i><span>{leadNextAction(lead)}</span></span>; })()}
-    </button>)}
-  </div>;
-}
 
 function applyTeaching(
   bundle: TeachingBundle,
@@ -4668,73 +4471,6 @@ function staffRoleValue(role: StaffRoleDemo) {
   return values[role];
 }
 
-function leadActionPriority(lead: Lead) {
-  const now = Date.now();
-  if (lead.nextContactAt && dateValue(lead.nextContactAt) <= now) return 0;
-  if (lead.trialResult === "no_show") return 1;
-  if (lead.trialResult === "cancelled") return 2;
-  if (lead.status === "Після пробного" && !lead.nextContactAt) return 3;
-  if (lead.status === "Нова") return 4;
-  if (lead.status === "Пробне заплановано") return 5;
-  if (lead.nextContactAt) return 6;
-  if (lead.status === "Зв'язались") return 7;
-  if (lead.status === "Очікує групу") return 8;
-  return 9;
-}
-
-function leadDisplayStatus(lead: Lead) {
-  if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "Не прийшов";
-  if (lead.trialResult === "cancelled" && lead.status === "Зв'язались") return "Скасували пробне";
-  return lead.status;
-}
-
-function leadPrimaryActionLabel(lead: Lead) {
-  if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return "Повернути в роботу";
-  if (lead.status === "Зарахований") return "Відкрити картку учня";
-  if (lead.status === "Нова") return "Позначити «Зв'язались»";
-  if (lead.trialResult === "no_show" || lead.trialResult === "cancelled") return "Перезаписати на пробне";
-  if (lead.status === "Пробне заплановано") return "Внести результат пробного";
-  if (lead.status === "Після пробного") return "Рішення після пробного";
-  if (lead.status === "Очікує групу") return "Зарахувати учня";
-  return "Записати на пробне";
-}
-
-function leadNextAction(lead: Lead) {
-  if (leadIsDeferred(lead) && lead.deferredUntil) {
-    const when = new Date(lead.deferredUntil);
-    return `Повернутись: ${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit" })}`;
-  }
-  if (lead.status === "Відмовились") return "Закрито: відмовились";
-  if (lead.status === "Не відповідає") return "Закрито: не відповідає";
-  if (lead.status === "Неактуально") return "Закрито: неактуально";
-  if (lead.status === "Зарахований") return "Учень зарахований";
-  if (lead.nextContactAt) {
-    const when = new Date(lead.nextContactAt);
-    const overdue = when.getTime() < Date.now();
-    return `${overdue ? "Прострочено: " : "Зв'язатися: "}${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · ${when.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}`;
-  }
-  if (lead.trialResult === "no_show") return "Зателефонувати / перезаписати";
-  if (lead.trialResult === "cancelled") return "Узгодити нову дату";
-  if (lead.status === "Після пробного") return "Уточнити рішення";
-  if (lead.status === "Нова") return "Перший контакт";
-  if (lead.status === "Пробне заплановано" && lead.trialAt) {
-    const when = new Date(lead.trialAt);
-    return `Пробне ${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · ${when.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}`;
-  }
-  if (lead.status === "Очікує групу") return "Підібрати групу";
-  return "Продовжити контакт";
-}
-
-function leadActionMeta(lead: Lead): { type: "call" | "trial" | "decision" | "group" | "closed" | "general"; icon: string; label: string } {
-  if (leadIsDeferred(lead)) return { type: "general", icon: "◷", label: "Пізніше" };
-  if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return { type: "closed", icon: "×", label: "Закрито" };
-  if (lead.status === "Пробне заплановано") return { type: "trial", icon: "◷", label: "Пробне" };
-  if (lead.trialResult === "no_show" || lead.trialResult === "cancelled" || lead.nextContactAt || lead.status === "Нова" || lead.status === "Зв'язались") return { type: "call", icon: "☎", label: "Контакт" };
-  if (lead.status === "Після пробного") return { type: "decision", icon: "?", label: "Рішення" };
-  if (lead.status === "Очікує групу") return { type: "group", icon: "→", label: "Група" };
-  return { type: "general", icon: "•", label: "Дія" };
-}
-
 function closeReasonLabel(reason: string | null | undefined) {
   const labels: Record<string, string> = {
     price: "Ціна",
@@ -4747,56 +4483,6 @@ function closeReasonLabel(reason: string | null | undefined) {
   };
   return reason ? (labels[reason] ?? reason) : "Не вказано";
 }
-
-function canonicalLeadSource(source: string | null | undefined) {
-  const value = (source ?? "").trim().toLowerCase();
-  const aliases: Record<string, string> = {
-    iphone: "phone",
-    телефон: "phone",
-    дзвінок: "phone",
-    site: "website",
-    сайт: "website",
-    insta: "instagram",
-    referral: "recommendation",
-    рекомендація: "recommendation",
-    "walk_in": "walk-in",
-    "walk in": "walk-in",
-    "google maps": "maps",
-  };
-  return aliases[value] ?? value;
-}
-
-function leadMissingDetails(lead: Lead): string[] {
-  const missing: string[] = [];
-  if (!lead.lastName?.trim()) missing.push("прізвище дитини");
-  const contactName = cleanSpaces(lead.parent ?? "");
-  if (!contactName || contactName === "Контакт не вказано") {
-    missing.push("ім’я відповідальної особи");
-  } else if (contactName.split(" ").filter(Boolean).length < 2) {
-    missing.push("прізвище відповідальної особи");
-  }
-  return missing;
-}
-
-function leadSourceLabel(source: string | null | undefined) {
-  const labels: Record<string, string> = {
-    phone: "Телефон",
-    website: "Сайт",
-    instagram: "Instagram",
-    recommendation: "Рекомендація",
-    "walk-in": "Зайшли особисто",
-    walk_in: "Зайшли особисто",
-    facebook: "Facebook",
-    tiktok: "TikTok",
-    google: "Google",
-    maps: "Google Maps",
-    other: "Інше",
-  };
-  if (!source) return "Не вказано";
-  const canonical = canonicalLeadSource(source);
-  return labels[canonical] ?? source;
-}
-
 
 function paymentMethodLabel(method: string | null | undefined): PaymentDemo["method"] {
   const labels: Record<string, PaymentDemo["method"]> = {
