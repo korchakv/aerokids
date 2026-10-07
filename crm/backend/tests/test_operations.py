@@ -16,6 +16,15 @@ def _ok_result():
         }],
         "throttle_cleanup": {"auth_login": 0, "public_intake": 0},
         "transactional_email": {"enabled": False, "sent": 0, "failed": 0, "pending": 0},
+        "integrity": {
+            "organizations": [],
+            "summary": {
+                "organization_count": 1,
+                "critical_finding_types": 0,
+                "warning_finding_types": 0,
+                "ok": True,
+            },
+        },
     }
 
 
@@ -73,6 +82,20 @@ def test_daily_maintenance_fails_scheduler_on_partial_error(client, monkeypatch)
     assert response.status_code == 500
     assert response.json()["detail"]["status"] == "degraded"
 
+
+
+def test_daily_maintenance_fails_scheduler_on_critical_integrity_finding(client, monkeypatch):
+    monkeypatch.setattr(settings, "maintenance_secret", "m" * 40)
+    bad = _ok_result()
+    bad["integrity"]["summary"]["critical_finding_types"] = 1
+    bad["integrity"]["summary"]["ok"] = False
+    monkeypatch.setattr(operations_router, "run_daily_maintenance", lambda: bad)
+    response = client.post(
+        "/internal/operations/daily-maintenance",
+        headers={"X-Maintenance-Secret": "m" * 40},
+    )
+    assert response.status_code == 500
+    assert response.json()["detail"]["integrity"]["ok"] is False
 
 def test_read_only_mode_blocks_daily_maintenance(client, monkeypatch):
     monkeypatch.setattr(settings, "maintenance_secret", "m" * 40)
