@@ -3,6 +3,7 @@ import { UiIcon, navigationIcon } from "./components/UiIcon";
 import { AuditHistory } from "./components/AuditHistory";
 import { LoginView } from "./features/auth/LoginView";
 import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
+import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
 import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
@@ -135,19 +136,6 @@ type StaffDemo = {
 };
 
 const allNav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти", "Налаштування"];
-
-function dayOffsetForDate(value: string | Date) {
-  const current = new Date();
-  current.setHours(0, 0, 0, 0);
-  const target = typeof value === "string" ? new Date(value) : new Date(value);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - current.getTime()) / (24 * 60 * 60 * 1000));
-}
-
-function weekdayLong(value: string) {
-  const text = new Date(value).toLocaleDateString("uk-UA", { weekday: "long" });
-  return text ? text.charAt(0).toLocaleUpperCase("uk-UA") + text.slice(1) : "";
-}
 
 function tariffHistoryDetail(event: ApiAuditEvent) {
   const payload = event.payload ?? {};
@@ -4680,18 +4668,6 @@ function staffRoleValue(role: StaffRoleDemo) {
   return values[role];
 }
 
-function dateValue(value?: string, fallback = 0) {
-  if (!value) return fallback;
-  const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) ? timestamp : fallback;
-}
-
-function lessonWeekdayLabel(value: string) {
-  const names = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : names[date.getDay()];
-}
-
 function leadActionPriority(lead: Lead) {
   const now = Date.now();
   if (lead.nextContactAt && dateValue(lead.nextContactAt) <= now) return 0;
@@ -5017,37 +4993,6 @@ function roleLabel(role?: string) {
     accountant: "Бухгалтер",
   };
   return role ? labels[role] ?? role : "Demo";
-}
-
-function addLocalDays(value: Date, amount: number) {
-  const next = new Date(value);
-  next.setHours(12, 0, 0, 0);
-  next.setDate(next.getDate() + amount);
-  return next;
-}
-
-function startOfLocalWeek(value: Date) {
-  const next = new Date(value);
-  next.setHours(12, 0, 0, 0);
-  const mondayOffset = (next.getDay() + 6) % 7;
-  next.setDate(next.getDate() - mondayOffset);
-  return next;
-}
-
-function localDateInput(value: Date) {
-  const offset = value.getTimezoneOffset() * 60_000;
-  return new Date(value.getTime() - offset).toISOString().slice(0, 10);
-}
-
-function defaultPaymentDueDate() {
-  const now = new Date();
-  return localDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-}
-
-function toLocalDateTimeInput(value: string) {
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function formatMoney(value: number, locale = "uk-UA", currency = "UAH") {
