@@ -6,14 +6,20 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.billing_hardening_router import router as billing_hardening_router
 from app.api.reconciliation_router import router as reconciliation_router
 from app.api.hardening_router import router as hardening_router
 from app.api.router import router
 from app.core.config import settings
+from app.services import billing_hardening, hardening
 
 
 logger = logging.getLogger("schoolcrm.http")
 is_production = settings.environment.lower() == "production"
+
+# One canonical eligibility rule is shared by group and individual attendance.
+# It additionally enforces the tariff's allow_debt setting.
+hardening._eligible_subscription = billing_hardening.eligible_subscription
 
 
 app = FastAPI(
@@ -80,8 +86,9 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
-# Most specific reconciliation handlers go first; the hardening compatibility
-# overlay comes next, then all remaining legacy routes.
+# Most specific handlers go first, followed by the compatibility hardening
+# overlay and then all untouched legacy routes.
+app.include_router(billing_hardening_router)
 app.include_router(reconciliation_router)
 app.include_router(hardening_router)
 app.include_router(router)
