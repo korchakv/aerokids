@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth_hardening_router import router as auth_hardening_router
+from app.api.tariff_hardening_router import router as tariff_hardening_router
 from app.api.billing_hardening_router import router as billing_hardening_router
 from app.api.enrollment_hardening_router import router as enrollment_hardening_router
 from app.api.privacy_router import router as privacy_router
@@ -14,15 +15,16 @@ from app.api.reconciliation_router import router as reconciliation_router
 from app.api.hardening_router import router as hardening_router
 from app.api.router import router
 from app.core.config import settings
-from app.services import billing_hardening, hardening
+from app.services import hardening, tariff_hardening
 
 
 logger = logging.getLogger("schoolcrm.http")
 is_production = settings.environment.lower() == "production"
 
-# One canonical eligibility rule is shared by group and individual attendance.
-# It additionally enforces the tariff's allow_debt setting.
-hardening._eligible_subscription = billing_hardening.eligible_subscription
+# One canonical subscription policy is shared by group and individual
+# attendance. Existing subscriptions use frozen tariff-rule snapshots.
+hardening._eligible_subscription = tariff_hardening.eligible_subscription
+hardening._should_consume = tariff_hardening.should_consume
 
 
 app = FastAPI(
@@ -92,6 +94,7 @@ async def add_security_headers(request: Request, call_next):
 # Most specific handlers go first, followed by the compatibility hardening
 # overlay and then all untouched legacy routes.
 app.include_router(auth_hardening_router)
+app.include_router(tariff_hardening_router)
 app.include_router(billing_hardening_router)
 app.include_router(enrollment_hardening_router)
 app.include_router(privacy_router)
