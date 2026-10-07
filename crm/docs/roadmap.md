@@ -86,12 +86,16 @@ Production baseline at the time of this roadmap: `172124a...`.
 
 Goal: reduce regression risk before adding more commercial SaaS features.
 
+Progress:
+- PR #48 merged: API contracts/client/auth split, shared UI/date/contact utilities extracted, LoginView, AuditHistory, schedule editors and lead Kanban/table moved out of App.tsx; App.tsx reduced substantially with full CI/E2E green.
+- Current Stage 2 domain-module branch: group, teaching, billing, staff, location and workspace/operations projection models/adapters are being extracted from App.tsx.
+
 Required:
-1. Split the 350KB+ `frontend/src/App.tsx` into feature modules without changing behavior.
-2. Split frontend API/types by domain while keeping a compatibility barrel.
-3. Continue decomposing legacy `backend/app/services/crm.py`; hardened services are already split, but legacy flows remain too large.
-4. Keep every extraction behavior-preserving and protected by CI/E2E.
-5. Add targeted browser tests when moving a feature out of App.tsx.
+1. Continue splitting `frontend/src/App.tsx` into feature modules without changing behavior. **In progress.**
+2. Split frontend API/types by domain while keeping a compatibility barrel. **Foundation complete; domain-specific API façades remain.**
+3. Continue decomposing legacy `backend/app/services/crm.py`; hardened services are already split, but legacy flows remain too large. **Not started.**
+4. Keep every extraction behavior-preserving and protected by CI/E2E. **Active release rule.**
+5. Add targeted browser tests when moving a feature out of App.tsx. **Existing full desktop/mobile smoke retained; feature-specific coverage to expand.**
 
 Recommended frontend domains:
 - app shell / navigation
