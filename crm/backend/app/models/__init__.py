@@ -27,6 +27,7 @@ from app.models.hardening_extensions import (
     AttendanceDecision,
     IndividualDerivedBilling,
     NotificationOutbox,
+    SubscriptionRuleSnapshot,
 )
 
 __all__ = [
@@ -54,4 +55,5 @@ __all__ = [
     "AttendanceDecision",
     "IndividualDerivedBilling",
     "NotificationOutbox",
+    "SubscriptionRuleSnapshot",
 ]
