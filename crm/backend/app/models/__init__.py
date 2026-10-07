@@ -23,6 +23,11 @@ from app.models.hardening import (
     StaffCapability,
     TrialResourceAssignment,
 )
+from app.models.hardening_extensions import (
+    AttendanceDecision,
+    IndividualDerivedBilling,
+    NotificationOutbox,
+)
 
 __all__ = [
     "Organization",
@@ -46,4 +51,7 @@ __all__ = [
     "IndividualLessonSession",
     "IndividualAttendance",
     "IndividualSubscriptionUsage",
+    "AttendanceDecision",
+    "IndividualDerivedBilling",
+    "NotificationOutbox",
 ]
