@@ -18,12 +18,14 @@ services:
         value: production
       - key: AUTH_REQUIRED
         value: "true"
+      - key: STRICT_RBAC
+        value: "true"
       - key: JWT_SECRET
         sync: false
       - key: BOOTSTRAP_SECRET
         sync: false
       - key: ACCESS_TOKEN_MINUTES
-        value: "480"
+        value: "120"
       - key: CORS_ORIGINS
         value: https://aerokids-crm.onrender.com,https://crm.aerokids.space,https://aerokids.space,https://www.aerokids.space
       - key: AUTH_LOGIN_WINDOW_MINUTES
@@ -45,6 +47,8 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://aerokids-crm-api.onrender.com
+      - key: VITE_DEMO_MODE
+        value: "false"
     routes:
       - type: rewrite
         source: /*
