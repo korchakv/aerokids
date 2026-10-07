@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { UiIcon, navigationIcon } from "./components/UiIcon";
 import { AuditHistory } from "./components/AuditHistory";
 import { LoginView } from "./features/auth/LoginView";
@@ -7,15 +7,15 @@ import { initialLeads, statuses } from "./features/leads/demo";
 import { canonicalLeadSource, leadActionMeta, leadActionPriority, leadDisplayStatus, leadIsDeferred, leadKanbanColumn, leadMissingDetails, leadPrimaryActionLabel, leadSourceLabel, type EntityId, type Lead, type LeadKanbanColumnId, type LeadStatus } from "./features/leads/model";
 import type { GroupItem } from "./features/groups/types";
 import { applyTeaching, SCHEDULE_DAY_NAMES, type LessonItem } from "./features/teaching/model";
-import { paymentMethodLabel, type PaymentDemo, type PlanDemo } from "./features/billing/model";
+import { type PaymentDemo, type PlanDemo } from "./features/billing/model";
 import type { LocationDemo } from "./features/locations/types";
-import { staffRoleLabel, staffRoleValue, type StaffDemo, type StaffRoleDemo } from "./features/staff/model";
+import { staffRoleValue, type StaffDemo, type StaffRoleDemo } from "./features/staff/model";
 import { applyOperations } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
 import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
-import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
 
 
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
