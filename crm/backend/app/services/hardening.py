@@ -1025,7 +1025,7 @@ def create_trial_hardened(db: Session, org_id: UUID, data, actor_user_id: UUID |
     student.deferred_until = None
     student.deferred_reason = None
     student.deferred_note = None
-    crm.record_audit(db, org_id, "student", student.id, "trial.scheduled_hardened", {
+    crm.record_audit(db, org_id, "student", student.id, "trial.scheduled", {
         "trial_id": str(trial.id), "staff_id": str(staff_id) if staff_id else None, "room_id": str(room_id) if room_id else None,
     }, actor_user_id)
     db.commit()
@@ -1070,7 +1070,7 @@ def update_trial_hardened(db: Session, org_id: UUID, trial_id: UUID, data, actor
     student.deferred_until = None
     student.deferred_reason = None
     student.deferred_note = None
-    crm.record_audit(db, org_id, "student", student.id, "trial.rescheduled_hardened", {
+    crm.record_audit(db, org_id, "student", student.id, "trial.rescheduled", {
         "trial_id": str(trial.id), "starts_at": starts_at.isoformat(),
     }, actor_user_id)
     db.commit()
