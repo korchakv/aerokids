@@ -1,13 +1,21 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { UiIcon, navigationIcon } from "./components/UiIcon";
 import { AuditHistory } from "./components/AuditHistory";
 import { LoginView } from "./features/auth/LoginView";
 import { LeadKanban, LeadTable } from "./features/leads/LeadBoard";
+import { initialLeads, statuses } from "./features/leads/demo";
 import { canonicalLeadSource, leadActionMeta, leadActionPriority, leadDisplayStatus, leadIsDeferred, leadKanbanColumn, leadMissingDetails, leadPrimaryActionLabel, leadSourceLabel, type EntityId, type Lead, type LeadKanbanColumnId, type LeadStatus } from "./features/leads/model";
+import type { GroupItem } from "./features/groups/types";
+import { applyTeaching, SCHEDULE_DAY_NAMES, type LessonItem } from "./features/teaching/model";
+import { type PaymentDemo, type PlanDemo } from "./features/billing/model";
+import type { LocationDemo } from "./features/locations/types";
+import { staffRoleValue, type StaffDemo, type StaffRoleDemo } from "./features/staff/model";
+import { applyOperations } from "./features/operations/adapters";
+import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
 import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
-import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
 
 
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
@@ -18,83 +26,20 @@ const UI_SCALE_LEVELS: UiScale[] = [1, 1.1, 1.25, 1.4];
 
 
 
-type GroupItem = {
-  id: EntityId;
-  name: string;
-  ages: string;
-  schedule: string;
-  location: string;
-  capacity: number;
-  members: EntityId[];
-  teacherName?: string;
-};
+
 
 type AttendanceValue = "present" | "absent" | "late" | "excused";
 
-type LessonItem = {
-  id: EntityId;
-  groupId: EntityId;
-  startsAt: string;
-  duration: number;
-  topic: string;
-  notes?: string;
-  status?: "scheduled" | "completed" | "cancelled";
-  attendancePresent?: number;
-  attendanceAbsent?: number;
-  attendanceLate?: number;
-  attendanceExcused?: number;
-  attendanceTotal?: number;
-};
 
-type PlanDemo = {
-  id: EntityId;
-  name: string;
-  price: number;
-  days: number | null;
-  lessons: number | null;
-  isActive: boolean;
-  usageMode?: "attendance" | "scheduled" | "period";
-  absentRule?: "consume" | "dont_consume" | "choice";
-  excusedRule?: "consume" | "dont_consume" | "makeup";
-  endRule?: "lessons" | "date" | "whichever_first";
-};
 
-type PaymentDemo = {
-  id: EntityId;
-  studentId: EntityId;
-  planId: EntityId;
-  subscriptionId?: EntityId;
-  amount: number;
-  adjustedAmount: number;
-  paidAmount: number;
-  refundedAmount: number;
-  balanceAmount: number;
-  creditAmount: number;
-  dueDate: string;
-  status: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
-  method?: "Картка" | "Готівка" | "Переказ";
-};
 
-type LocationDemo = {
-  id: EntityId;
-  name: string;
-  address: string;
-  isActive: boolean;
-};
 
-type StaffRoleDemo = "Власник" | "Адміністратор" | "Менеджер" | "Викладач" | "Бухгалтер";
 
-type StaffDemo = {
-  id: EntityId;
-  fullName: string;
-  role: StaffRoleDemo;
-  canTeach: boolean;
-  email: string;
-  phone: string;
-  locationIds: EntityId[];
-  groupIds: EntityId[];
-  isActive: boolean;
-};
+
+
+
+
+
 
 const allNav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти", "Налаштування"];
 
@@ -148,19 +93,8 @@ function emailError(value: string, required = false): string {
   return "";
 }
 
-const initialLeads: Lead[] = [
-  { id: "1", child: "Максим", age: 9, parent: "Оксана", phone: "+380 67 123 45 67", status: "Очікує групу", source: "Сайт", comment: "Цікавиться FPV та симулятором.", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: "2", child: "Артем", age: 10, parent: "Ірина", phone: "+380 50 222 14 09", status: "Пробне заплановано", source: "Instagram", trialAt: "2026-10-05T17:00", trialLocation: "Основна локація", trialResult: "scheduled" },
-  { id: "3", child: "Софія", age: 11, parent: "Марина", phone: "+380 96 411 28 60", status: "Очікує групу", source: "Сайт", comment: "Після пробного готова продовжувати.", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: "4", child: "Данило", age: 8, parent: "Олег", phone: "+380 93 701 44 31", status: "Очікує групу", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: "5", child: "Анна", age: 9, parent: "Наталія", phone: "+380 68 555 11 20", status: "Очікує групу", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: "6", child: "Олег", age: 10, parent: "Вікторія", phone: "+380 95 100 23 44", status: "Очікує групу", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: "7", child: "Ілля", age: 12, parent: "Юлія", phone: "+380 97 222 42 15", status: "Очікує групу", source: "Instagram", trialResult: "completed", recommendedLevel: "Середній" },
-  { id: "8", child: "Марта", age: 9, parent: "Андрій", phone: "+380 67 700 10 08", status: "Зарахований", source: "Сайт", trialResult: "completed", recommendedLevel: "Початковий" },
-  { id: "9", child: "Назар", age: 10, parent: "Олена", phone: "+380 95 700 10 09", status: "Зарахований", source: "Рекомендація", trialResult: "completed", recommendedLevel: "Початковий" },
-];
 
-const statuses: LeadStatus[] = ["Нова", "Зв'язались", "Пробне заплановано", "Після пробного", "Очікує групу"];
+
 
 function App() {
   const [theme, setTheme] = useState<"dark" | "light">(() => {
@@ -4347,130 +4281,6 @@ function deferReasonLabel(reason: string | null | undefined): string {
 }
 
 
-function applyTeaching(
-  bundle: TeachingBundle,
-  setLessons: Dispatch<SetStateAction<LessonItem[]>>,
-  setGroups: Dispatch<SetStateAction<GroupItem[]>>,
-) {
-  setLessons(bundle.lessons.map((item) => ({
-    id: item.id,
-    groupId: item.group_id,
-    startsAt: item.starts_at,
-    duration: item.duration_minutes,
-    topic: item.topic ?? "Заняття",
-    notes: item.notes ?? undefined,
-    status: item.status,
-    attendancePresent: item.attendance_present,
-    attendanceAbsent: item.attendance_absent,
-    attendanceLate: item.attendance_late,
-    attendanceExcused: item.attendance_excused,
-    attendanceTotal: item.attendance_total,
-  })));
-
-  const byGroup = new Map<EntityId, TeachingBundle["schedules"]>();
-  bundle.schedules.forEach((item) => {
-    const list = byGroup.get(item.group_id) ?? [];
-    list.push(item);
-    byGroup.set(item.group_id, list);
-  });
-
-  setGroups((items) => items.map((group) => {
-    const schedules = byGroup.get(group.id) ?? [];
-    return {
-      ...group,
-      schedule: schedules.length ? scheduleLabel(schedules) : "Розклад не задано",
-    };
-  }));
-}
-
-function scheduleLabel(items: TeachingBundle["schedules"]) {
-  return [...items]
-    .sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time))
-    .map((item) => `${SCHEDULE_DAY_NAMES[item.weekday] ?? "Невідомий день"} · ${item.start_time.slice(0, 5)}`)
-    .join("; ");
-}
-
-function applyOperations(
-  bundle: OperationsBundle,
-  setLocations: Dispatch<SetStateAction<LocationDemo[]>>,
-  setStaff: Dispatch<SetStateAction<StaffDemo[]>>,
-  setPlans: Dispatch<SetStateAction<PlanDemo[]>>,
-  setPayments: Dispatch<SetStateAction<PaymentDemo[]>>,
-  setSubscriptions: Dispatch<SetStateAction<ApiStudentSubscription[]>>,
-) {
-  setLocations(bundle.locations.map((item) => ({
-    id: item.id,
-    name: item.name,
-    address: item.address ?? "",
-    isActive: item.is_active,
-  })));
-
-  setStaff(bundle.staff.map((item) => ({
-    id: item.id,
-    fullName: item.full_name,
-    role: staffRoleLabel(item.role),
-    canTeach: item.can_teach,
-    email: item.email ?? "",
-    phone: item.phone ?? "",
-    locationIds: item.assignments.location_ids,
-    groupIds: item.assignments.group_ids,
-    isActive: item.is_active,
-  })));
-
-  setPlans(bundle.plans.map((item) => ({
-    id: item.id,
-    name: item.name,
-    price: item.price_minor / 100,
-    days: item.period_days,
-    lessons: item.lessons_included,
-    isActive: item.is_active,
-    usageMode: item.usage_mode,
-    absentRule: item.absent_rule,
-    excusedRule: item.excused_rule,
-    endRule: item.end_rule,
-  })));
-
-  const today = new Date().toISOString().slice(0, 10);
-  setPayments(bundle.payments.map((item) => ({
-    id: item.id,
-    studentId: item.student_id,
-    planId: item.plan_id ?? "",
-    subscriptionId: item.subscription_id ?? undefined,
-    amount: item.amount_minor / 100,
-    adjustedAmount: item.adjusted_amount_minor / 100,
-    paidAmount: item.paid_minor / 100,
-    refundedAmount: item.refunded_minor / 100,
-    balanceAmount: item.balance_minor / 100,
-    creditAmount: item.credit_minor / 100,
-    dueDate: item.due_date ?? "",
-    status: item.status === "pending" && item.due_date && item.due_date < today ? "overdue" : item.status,
-    method: paymentMethodLabel(item.method),
-  })));
-  setSubscriptions(bundle.subscriptions);
-}
-
-function staffRoleLabel(role: string): StaffRoleDemo {
-  const labels: Record<string, StaffRoleDemo> = {
-    owner: "Власник",
-    admin: "Адміністратор",
-    manager: "Менеджер",
-    teacher: "Викладач",
-    accountant: "Бухгалтер",
-  };
-  return labels[role] ?? "Викладач";
-}
-
-function staffRoleValue(role: StaffRoleDemo) {
-  const values: Record<StaffRoleDemo, string> = {
-    "Власник": "owner",
-    "Адміністратор": "admin",
-    "Менеджер": "manager",
-    "Викладач": "teacher",
-    "Бухгалтер": "accountant",
-  };
-  return values[role];
-}
-
 function closeReasonLabel(reason: string | null | undefined) {
   const labels: Record<string, string> = {
     price: "Ціна",
@@ -4482,129 +4292,6 @@ function closeReasonLabel(reason: string | null | undefined) {
     other: "Інше",
   };
   return reason ? (labels[reason] ?? reason) : "Не вказано";
-}
-
-function paymentMethodLabel(method: string | null | undefined): PaymentDemo["method"] {
-  const labels: Record<string, PaymentDemo["method"]> = {
-    cash: "Готівка",
-    card: "Картка",
-    bank: "Переказ",
-    other: "Переказ",
-  };
-  return method ? labels[method] : undefined;
-}
-
-function applyWorkspace(
-  bundle: WorkspaceBundle,
-  setLeads: Dispatch<SetStateAction<Lead[]>>,
-  setGroups: Dispatch<SetStateAction<GroupItem[]>>,
-  setStudentStates: Dispatch<SetStateAction<Record<EntityId, "Активний" | "Пауза" | "Архів">>>,
-) {
-  const prospects: Lead[] = bundle.leads.map((item) => ({
-    id: item.student_id,
-    createdAt: item.created_at,
-    firstName: item.first_name,
-    lastName: item.last_name ?? undefined,
-    child: [item.first_name, item.last_name].filter(Boolean).join(" "),
-    age: item.age ?? 0,
-    parent: item.contact_name ?? "Контакт не вказано",
-    phone: item.contact_phone ?? "",
-    childPhone: item.student_phone ?? undefined,
-    source: item.source ?? "CRM",
-    comment: item.comment ?? undefined,
-    preferredLocationId: item.preferred_location_id ?? undefined,
-    preferredLocationName: item.preferred_location_name ?? undefined,
-    availability: item.availability.map((slot) => ({
-      weekday: slot.weekday,
-      start_time: slot.start_time.slice(0, 5),
-      end_time: slot.end_time.slice(0, 5),
-      preference: slot.preference ?? "preferred",
-      note: slot.note,
-    })),
-    status: crmStatusLabel(item.crm_status),
-    trialId: item.latest_trial_id ?? undefined,
-    trialAt: item.latest_trial_at ?? undefined,
-    trialLocationId: item.trial_location_id ?? undefined,
-    trialLocation: item.trial_location_name ?? undefined,
-    recommendedLevel: item.recommended_level ?? undefined,
-    teacherNotes: item.teacher_notes ?? undefined,
-    trialResult: item.latest_trial_status ?? undefined,
-    nextContactAt: item.next_contact_at ?? undefined,
-    deferredUntil: item.deferred_until ?? undefined,
-    deferredReason: item.deferred_reason ?? undefined,
-    deferredNote: item.deferred_note ?? undefined,
-    closeReason: item.close_reason ?? undefined,
-    closeNote: item.close_note ?? undefined,
-  }));
-
-  const students: Lead[] = bundle.students.map((item) => ({
-    id: item.student_id,
-    firstName: item.first_name,
-    lastName: item.last_name ?? undefined,
-    child: [item.first_name, item.last_name].filter(Boolean).join(" "),
-    age: item.age ?? 0,
-    parent: item.contact_name ?? "Контакт не вказано",
-    phone: item.contact_phone ?? "",
-    childPhone: item.student_phone ?? undefined,
-    source: item.source ?? "CRM",
-    status: "Зарахований",
-  }));
-
-  const states: Record<EntityId, "Активний" | "Пауза" | "Архів"> = {};
-  bundle.students.forEach((item) => {
-    states[item.student_id] = item.student_status === "paused" ? "Пауза" : item.student_status === "archived" ? "Архів" : "Активний";
-  });
-
-  const groups: GroupItem[] = bundle.groups.map((group) => ({
-    id: group.group_id,
-    name: group.name,
-    ages: ageLabel(group.min_age, group.max_age),
-    schedule: "Розклад не задано",
-    location: group.location_name ?? "Локацію не вказано",
-    capacity: group.capacity ?? Math.max(group.enrolled_count, 1),
-    members: bundle.students.filter((student) => student.group_id === group.group_id).map((student) => student.student_id),
-    teacherName: group.primary_teacher_name ?? undefined,
-  }));
-
-  setLeads([...prospects, ...students]);
-  setGroups(groups);
-  setStudentStates(states);
-}
-
-function crmStatusValue(status: LeadStatus) {
-  const values: Record<LeadStatus, string> = {
-    "Нова": "new",
-    "Зв'язались": "contacted",
-    "Пробне заплановано": "trial_scheduled",
-    "Після пробного": "trial_completed",
-    "Очікує групу": "waiting_for_group",
-    "Зарахований": "enrolled",
-    "Не відповідає": "no_response",
-    "Відмовились": "declined",
-    "Неактуально": "not_relevant",
-  };
-  return values[status];
-}
-
-function crmStatusLabel(status: WorkspaceBundle["leads"][number]["crm_status"]): LeadStatus {
-  const labels: Record<WorkspaceBundle["leads"][number]["crm_status"], LeadStatus> = {
-    new: "Нова",
-    contacted: "Зв'язались",
-    trial_scheduled: "Пробне заплановано",
-    trial_completed: "Після пробного",
-    waiting_for_group: "Очікує групу",
-    enrolled: "Зарахований",
-    no_response: "Не відповідає",
-    declined: "Відмовились",
-    not_relevant: "Неактуально",
-  };
-  return labels[status];
-}
-
-function ageLabel(min: number | null, max: number | null) {
-  if (min == null && max == null) return "—";
-  if (min != null && max != null) return min === max ? String(min) : `${min}–${max}`;
-  return String(min ?? max);
 }
 
 function auditEventLabel(type: string) {
@@ -4810,7 +4497,6 @@ function availabilityLabel(slots: AvailabilitySlot[]) {
   return [...groups.entries()].map(([time, days]) => `${days.join("/")} · ${time}`).join("; ");
 }
 
-const SCHEDULE_DAY_NAMES = ["Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя"];
 function scheduleDraftLabel(slots: DraftScheduleSlot[]) { return slots.map((slot) => `${SCHEDULE_DAY_NAMES[slot.weekday] ?? "Невідомий день"} · ${slot.start_time.slice(0, 5)}`).join("; "); }
 function hasDuplicateSlots(slots: DraftScheduleSlot[]) { return new Set(slots.map((slot) => `${slot.weekday}:${slot.start_time}`)).size !== slots.length; }
 
