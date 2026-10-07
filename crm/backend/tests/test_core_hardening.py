@@ -339,3 +339,30 @@ def test_individual_student_can_consume_and_safely_reverse_auto_renewal(client):
         active_children = [row for row in subscriptions if row.renewal_of_id == parent.id and row.status != SubscriptionStatus.CANCELLED]
         assert parent.status == SubscriptionStatus.ACTIVE
         assert active_children == []
+
+
+def test_transfer_date_belongs_only_to_target_group(client):
+    org = create_org(client, slug="transfer-history")
+    student = create_student(client, org, "Transfer Student")
+    first = create_group(client, org, "First")
+    second = create_group(client, org, "Second")
+    start = date.today()
+    enrolled = client.post("/enrollments", headers=headers(org), json={
+        "student_id": student["id"],
+        "group_id": first["id"],
+        "started_at": (start - timedelta(days=2)).isoformat(),
+    })
+    assert enrolled.status_code == 201, enrolled.text
+
+    moved = client.post(f"/students/{student['id']}/transfer", headers=headers(org), json={
+        "to_group_id": second["id"],
+        "started_at": start.isoformat(),
+    })
+    assert moved.status_code == 200, moved.text
+
+    first_roster = client.get(f"/groups/{first['id']}/roster", headers=headers(org), params={"at": start.isoformat()})
+    second_roster = client.get(f"/groups/{second['id']}/roster", headers=headers(org), params={"at": start.isoformat()})
+    assert first_roster.status_code == 200, first_roster.text
+    assert second_roster.status_code == 200, second_roster.text
+    assert first_roster.json() == []
+    assert [row["student_id"] for row in second_roster.json()] == [student["id"]]
