@@ -833,7 +833,7 @@ def transfer_student_hardened(
         if row.group_id == target.id:
             return row
         row.status = EnrollmentStatus.FINISHED
-        row.ended_at = start
+        row.ended_at = start - timedelta(days=1)
     existing = db.scalar(select(Enrollment).where(
         Enrollment.organization_id == org_id,
         Enrollment.student_id == student.id,
