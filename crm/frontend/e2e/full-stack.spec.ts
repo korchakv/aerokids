@@ -25,3 +25,17 @@ test("mobile shell does not overflow horizontally", async ({ page }) => {
   }));
   expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport + 2);
 });
+
+test("owner can open modular staff locations and settings workspaces", async ({ page }) => {
+  await login(page);
+
+  await page.getByText("Працівники", { exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Працівники", level: 1 })).toBeVisible();
+
+  await page.getByText("Локації", { exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Локації школи" })).toBeVisible();
+
+  await page.getByText("Налаштування", { exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Основні налаштування" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Вигляд інтерфейсу" })).toBeVisible();
+});
