@@ -7,6 +7,10 @@ if [[ -z "${DB_URL}" ]]; then
   exit 2
 fi
 
+# PostgreSQL CLI tools use libpq URLs and do not understand SQLAlchemy's
+# explicit +psycopg driver marker.
+PG_DUMP_URL="${DB_URL/postgresql+psycopg:\/\//postgresql:\/\/}"
+
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
 mkdir -p "${BACKUP_DIR}"
 chmod 700 "${BACKUP_DIR}" || true
@@ -14,7 +18,7 @@ chmod 700 "${BACKUP_DIR}" || true
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUTPUT="${BACKUP_DIR}/schoolcrm-${STAMP}.dump"
 
-pg_dump "${DB_URL}" \
+pg_dump "${PG_DUMP_URL}" \
   --format=custom \
   --no-owner \
   --no-acl \
