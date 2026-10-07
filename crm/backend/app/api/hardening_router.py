@@ -716,6 +716,14 @@ def assign_staff_group_hardened(
     return {"id": assignment.id, "group_id": assignment.group_id, "staff_id": assignment.staff_id, "is_primary": assignment.is_primary}
 
 
+@router.get("/workspace/leads")
+def workspace_leads_hardened(
+    access: OrgAccess = Depends(_require_capability("leads.manage")),
+    db: Session = Depends(get_db),
+):
+    return crm.list_lead_overview(db, access.organization_id)
+
+
 @router.get("/workspace/students")
 def workspace_students_paginated(
     q: str | None = None,
