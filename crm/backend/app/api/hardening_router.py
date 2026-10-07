@@ -35,7 +35,9 @@ from app.models.hardening import (
     LessonResourceAssignment,
     Room,
     StaffCapability,
+    TrialResourceAssignment,
 )
+from app.models.hardening_extensions import AttendanceDecision, IndividualDerivedBilling
 from app.schemas import (
     AttendanceBulkUpdate,
     AttendanceRead,
@@ -260,6 +262,44 @@ def get_staff_capabilities(
         StaffCapability.organization_id == access.organization_id,
         StaffCapability.staff_id == staff_id,
     ).order_by(StaffCapability.capability)))
+
+
+@router.delete("/locations/{location_id}", status_code=204)
+def delete_location_hardened(
+    location_id: UUID,
+    access: OrgAccess = Depends(_require_capability("settings.manage")),
+    db: Session = Depends(get_db),
+):
+    crm.scoped_get(db, Location, access.organization_id, location_id)
+    room = db.scalar(select(Room.id).where(
+        Room.organization_id == access.organization_id,
+        Room.location_id == location_id,
+    ).limit(1))
+    if room is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="У локації налаштовані кімнати. Спочатку перенесіть або приберіть кімнати.",
+        )
+    individual = db.scalar(select(IndividualLessonSession.id).where(
+        IndividualLessonSession.organization_id == access.organization_id,
+        IndividualLessonSession.location_id == location_id,
+    ).limit(1))
+    if individual is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Для цієї локації є індивідуальні заняття. Щоб не втратити історію, її видалити не можна.",
+        )
+    schedule_history = db.scalar(select(GroupScheduleHistory.id).where(
+        GroupScheduleHistory.organization_id == access.organization_id,
+        GroupScheduleHistory.location_id == location_id,
+    ).limit(1))
+    if schedule_history is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Локація вже використовується в історії розкладу. Її можна деактивувати, але не видалити.",
+        )
+    crm.delete_location(db, access.organization_id, location_id, access.user_id)
+    return None
 
 
 @router.post("/rooms", response_model=RoomRead, status_code=201)
@@ -568,6 +608,56 @@ def individual_attendance(
     return hardening.save_individual_attendance(
         db, access.organization_id, session_id, data.status, data.note, access.user_id,
     )
+
+
+@router.delete("/students/{student_id}", status_code=204)
+def delete_student_hardened(
+    student_id: UUID,
+    access: OrgAccess = Depends(_require_capability("students.manage")),
+    db: Session = Depends(get_db),
+):
+    student = crm.scoped_get(db, Student, access.organization_id, student_id)
+    individual_ids = list(db.scalars(select(IndividualLessonSession.id).where(
+        IndividualLessonSession.organization_id == access.organization_id,
+        IndividualLessonSession.student_id == student.id,
+    )))
+    if individual_ids:
+        individual_attendance = db.scalar(select(IndividualAttendance.id).where(
+            IndividualAttendance.organization_id == access.organization_id,
+            IndividualAttendance.session_id.in_(individual_ids),
+        ).limit(1))
+        derived_billing = db.scalar(select(IndividualDerivedBilling.id).where(
+            IndividualDerivedBilling.organization_id == access.organization_id,
+            IndividualDerivedBilling.session_id.in_(individual_ids),
+        ).limit(1))
+        if individual_attendance is not None or derived_billing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Для учня вже є історія індивідуальних занять. Використайте «Архів», щоб не втратити дані.",
+            )
+        db.execute(delete(IndividualLessonSession).where(
+            IndividualLessonSession.organization_id == access.organization_id,
+            IndividualLessonSession.student_id == student.id,
+        ))
+
+    trial_ids = list(db.scalars(select(crm.TrialLesson.id).where(
+        crm.TrialLesson.organization_id == access.organization_id,
+        crm.TrialLesson.student_id == student.id,
+    )))
+    if trial_ids:
+        db.execute(delete(TrialResourceAssignment).where(
+            TrialResourceAssignment.organization_id == access.organization_id,
+            TrialResourceAssignment.trial_id.in_(trial_ids),
+        ))
+
+    # A consume/no-consume choice without preserved attendance is draft state,
+    # not immutable learning history, and may be removed with the draft student.
+    db.execute(delete(AttendanceDecision).where(
+        AttendanceDecision.organization_id == access.organization_id,
+        AttendanceDecision.student_id == student.id,
+    ))
+    crm.delete_student(db, access.organization_id, student.id, access.user_id)
+    return None
 
 
 @router.patch("/students/{student_id}/status")
