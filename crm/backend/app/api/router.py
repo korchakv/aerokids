@@ -11,7 +11,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, crm, location_service, organization_service, reporting_service, staff_service, student_service
+from app.services import audit_service, contact_service, crm, location_service, organization_service, reporting_service, staff_service, student_service
 
 router = APIRouter()
 
@@ -184,12 +184,12 @@ def delete_location(
 
 @router.post("/contacts", response_model=ContactRead, status_code=201)
 def create_contact(data: ContactCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.create_contact(db, org_id, data)
+    return contact_service.create_contact(db, org_id, data)
 
 
 @router.get("/contacts", response_model=list[ContactRead])
 def contacts(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.list_contacts(db, org_id)
+    return contact_service.list_contacts(db, org_id)
 
 
 @router.post("/students", response_model=StudentRead, status_code=201)
