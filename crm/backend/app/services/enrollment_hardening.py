@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -138,7 +138,10 @@ def transfer(
                 db.refresh(row)
             return row
         row.status = EnrollmentStatus.FINISHED
-        row.ended_at = start
+        # Enrollment intervals are date-based and inclusive. Ending on the
+        # same date the target enrollment starts would put the student in
+        # both historical rosters for that day.
+        row.ended_at = start - timedelta(days=1)
 
     target_row = db.scalar(select(Enrollment).where(
         Enrollment.organization_id == org_id,
