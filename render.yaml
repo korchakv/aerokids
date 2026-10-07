@@ -38,8 +38,12 @@ services:
         value: "10"
       - key: READ_ONLY_MODE
         value: "false"
-      - key: MAINTENANCE_SECRET
-        sync: false
+      - key: MAINTENANCE_OIDC_AUDIENCE
+        value: aerokids-crm-maintenance
+      - key: MAINTENANCE_GITHUB_REPOSITORY
+        value: korchakv/aerokids
+      - key: MAINTENANCE_GITHUB_REF
+        value: refs/heads/main
       - key: TRANSACTIONAL_EMAIL_ENABLED
         value: "false"
       - key: SMTP_HOST
