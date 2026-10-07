@@ -6,6 +6,7 @@ from sqlalchemy import engine_from_config, pool
 from app.core.config import settings
 from app.db.base import Base
 from app.models import core  # noqa: F401
+from app.models import hardening  # noqa: F401
 
 config = context.config
 migration_database_url = settings.migration_database_url or settings.database_url
