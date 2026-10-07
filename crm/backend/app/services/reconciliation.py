@@ -242,7 +242,12 @@ def save_group_attendance(
     actor_user_id: UUID | None,
     role,
 ) -> list[Attendance]:
-    session = crm.scoped_get(db, LessonSession, org_id, session_id)
+    session = db.scalar(select(LessonSession).where(
+        LessonSession.organization_id == org_id,
+        LessonSession.id == session_id,
+    ).with_for_update())
+    if session is None:
+        raise HTTPException(status_code=404, detail="Заняття не знайдено")
     hardening.ensure_group_access(db, org_id, actor_user_id, role, session.group_id)
     existing_finalization = db.scalar(select(LessonFinalization.id).where(
         LessonFinalization.organization_id == org_id,
