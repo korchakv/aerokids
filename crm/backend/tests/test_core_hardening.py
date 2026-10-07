@@ -287,7 +287,7 @@ def test_absent_choice_is_persisted_across_finalize_and_correction(client):
     assert corrected.status_code == 200, corrected.text
     with SessionLocal() as db:
         usage = list(db.scalars(select(SubscriptionUsage).where(
-            SubscriptionUsage.subscription_id == subscription_id,
+            SubscriptionUsage.subscription_id == UUID(subscription_id),
         )))
         assert len(usage) == 1
 
@@ -333,7 +333,7 @@ def test_individual_student_can_consume_and_safely_reverse_auto_renewal(client):
     assert corrected.status_code == 200, corrected.text
     with SessionLocal() as db:
         subscriptions = list(db.scalars(select(StudentSubscription).where(
-            StudentSubscription.student_id == student["id"],
+            StudentSubscription.student_id == UUID(student["id"]),
         )))
         parent = next(row for row in subscriptions if str(row.id) == parent_id)
         active_children = [row for row in subscriptions if row.renewal_of_id == parent.id and row.status != SubscriptionStatus.CANCELLED]
