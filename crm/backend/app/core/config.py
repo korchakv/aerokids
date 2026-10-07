@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     auth_login_email_limit: int = 10
     read_only_mode: bool = False
     strict_rbac: bool = False
+    maintenance_secret: str | None = None
     transactional_email_enabled: bool = False
     smtp_host: str | None = None
     smtp_port: int = 587
@@ -56,6 +57,8 @@ class Settings(BaseSettings):
                 raise ValueError("Production FRONTEND_URL must use HTTPS")
             if self.access_token_minutes > 240:
                 raise ValueError("Production access tokens must not live longer than 4 hours")
+            if self.maintenance_secret is not None and len(self.maintenance_secret) < 32:
+                raise ValueError("Production MAINTENANCE_SECRET must contain at least 32 characters when configured")
             if self.transactional_email_enabled:
                 missing = [
                     name for name, value in {
