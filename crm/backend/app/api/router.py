@@ -11,7 +11,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, crm, location_service, staff_service
+from app.services import audit_service, crm, location_service, organization_service, staff_service
 
 router = APIRouter()
 
@@ -139,19 +139,19 @@ def reset_password(data: PasswordResetComplete, db: Session = Depends(get_db)):
 def create_organization(data: OrganizationCreate, db: Session = Depends(get_db)):
     if auth_is_required():
         raise HTTPException(status_code=403, detail="Direct organization creation is disabled when authentication is required")
-    return crm.create_organization(db, data)
+    return organization_service.create_organization(db, data)
 
 
 @router.get("/organizations", response_model=list[OrganizationRead])
 def organizations(db: Session = Depends(get_db)):
     if auth_is_required():
         raise HTTPException(status_code=403, detail="Use /auth/me to list your organizations")
-    return crm.list_organizations(db)
+    return organization_service.list_organizations(db)
 
 
 @router.get("/organization", response_model=OrganizationRead)
 def current_organization(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.require_organization(db, org_id)
+    return organization_service.require_organization(db, org_id)
 
 
 @router.patch("/organization", response_model=OrganizationRead)
@@ -160,7 +160,7 @@ def update_current_organization(
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    return crm.update_organization(db, access.organization_id, data, access.user_id)
+    return organization_service.update_organization(db, access.organization_id, data, access.user_id)
 
 
 @router.post("/locations", response_model=LocationRead, status_code=201)
@@ -349,7 +349,7 @@ def internal_intake(
                 "student_id": str(likely_duplicate["student_id"]),
             },
         )
-    organization = crm.require_organization(db, access.organization_id)
+    organization = organization_service.require_organization(db, access.organization_id)
     student, contact = crm.create_intake(db, organization, data, access.user_id)
     return IntakeResult(student_id=student.id, contact_id=contact.id, crm_status=student.crm_status)
 
