@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
+from uuid import UUID
 
 from sqlalchemy import select
 
@@ -276,7 +277,7 @@ def test_absent_choice_is_persisted_across_finalize_and_correction(client):
     assert first.status_code == 200, first.text
     with SessionLocal() as db:
         usage = list(db.scalars(select(SubscriptionUsage).where(
-            SubscriptionUsage.subscription_id == subscription_id,
+            SubscriptionUsage.subscription_id == UUID(subscription_id),
         )))
         assert usage == []
 
@@ -319,7 +320,7 @@ def test_individual_student_can_consume_and_safely_reverse_auto_renewal(client):
     assert present.status_code == 200, present.text
     with SessionLocal() as db:
         subscriptions = list(db.scalars(select(StudentSubscription).where(
-            StudentSubscription.student_id == student["id"],
+            StudentSubscription.student_id == UUID(student["id"]),
         )))
         parent = next(row for row in subscriptions if str(row.id) == parent_id)
         children = [row for row in subscriptions if row.renewal_of_id == parent.id and row.status != SubscriptionStatus.CANCELLED]
