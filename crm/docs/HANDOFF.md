@@ -94,8 +94,9 @@ Therefore the first operational continuation task is to confirm Render has deplo
 ### P1 scheduled operations
 1. Run daily maintenance independently of a user opening the CRM.
 2. Maintenance includes renewal reconciliation, pause/resume lifecycle, reminder queue/outbox delivery, stale rate-limit cleanup and integrity checks as appropriate.
-3. Use a server-side scheduler/cron with idempotent commands. Never make GET endpoints perform scheduled writes.
-4. Avoid copying database credentials into source code.
+3. GitHub Actions OIDC is the selected free scheduler identity; no shared cron secret is required for the normal path.
+4. Because GitHub cron reads workflows only from the default branch, keep `.github/workflows/crm-maintenance.yml` on `main` while CRM code remains on `crm-v1`.
+5. Never make GET endpoints perform scheduled writes and never copy database credentials into source code.
 
 ### P1 observability
 1. Keep request IDs end-to-end.
