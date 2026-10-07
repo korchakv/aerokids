@@ -11,7 +11,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import crm
+from app.services import crm, staff_service
 
 router = APIRouter()
 
@@ -759,22 +759,22 @@ def payments_summary(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, S
 
 @router.post("/staff", response_model=StaffRead, status_code=201)
 def create_staff(data: StaffCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
-    return crm.create_staff(db, org_id, data)
+    return staff_service.create_staff(db, org_id, data)
 
 
 @router.get("/staff", response_model=list[StaffRead])
 def staff(active_only: bool = True, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
-    return crm.list_staff(db, org_id, active_only)
+    return staff_service.list_staff(db, org_id, active_only)
 
 
 @router.patch("/staff/{staff_id}", response_model=StaffRead)
 def update_staff(staff_id: UUID, data: StaffUpdate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
-    return crm.update_staff(db, org_id, staff_id, data)
+    return staff_service.update_staff(db, org_id, staff_id, data)
 
 
 @router.get("/staff/{staff_id}/profile", response_model=StaffProfile)
 def get_staff_profile(staff_id: UUID, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
-    item, location_ids, group_ids = crm.staff_profile(db, org_id, staff_id)
+    item, location_ids, group_ids = staff_service.staff_profile(db, org_id, staff_id)
     return StaffProfile(
         **StaffRead.model_validate(item).model_dump(),
         assignments=StaffAssignmentInfo(location_ids=location_ids, group_ids=group_ids),
@@ -783,18 +783,18 @@ def get_staff_profile(staff_id: UUID, org_id: UUID = Depends(require_org_roles(S
 
 @router.put("/staff/{staff_id}/locations", response_model=StaffRead)
 def update_staff_locations(staff_id: UUID, data: StaffLocationAssignment, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
-    return crm.set_staff_locations(db, org_id, staff_id, data.location_ids)
+    return staff_service.set_staff_locations(db, org_id, staff_id, data.location_ids)
 
 
 @router.post("/staff/{staff_id}/groups", status_code=201)
 def assign_staff_group(staff_id: UUID, data: StaffGroupAssignment, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
-    item = crm.assign_staff_to_group(db, org_id, staff_id, data.group_id, data.is_primary)
+    item = staff_service.assign_staff_to_group(db, org_id, staff_id, data.group_id, data.is_primary)
     return {"id": str(item.id), "group_id": str(item.group_id), "is_primary": item.is_primary}
 
 
 @router.post("/organization-memberships", response_model=OrganizationMembershipRead, status_code=201)
 def create_organization_membership(data: OrganizationMembershipCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER)), db: Session = Depends(get_db)):
-    membership, user = crm.create_membership(db, org_id, data)
+    membership, user = staff_service.create_membership(db, org_id, data)
     return OrganizationMembershipRead(
         id=membership.id,
         organization_id=membership.organization_id,

@@ -94,7 +94,7 @@ Progress:
 Required:
 1. Continue splitting `frontend/src/App.tsx` into feature modules without changing behavior. **In progress.**
 2. Split frontend API/types by domain while keeping a compatibility barrel. **Foundation complete; domain-specific API façades remain.**
-3. Continue decomposing legacy `backend/app/services/crm.py`; hardened services are already split, but legacy flows remain too large. **Not started.**
+3. Continue decomposing legacy `backend/app/services/crm.py`; hardened services are already split, but legacy flows remain too large. **Started: staff/membership domain implementation extracted to `services/staff_service.py` with compatibility wrappers retained in `crm.py`.**
 4. Keep every extraction behavior-preserving and protected by CI/E2E. **Active release rule.**
 5. Add targeted browser tests when moving a feature out of App.tsx. **Existing full desktop/mobile smoke retained; feature-specific coverage to expand.**
 
