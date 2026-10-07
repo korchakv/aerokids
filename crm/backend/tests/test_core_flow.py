@@ -2024,15 +2024,16 @@ def test_teacher_workspace_and_lessons_have_full_operational_access(client):
 
     groups = client.get("/workspace/groups", headers=teacher_headers)
     assert groups.status_code == 200, groups.text
-    assert {item["name"] for item in groups.json()} == {"Teacher Group", "Other Group"}
+    assert {item["name"] for item in groups.json()} == {"Teacher Group"}
 
     workspace_students = client.get("/workspace/students", headers=teacher_headers)
     assert workspace_students.status_code == 200, workspace_students.text
-    assert {item["first_name"] for item in workspace_students.json()} == {"Assigned Child", "Foreign Child"}
+    assert {item["first_name"] for item in workspace_students.json()} == {"Assigned Child"}
 
-    assert client.get("/workspace/leads", headers=teacher_headers).status_code == 200
+    # A teacher may work only with explicitly assigned groups/students.
+    assert client.get("/workspace/leads", headers=teacher_headers).status_code == 403
     assert client.get(f"/groups/{group_a_id}/roster", headers=teacher_headers).status_code == 200
-    assert client.get(f"/groups/{group_b_id}/roster", headers=teacher_headers).status_code == 200
+    assert client.get(f"/groups/{group_b_id}/roster", headers=teacher_headers).status_code == 403
 
     allowed_session = client.post(
         "/lesson-sessions",
@@ -2046,7 +2047,7 @@ def test_teacher_workspace_and_lessons_have_full_operational_access(client):
         headers=teacher_headers,
         json={"group_id": group_b_id, "starts_at": "2026-10-10T18:00:00+03:00"},
     )
-    assert second_session.status_code == 201, second_session.text
+    assert second_session.status_code == 403, second_session.text
 
 
 def test_audit_events_follow_student_workflow_and_are_tenant_scoped(client):
