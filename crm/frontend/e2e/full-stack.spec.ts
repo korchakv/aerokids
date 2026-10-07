@@ -38,4 +38,8 @@ test("owner can open modular staff locations and settings workspaces", async ({ 
   await page.getByText("Налаштування", { exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Основні налаштування" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Вигляд інтерфейсу" })).toBeVisible();
+
+  await page.getByText("Звіти", { exact: true }).first().click();
+  await expect(page.getByRole("heading", { name: "Заявка → учень" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Оплати" })).toBeVisible();
 });
