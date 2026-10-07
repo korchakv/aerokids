@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.core import Group, Organization
+from app.jobs.audit_invariants import run_audit
 from app.services import billing_hardening, hardening, notifications, tariff_hardening
 
 
@@ -64,10 +65,12 @@ def run_daily_maintenance() -> dict:
         cleanup_before = datetime.now(timezone.utc) - timedelta(days=7)
         cleanup = hardening.cleanup_stale_throttles(db, cleanup_before)
         email_delivery = notifications.deliver_pending(db)
+        integrity = run_audit()
         return {
             "organizations": results,
             "throttle_cleanup": cleanup,
             "transactional_email": email_delivery,
+            "integrity": integrity,
         }
     finally:
         db.close()

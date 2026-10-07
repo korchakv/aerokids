@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.network_security_router import router as network_security_router
+from app.api.operations_router import router as operations_router
 from app.api.auth_hardening_router import router as auth_hardening_router
 from app.api.tariff_hardening_router import router as tariff_hardening_router
 from app.api.billing_hardening_router import router as billing_hardening_router
@@ -16,9 +17,11 @@ from app.api.reconciliation_router import router as reconciliation_router
 from app.api.hardening_router import router as hardening_router
 from app.api.router import router
 from app.core.config import settings
+from app.core.logging import configure_app_logging
 from app.services import hardening, tariff_hardening
 
 
+configure_app_logging()
 logger = logging.getLogger("schoolcrm.http")
 is_production = settings.environment.lower() == "production"
 
@@ -63,12 +66,13 @@ async def add_security_headers(request: Request, call_next):
             headers={"Retry-After": "60", "Cache-Control": "no-store"},
         )
 
-    request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+    supplied_request_id = (request.headers.get("X-Request-Id") or "").strip()
+    request_id = supplied_request_id[:128] if supplied_request_id else str(uuid.uuid4())
     started = time.perf_counter()
     try:
         response = await call_next(request)
     except Exception:
-        logger.exception("request_failed request_id=%s method=%s path=%s", request_id, request.method, request.url.path)
+        logger.exception("request_failed", extra={"request_id": request_id, "method": request.method, "path": request.url.path})
         raise
 
     elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
@@ -82,18 +86,21 @@ async def add_security_headers(request: Request, call_next):
         response.headers["Strict-Transport-Security"] = "max-age=31536000"
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
     logger.info(
-        "request_complete request_id=%s method=%s path=%s status=%s duration_ms=%s",
-        request_id,
-        request.method,
-        request.url.path,
-        response.status_code,
-        elapsed_ms,
+        "request_complete",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status": response.status_code,
+            "duration_ms": elapsed_ms,
+        },
     )
     return response
 
 
 # Most specific handlers go first, followed by the compatibility hardening
 # overlay and then all untouched legacy routes.
+app.include_router(operations_router)
 app.include_router(network_security_router)
 app.include_router(auth_hardening_router)
 app.include_router(tariff_hardening_router)

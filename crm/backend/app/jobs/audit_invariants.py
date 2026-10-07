@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
+from datetime import timedelta
 
 from sqlalchemy import func, select
 
@@ -15,6 +16,7 @@ from app.models.core import (
     GroupSchedule,
     GroupStaff,
     LessonSession,
+    LessonStatus,
     Location,
     Organization,
     OrganizationMembership,
@@ -26,6 +28,8 @@ from app.models.core import (
     StudentStatus,
     StudentSubscription,
     SubscriptionPlan,
+    TrialLesson,
+    TrialStatus,
 )
 from app.models.hardening import (
     EnrollmentHistory,
@@ -51,6 +55,111 @@ class Finding:
 
 def _count(db, stmt) -> int:
     return int(db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+
+
+def _count_resource_conflicts(db, org: Organization) -> int:
+    group_rooms = {
+        row.group_id: row.room_id
+        for row in db.scalars(select(GroupRoomAssignment).where(
+            GroupRoomAssignment.organization_id == org.id,
+        ))
+    }
+    primary_staff = {
+        row.group_id: row.staff_id
+        for row in db.scalars(select(GroupStaff).where(
+            GroupStaff.organization_id == org.id,
+            GroupStaff.is_primary.is_(True),
+        ))
+    }
+    lesson_resources = {
+        row.session_id: row
+        for row in db.scalars(select(LessonResourceAssignment).where(
+            LessonResourceAssignment.organization_id == org.id,
+        ))
+    }
+    trial_resources = {
+        row.trial_id: row
+        for row in db.scalars(select(TrialResourceAssignment).where(
+            TrialResourceAssignment.organization_id == org.id,
+        ))
+    }
+
+    events: list[dict] = []
+    for row in db.scalars(select(LessonSession).where(
+        LessonSession.organization_id == org.id,
+        LessonSession.status != LessonStatus.CANCELLED,
+    )):
+        resources = lesson_resources.get(row.id)
+        events.append({
+            "kind": "group",
+            "start": crm._comparable_dt(row.starts_at, org.timezone),
+            "duration": row.duration_minutes,
+            "group_id": row.group_id,
+            "location_id": row.location_id,
+            "room_id": resources.room_id if resources else group_rooms.get(row.group_id),
+            "staff_id": resources.staff_id if resources else primary_staff.get(row.group_id),
+        })
+
+    for row in db.scalars(select(TrialLesson).where(
+        TrialLesson.organization_id == org.id,
+        TrialLesson.status == TrialStatus.SCHEDULED,
+    )):
+        resources = trial_resources.get(row.id)
+        events.append({
+            "kind": "trial",
+            "start": crm._comparable_dt(row.starts_at, org.timezone),
+            "duration": resources.duration_minutes if resources else 60,
+            "group_id": None,
+            "location_id": row.location_id,
+            "room_id": resources.room_id if resources else None,
+            "staff_id": resources.staff_id if resources else None,
+        })
+
+    for row in db.scalars(select(IndividualLessonSession).where(
+        IndividualLessonSession.organization_id == org.id,
+        IndividualLessonSession.status != "cancelled",
+    )):
+        events.append({
+            "kind": "individual",
+            "start": crm._comparable_dt(row.starts_at, org.timezone),
+            "duration": row.duration_minutes,
+            "group_id": None,
+            "location_id": row.location_id,
+            "room_id": row.room_id,
+            "staff_id": row.staff_id,
+        })
+
+    conflicts = 0
+    for index, left in enumerate(events):
+        left_end = left["start"] + timedelta(minutes=left["duration"])
+        for right in events[index + 1:]:
+            right_end = right["start"] + timedelta(minutes=right["duration"])
+            if not (left["start"] < right_end and right["start"] < left_end):
+                continue
+            same_group = bool(
+                left["group_id"] is not None
+                and right["group_id"] is not None
+                and left["group_id"] == right["group_id"]
+            )
+            same_staff = bool(
+                left["staff_id"] is not None
+                and right["staff_id"] is not None
+                and left["staff_id"] == right["staff_id"]
+            )
+            same_room = bool(
+                left["room_id"] is not None
+                and right["room_id"] is not None
+                and left["room_id"] == right["room_id"]
+            )
+            same_location_without_room = bool(
+                left["location_id"] is not None
+                and right["location_id"] is not None
+                and left["location_id"] == right["location_id"]
+                and (left["room_id"] is None or right["room_id"] is None)
+            )
+            if same_group or same_staff or same_room or same_location_without_room:
+                conflicts += 1
+    return conflicts
 
 
 def audit_organization(db, org: Organization) -> list[Finding]:
@@ -359,6 +468,15 @@ def audit_organization(db, org: Organization) -> list[Finding]:
             "payment_ledger_state_mismatch",
             finance_mismatches,
             "Stored payment status disagrees with immutable ledger balance",
+        ))
+
+    resource_conflicts = _count_resource_conflicts(db, org)
+    if resource_conflicts:
+        findings.append(Finding(
+            "warning",
+            "scheduled_resource_conflicts",
+            resource_conflicts,
+            "Scheduled lessons/trials share a group, teacher, room or unpartitioned location",
         ))
 
     return findings
