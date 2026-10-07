@@ -51,11 +51,14 @@ def daily_maintenance(
         if row.get("errors")
     ]
     email_result = result.get("transactional_email") or {}
-    if organization_errors or int(email_result.get("failed", 0) or 0) > 0:
+    integrity_result = result.get("integrity") or {}
+    integrity_ok = bool((integrity_result.get("summary") or {}).get("ok", True))
+    if organization_errors or int(email_result.get("failed", 0) or 0) > 0 or not integrity_ok:
         logger.error(
-            "daily_maintenance_degraded organization_error_count=%s email_failed=%s",
+            "daily_maintenance_degraded organization_error_count=%s email_failed=%s integrity_ok=%s",
             len(organization_errors),
             email_result.get("failed", 0),
+            integrity_ok,
         )
         raise HTTPException(
             status_code=500,
@@ -63,6 +66,7 @@ def daily_maintenance(
                 "status": "degraded",
                 "organization_errors": organization_errors,
                 "transactional_email": email_result,
+                "integrity": integrity_result.get("summary", {}),
             },
         )
 
