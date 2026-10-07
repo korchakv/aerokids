@@ -92,7 +92,7 @@ def bootstrap_owner(db: Session, data: BootstrapOwnerCreate) -> tuple[Organizati
     db.commit()
     db.refresh(organization)
     db.refresh(user)
-    return organization, user, create_access_token(user.id)
+    return organization, user, create_access_token(user.id, user.password_hash)
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User:
@@ -144,7 +144,7 @@ def auth_user_info(db: Session, user: User) -> AuthUserInfo:
 
 def issue_login_token(db: Session, email: str, password: str) -> tuple[str, AuthUserInfo]:
     user = authenticate_user(db, email, password)
-    return create_access_token(user.id), auth_user_info(db, user)
+    return create_access_token(user.id, user.password_hash), auth_user_info(db, user)
 
 
 def create_invitation(db: Session, org_id: UUID, invited_by_user_id: UUID, email: str, role: StaffRole, can_teach: bool = False):
@@ -270,7 +270,7 @@ def accept_invitation(db: Session, raw_token: str, full_name: str, password: str
 
     db.commit()
     db.refresh(user)
-    return user, create_access_token(user.id), auth_user_info(db, user)
+    return user, create_access_token(user.id, user.password_hash), auth_user_info(db, user)
 
 
 def create_password_reset_link(
@@ -350,4 +350,4 @@ def complete_password_reset(db: Session, raw_token: str, password: str):
 
     db.commit()
     db.refresh(user)
-    return user, create_access_token(user.id), auth_user_info(db, user)
+    return user, create_access_token(user.id, user.password_hash), auth_user_info(db, user)
