@@ -54,3 +54,22 @@ class NotificationOutbox(Base):
     last_error: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SubscriptionRuleSnapshot(Base):
+    __tablename__ = "subscription_rule_snapshots"
+    __table_args__ = (UniqueConstraint("subscription_id", name="uq_subscription_rule_snapshot"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    subscription_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("student_subscriptions.id"), index=True, nullable=False)
+    usage_mode: Mapped[str] = mapped_column(String(24), nullable=False)
+    absent_rule: Mapped[str] = mapped_column(String(24), nullable=False)
+    excused_rule: Mapped[str] = mapped_column(String(24), nullable=False)
+    late_rule: Mapped[str] = mapped_column(String(24), nullable=False)
+    end_rule: Mapped[str] = mapped_column(String(24), nullable=False)
+    renewal_trigger: Mapped[str] = mapped_column(String(24), nullable=False)
+    allow_debt: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    max_lates: Mapped[int | None] = mapped_column(Integer)
+    makeup_expiry_days: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
