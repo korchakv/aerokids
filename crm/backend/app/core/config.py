@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     migration_database_url: str | None = None
     jwt_secret: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
-    access_token_minutes: int = 480
+    access_token_minutes: int = 120
     auth_required: bool = False
     bootstrap_secret: str | None = None
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     auth_login_ip_limit: int = 30
     auth_login_email_limit: int = 10
     read_only_mode: bool = False
+    strict_rbac: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -43,8 +44,9 @@ class Settings(BaseSettings):
                 raise ValueError("Production CORS_ORIGINS must explicitly list trusted HTTPS origins")
             if any(not origin.startswith("https://") for origin in origins):
                 raise ValueError("Production CORS_ORIGINS must use HTTPS")
-            if self.access_token_minutes > 720:
-                raise ValueError("Production access tokens must not live longer than 12 hours")
+            if self.access_token_minutes > 240:
+                raise ValueError("Production access tokens must not live longer than 4 hours")
+            self.strict_rbac = True
         return self
 
 
