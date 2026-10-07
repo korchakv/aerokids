@@ -7,29 +7,40 @@ from fastapi import APIRouter, Header, HTTPException
 
 from app.core.config import settings
 from app.jobs.daily_maintenance import run_daily_maintenance
+from app.services.operations_auth import MaintenanceIdentityError, verify_github_actions_token
 
 
 router = APIRouter(prefix="/internal/operations", tags=["internal-operations"])
 logger = logging.getLogger("schoolcrm.operations")
 
 
-def _require_maintenance_secret(provided: str | None) -> None:
+def _authorize_maintenance(authorization: str | None, provided_secret: str | None) -> str:
     expected = settings.maintenance_secret
-    if not expected:
-        raise HTTPException(status_code=503, detail="Scheduled maintenance is not configured")
-    if not provided or not hmac.compare_digest(provided, expected):
-        raise HTTPException(status_code=401, detail="Invalid maintenance credential")
+    if expected and provided_secret and hmac.compare_digest(provided_secret, expected):
+        return "shared_secret"
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Maintenance identity required")
+    token = authorization.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Maintenance identity required")
+    try:
+        verify_github_actions_token(token)
+    except MaintenanceIdentityError as exc:
+        raise HTTPException(status_code=401, detail="Invalid maintenance identity") from exc
+    return "github_oidc"
 
 
 @router.post("/daily-maintenance")
 def daily_maintenance(
+    authorization: str | None = Header(default=None, alias="Authorization"),
     x_maintenance_secret: str | None = Header(default=None, alias="X-Maintenance-Secret"),
 ):
     if settings.read_only_mode:
         raise HTTPException(status_code=503, detail="CRM is in read-only maintenance mode")
-    _require_maintenance_secret(x_maintenance_secret)
+    auth_method = _authorize_maintenance(authorization, x_maintenance_secret)
 
-    logger.info("daily_maintenance_requested")
+    logger.info("daily_maintenance_requested", extra={"auth_method": auth_method})
     result = run_daily_maintenance()
     organization_errors = [
         {
