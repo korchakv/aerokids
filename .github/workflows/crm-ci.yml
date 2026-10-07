@@ -45,6 +45,9 @@ jobs:
       - name: Verify production Python runtime lock
         working-directory: .
         run: test "$(cat .python-version)" = "3.12.11"
+      - name: Validate operations shell scripts
+        working-directory: .
+        run: bash -n crm/scripts/backup-postgres.sh crm/scripts/restore-drill.sh
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
