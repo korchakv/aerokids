@@ -743,7 +743,7 @@ def test_schedule_session_and_attendance_flow(client):
         headers=headers,
         json={
             "group_id": group_id,
-            "starts_at": "2026-10-05T17:00:00+03:00",
+            "starts_at": f"{(date.today() + timedelta(days=1)).isoformat()}T17:00:00+03:00",
             "duration_minutes": 60,
             "topic": "FPV simulator",
         },
@@ -857,11 +857,11 @@ def test_attendance_consumes_subscription_and_creates_makeup(client):
     }).json()
     charge = client.post("/billing/charges", headers=headers, json={
         "student_id": student["id"], "plan_id": plan["id"], "group_id": group_id,
-        "starts_on": "2026-10-01", "due_date": "2026-10-01", "auto_renew": True,
+        "starts_on": date.today().isoformat(), "due_date": date.today().isoformat(), "auto_renew": True,
     })
     assert charge.status_code == 201, charge.text
 
-    lesson1 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-05T17:00:00+03:00"}).json()
+    lesson1 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": f"{(date.today() + timedelta(days=1)).isoformat()}T17:00:00+03:00"}).json()
     assert client.put(f"/lesson-sessions/{lesson1['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "present"}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
     assert subs[0]["used_lessons"] == 1 and subs[0]["remaining_lessons"] == 3
@@ -870,14 +870,14 @@ def test_attendance_consumes_subscription_and_creates_makeup(client):
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
     assert subs[0]["used_lessons"] == 0 and subs[0]["remaining_lessons"] == 4
 
-    lesson2 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-07T17:00:00+03:00"}).json()
-    assert client.put(f"/lesson-sessions/{lesson2['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "late"}]}).status_code == 200
+    lesson2 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": f"{(date.today() + timedelta(days=2)).isoformat()}T17:00:00+03:00"}).json()
+    assert client.put(f"/lesson-sessions/{lesson2['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "present"}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
     # The next attendance uses the pending makeup first, so it does not spend
     # a new subscription lesson.
     assert subs[0]["used_lessons"] == 0 and subs[0]["remaining_lessons"] == 4
 
-    lesson3 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": "2026-10-09T17:00:00+03:00"}).json()
+    lesson3 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": f"{(date.today() + timedelta(days=3)).isoformat()}T17:00:00+03:00"}).json()
     assert client.put(f"/lesson-sessions/{lesson3['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "absent", "consume_lesson": True}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
     assert subs[0]["used_lessons"] == 1 and subs[0]["remaining_lessons"] == 3
@@ -888,13 +888,13 @@ def test_student_attendance_history_endpoint(client):
     headers = {"X-Organization-Id": org["id"]}
     student = client.post("/students", headers=headers, json={"first_name": "Іван", "age_at_inquiry": 10}).json()
     group = client.post("/groups", headers=headers, json={"name": "History Group", "capacity": 8}).json()
-    enrollment = client.post("/enrollments", headers=headers, json={"student_id": student["id"], "group_id": group["id"]})
+    enrollment = client.post("/enrollments", headers=headers, json={"student_id": student["id"], "group_id": group["id"], "started_at": date.today().isoformat()})
     assert enrollment.status_code == 201, enrollment.text
     lesson = client.post("/lesson-sessions", headers=headers, json={
-        "group_id": group["id"], "starts_at": "2026-10-03T17:00:00+03:00", "topic": "FPV basics"
+        "group_id": group["id"], "starts_at": f"{date.today().isoformat()}T17:00:00+03:00", "topic": "FPV basics"
     }).json()
     marked = client.put(f"/lesson-sessions/{lesson['id']}/attendance", headers=headers, json={
-        "items": [{"student_id": student["id"], "status": "late", "note": "10 хв"}]
+        "items": [{"student_id": student["id"], "status": "present", "note": "Відвідав"}]
     })
     assert marked.status_code == 200, marked.text
 
@@ -905,8 +905,8 @@ def test_student_attendance_history_endpoint(client):
     assert rows[0]["session_id"] == lesson["id"]
     assert rows[0]["group_name"] == "History Group"
     assert rows[0]["topic"] == "FPV basics"
-    assert rows[0]["status"] == "late"
-    assert rows[0]["note"] == "10 хв"
+    assert rows[0]["status"] == "present"
+    assert rows[0]["note"] == "Відвідав"
 
 
 def test_tariff_requires_days_or_visits_and_can_be_archived(client):
@@ -1055,7 +1055,7 @@ def test_change_tariff_now_keeps_used_lesson_price_and_creates_credit(client):
             "student_id": student["id"],
             "plan_id": old_plan["id"],
             "group_id": group_id,
-            "starts_on": "2026-10-01",
+            "starts_on": date.today().isoformat(),
             "auto_renew": True,
         },
     )
@@ -1069,7 +1069,7 @@ def test_change_tariff_now_keeps_used_lesson_price_and_creates_credit(client):
     first = client.post(
         "/lesson-sessions",
         headers=headers,
-        json={"group_id": group_id, "starts_at": "2026-10-05T17:00:00+03:00"},
+        json={"group_id": group_id, "starts_at": f"{(date.today() + timedelta(days=1)).isoformat()}T17:00:00+03:00"},
     ).json()
     marked = client.put(
         f"/lesson-sessions/{first['id']}/attendance",
@@ -1098,11 +1098,12 @@ def test_change_tariff_now_keeps_used_lesson_price_and_creates_credit(client):
 
     # Seven remaining lessons are charged at the new unit price. On the last
     # one, auto-renewal applies the 350 UAH credit to the next 2000 UAH period.
-    for day in [7, 9, 11, 13, 15, 17, 19]:
+    for offset in range(2, 9):
+        lesson_date = date.today() + timedelta(days=offset)
         lesson = client.post(
             "/lesson-sessions",
             headers=headers,
-            json={"group_id": group_id, "starts_at": f"2026-10-{day:02d}T17:00:00+03:00"},
+            json={"group_id": group_id, "starts_at": f"{lesson_date.isoformat()}T17:00:00+03:00"},
         ).json()
         response = client.put(
             f"/lesson-sessions/{lesson['id']}/attendance",
@@ -1146,13 +1147,13 @@ def test_change_tariff_now_can_create_debt(client):
     charge = client.post(
         "/billing/charges",
         headers=headers,
-        json={"student_id": student["id"], "plan_id": old_plan["id"], "group_id": group_id, "starts_on": "2026-10-01"},
+        json={"student_id": student["id"], "plan_id": old_plan["id"], "group_id": group_id, "starts_on": date.today().isoformat()},
     ).json()
     client.patch(f"/payments/{charge['payment']['id']}/paid", headers=headers, json={"method": "card"})
     lesson = client.post(
         "/lesson-sessions",
         headers=headers,
-        json={"group_id": group_id, "starts_at": "2026-10-05T17:00:00+03:00"},
+        json={"group_id": group_id, "starts_at": f"{(date.today() + timedelta(days=1)).isoformat()}T17:00:00+03:00"},
     ).json()
     client.put(
         f"/lesson-sessions/{lesson['id']}/attendance",
@@ -1948,7 +1949,7 @@ def test_workspace_overviews_return_real_tenant_data(client):
     assert groups.json()[0]["capacity"] == 8
 
 
-def test_teacher_workspace_and_lessons_have_full_operational_access(client):
+def test_teacher_is_scoped_to_assigned_groups_and_cannot_manage_foreign_groups(client):
     bootstrap = client.post(
         "/auth/bootstrap",
         json={
@@ -2024,15 +2025,14 @@ def test_teacher_workspace_and_lessons_have_full_operational_access(client):
 
     groups = client.get("/workspace/groups", headers=teacher_headers)
     assert groups.status_code == 200, groups.text
-    assert {item["name"] for item in groups.json()} == {"Teacher Group", "Other Group"}
+    assert {item["name"] for item in groups.json()} == {"Teacher Group"}
 
     workspace_students = client.get("/workspace/students", headers=teacher_headers)
     assert workspace_students.status_code == 200, workspace_students.text
-    assert {item["first_name"] for item in workspace_students.json()} == {"Assigned Child", "Foreign Child"}
+    assert {item["first_name"] for item in workspace_students.json()} == {"Assigned Child"}
 
-    assert client.get("/workspace/leads", headers=teacher_headers).status_code == 200
     assert client.get(f"/groups/{group_a_id}/roster", headers=teacher_headers).status_code == 200
-    assert client.get(f"/groups/{group_b_id}/roster", headers=teacher_headers).status_code == 200
+    assert client.get(f"/groups/{group_b_id}/roster", headers=teacher_headers).status_code == 403
 
     allowed_session = client.post(
         "/lesson-sessions",
@@ -2041,13 +2041,12 @@ def test_teacher_workspace_and_lessons_have_full_operational_access(client):
     )
     assert allowed_session.status_code == 201, allowed_session.text
 
-    second_session = client.post(
+    foreign_session = client.post(
         "/lesson-sessions",
         headers=teacher_headers,
         json={"group_id": group_b_id, "starts_at": "2026-10-10T18:00:00+03:00"},
     )
-    assert second_session.status_code == 201, second_session.text
-
+    assert foreign_session.status_code == 403, foreign_session.text
 
 def test_audit_events_follow_student_workflow_and_are_tenant_scoped(client):
     org_a = create_org(client, "School A", "audit-a")
@@ -2247,7 +2246,7 @@ def test_group_capacity_blocks_extra_enrollment_and_transfer(client):
         json={"to_group_id": full_group_id},
     )
     assert transfer.status_code == 409
-    assert "available seats" in transfer.json()["detail"]
+    assert "вільних місць" in transfer.json()["detail"]
 
     third = client.post("/students", headers=headers, json={"first_name": "Третій"}).json()
     enrollment = client.post(
@@ -3014,7 +3013,7 @@ def test_group_detail_contains_attendance_and_billing(client):
     session = client.post(
         "/lesson-sessions",
         headers=headers,
-        json={"group_id": group_id, "starts_at": "2026-09-30T17:00:00+03:00"},
+        json={"group_id": group_id, "starts_at": f"{date.today().isoformat()}T17:00:00+03:00"},
     ).json()
     client.put(
         f"/lesson-sessions/{session['id']}/attendance",
@@ -3032,7 +3031,7 @@ def test_group_detail_contains_attendance_and_billing(client):
         json={
             "student_id": student["id"],
             "plan_id": plan["id"],
-            "starts_on": "2026-10-01",
+            "starts_on": date.today().isoformat(),
             "due_date": "2000-01-01",
         },
     )
@@ -3674,7 +3673,7 @@ def test_lesson_session_blocks_overlapping_time_for_same_group(client):
         },
     )
     assert overlap.status_code == 409, overlap.text
-    assert "Час зайнятий" in overlap.json()["detail"]
+    assert "Конфлікт розкладу" in overlap.json()["detail"]
 
     adjacent = client.post(
         "/lesson-sessions",

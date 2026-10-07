@@ -8,6 +8,27 @@ from app.models.core import (
     StudentContact,
     TrialLesson,
 )
+from app.models.hardening import (
+    EnrollmentHistory,
+    GroupRoomAssignment,
+    GroupScheduleHistory,
+    IndividualAttendance,
+    IndividualLessonSession,
+    IndividualSubscriptionUsage,
+    LessonDerivedBilling,
+    LessonFinalization,
+    LessonResourceAssignment,
+    MakeupCompletionLink,
+    Room,
+    StaffCapability,
+    TrialResourceAssignment,
+)
+from app.models.hardening_extensions import (
+    AttendanceDecision,
+    IndividualDerivedBilling,
+    NotificationOutbox,
+    SubscriptionRuleSnapshot,
+)
 
 __all__ = [
     "Organization",
@@ -18,4 +39,21 @@ __all__ = [
     "TrialLesson",
     "Group",
     "Enrollment",
+    "Room",
+    "GroupRoomAssignment",
+    "LessonResourceAssignment",
+    "TrialResourceAssignment",
+    "GroupScheduleHistory",
+    "EnrollmentHistory",
+    "LessonFinalization",
+    "LessonDerivedBilling",
+    "MakeupCompletionLink",
+    "StaffCapability",
+    "IndividualLessonSession",
+    "IndividualAttendance",
+    "IndividualSubscriptionUsage",
+    "AttendanceDecision",
+    "IndividualDerivedBilling",
+    "NotificationOutbox",
+    "SubscriptionRuleSnapshot",
 ]

@@ -1,19 +1,36 @@
 import logging
+import time
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.network_security_router import router as network_security_router
+from app.api.auth_hardening_router import router as auth_hardening_router
+from app.api.tariff_hardening_router import router as tariff_hardening_router
+from app.api.billing_hardening_router import router as billing_hardening_router
+from app.api.enrollment_hardening_router import router as enrollment_hardening_router
+from app.api.privacy_router import router as privacy_router
+from app.api.reconciliation_router import router as reconciliation_router
+from app.api.hardening_router import router as hardening_router
 from app.api.router import router
 from app.core.config import settings
+from app.services import hardening, tariff_hardening
 
 
+logger = logging.getLogger("schoolcrm.http")
 is_production = settings.environment.lower() == "production"
+
+# One canonical subscription policy is shared by group and individual
+# attendance. Existing subscriptions use frozen tariff-rule snapshots.
+hardening._eligible_subscription = tariff_hardening.eligible_subscription
+hardening._should_consume = tariff_hardening.should_consume
 
 
 app = FastAPI(
     title="School CRM API",
-    version="0.4.0",
+    version="0.5.0",
     description="Multi-tenant CRM core for schools and clubs.",
     docs_url=None if is_production else "/docs",
     redoc_url=None if is_production else "/redoc",
@@ -31,7 +48,9 @@ app.add_middleware(
         "Content-Type",
         "X-Organization-Id",
         "X-Bootstrap-Secret",
+        "X-Request-Id",
     ],
+    expose_headers=["X-Request-Id"],
 )
 
 
@@ -44,7 +63,16 @@ async def add_security_headers(request: Request, call_next):
             headers={"Retry-After": "60", "Cache-Control": "no-store"},
         )
 
-    response = await call_next(request)
+    request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("request_failed request_id=%s method=%s path=%s", request_id, request.method, request.url.path)
+        raise
+
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    response.headers["X-Request-Id"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -53,7 +81,25 @@ async def add_security_headers(request: Request, call_next):
     if is_production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000"
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    logger.info(
+        "request_complete request_id=%s method=%s path=%s status=%s duration_ms=%s",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
     return response
 
 
+# Most specific handlers go first, followed by the compatibility hardening
+# overlay and then all untouched legacy routes.
+app.include_router(network_security_router)
+app.include_router(auth_hardening_router)
+app.include_router(tariff_hardening_router)
+app.include_router(billing_hardening_router)
+app.include_router(enrollment_hardening_router)
+app.include_router(privacy_router)
+app.include_router(reconciliation_router)
+app.include_router(hardening_router)
 app.include_router(router)

@@ -1,6 +1,7 @@
 import os
 
 os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", "sqlite:///./test_schoolcrm.db")
+os.environ.setdefault("JWT_SECRET", "test-only-jwt-secret-at-least-32-characters-long")
 
 import pytest
 from fastapi.testclient import TestClient

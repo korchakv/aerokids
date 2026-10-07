@@ -475,7 +475,7 @@ export async function loadWorkspace(session: Session): Promise<WorkspaceBundle> 
   const membership = session.user.memberships.find((item) => item.organization_id === session.organizationId);
   const role = membership?.role;
 
-  const leadsPromise = ["owner", "admin", "manager", "teacher"].includes(role ?? "")
+  const leadsPromise = ["owner", "admin", "manager"].includes(role ?? "")
     ? apiGet<WorkspaceLead[]>("/workspace/leads", session)
     : Promise.resolve([]);
 
@@ -592,19 +592,19 @@ export async function loadOperations(session: Session): Promise<OperationsBundle
   const membership = session.user.memberships.find((item) => item.organization_id === session.organizationId);
   const role = membership?.role;
 
-  const fullAccess = ["owner", "admin", "manager", "teacher"].includes(role ?? "");
+  const operationalAccess = ["owner", "admin", "manager", "teacher"].includes(role ?? "");
+  const staffAccess = ["owner", "admin"].includes(role ?? "");
+  const financeAccess = ["owner", "admin", "accountant"].includes(role ?? "");
 
-  const locationsPromise = fullAccess
+  const locationsPromise = operationalAccess
     ? apiGet<ApiLocation[]>("/locations", session)
     : Promise.resolve([]);
 
-  const staffPromise = fullAccess
+  const staffPromise = staffAccess
     ? apiGet<ApiStaff[]>("/staff", session).then(async (items) => Promise.all(
         items.map((item) => apiGet<ApiStaffProfile>(`/staff/${item.id}/profile`, session))
       ))
     : Promise.resolve([]);
-
-  const financeAccess = fullAccess || role === "accountant";
 
   const plansPromise = financeAccess
     ? apiGet<ApiSubscriptionPlan[]>("/subscription-plans", session)

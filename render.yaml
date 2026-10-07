@@ -18,14 +18,18 @@ services:
         value: production
       - key: AUTH_REQUIRED
         value: "true"
+      - key: STRICT_RBAC
+        value: "true"
       - key: JWT_SECRET
         sync: false
       - key: BOOTSTRAP_SECRET
         sync: false
       - key: ACCESS_TOKEN_MINUTES
-        value: "480"
+        value: "120"
       - key: CORS_ORIGINS
         value: https://aerokids-crm.onrender.com,https://crm.aerokids.space,https://aerokids.space,https://www.aerokids.space
+      - key: FRONTEND_URL
+        value: https://aerokids-crm.onrender.com
       - key: AUTH_LOGIN_WINDOW_MINUTES
         value: "15"
       - key: AUTH_LOGIN_IP_LIMIT
@@ -34,6 +38,16 @@ services:
         value: "10"
       - key: READ_ONLY_MODE
         value: "false"
+      - key: TRANSACTIONAL_EMAIL_ENABLED
+        value: "false"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
+        sync: false
 
   - type: web
     name: aerokids-crm
@@ -45,6 +59,8 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://aerokids-crm-api.onrender.com
+      - key: VITE_DEMO_MODE
+        value: "false"
     routes:
       - type: rewrite
         source: /*
