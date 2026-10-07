@@ -13,7 +13,9 @@ import { ageRange, hasDuplicateSlots, scheduleDraftLabel, scheduleSlots } from "
 import { applyTeaching, SCHEDULE_DAY_NAMES, type LessonItem } from "./features/teaching/model";
 import { type PaymentDemo, type PlanDemo } from "./features/billing/model";
 import type { LocationDemo } from "./features/locations/types";
+import { LocationsView } from "./features/locations/LocationsView";
 import { staffRoleValue, type StaffDemo, type StaffRoleDemo } from "./features/staff/model";
+import { StaffView } from "./features/staff/StaffView";
 import { applyOperations } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
 import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
@@ -3331,50 +3333,22 @@ function App() {
           </aside>
         </section>}
 
-        {active === "Працівники" && <section className="staffLayout">
-          <article className="panel staffPanel">
-            <div className="panelHead">
-              <div><p className="eyebrow">Команда</p><h2>Працівники</h2></div>
-              <div className="staffActions"><button className="search" onClick={() => { setInviteLink(""); setShowInviteForm(true); }}>Запросити в CRM</button><button className="primary" onClick={() => setShowStaffForm(true)}>+ Працівник</button></div>
-            </div>
-            <div className="staffTable">
-              <div className="staffRow staffHead"><span>Працівник</span><span>Роль</span><span>Локації</span><span>Групи</span><span>Статус</span></div>
-              {staff.map((member) => <button className="staffRow staffButton" key={member.id} onClick={() => setSelectedStaffId(member.id)}>
-                <span className="staffIdentity"><i>{member.fullName[0]}</i><b>{member.fullName}<small>{member.email || member.phone || "Контакти не вказано"}</small></b></span>
-                <span>{member.role}</span>
-                <span>{member.locationIds.map((id) => locations.find((loc) => loc.id === id)?.name).filter(Boolean).join(", ") || "—"}</span>
-                <span>{member.groupIds.length}</span>
-                <span className={"staffStatus " + (member.isActive ? "active" : "inactive")}>{member.isActive ? "Активний" : "Неактивний"}</span>
-              </button>)}
-            </div>
-          </article>
-          <aside className="panel staffSummary">
-            <p className="eyebrow">Команда</p><h2>{staff.filter((x) => x.isActive).length} активних</h2>
-            <div className="summaryMetric"><span>Викладачі</span><strong>{staff.filter((x) => x.role === "Викладач" && x.isActive).length}</strong></div>
-            <div className="summaryMetric"><span>Адміністрація</span><strong>{staff.filter((x) => ["Власник","Адміністратор","Менеджер"].includes(x.role) && x.isActive).length}</strong></div>
-            <div className="summaryMetric"><span>Локацій</span><strong>{locations.filter((x) => x.isActive).length}</strong></div>
-          </aside>
-        </section>}
+        {active === "Працівники" && <StaffView
+          staff={staff}
+          locations={locations}
+          onSelectStaff={setSelectedStaffId}
+          onInvite={() => { setInviteLink(""); setShowInviteForm(true); }}
+          onCreate={() => setShowStaffForm(true)}
+        />}
 
-        {active === "Локації" && <section className="locationsLayout">
-          <div className="panelHead locationsHead">
-            <div><p className="eyebrow">Мережа</p><h2>Локації школи</h2></div>
-            {canManageLocations && <button className="primary" onClick={openLocationCreation}>+ Додати локацію</button>}
-          </div>
-          <div className="locationCards">
-            {locations.map((location) => {
-              const locationStaff = staff.filter((member) => member.locationIds.includes(location.id) && member.isActive);
-              const locationGroups = groups.filter((group) => group.location === location.name);
-              return <article className="panel locationCard" key={location.id}>
-                <div className="locationTop"><span className="locationIcon">⌂</span><div className="locationTopActions"><span className={"staffStatus " + (location.isActive ? "active" : "inactive")}>{location.isActive ? "Активна" : "Неактивна"}</span>{canManageLocations && <button className="locationEditIcon" type="button" aria-label={"Редагувати " + location.name} title="Редагувати локацію" onClick={() => openLocationEdit(location)}><UiIcon name="edit" size={14} /></button>}</div></div>
-                <h2>{location.name}</h2>
-                <p>{location.address || "Адресу ще не вказано"}</p>
-                <div className="locationMetrics"><span><b>{locationStaff.length}</b> працівників</span><span><b>{locationGroups.length}</b> груп</span></div>
-                <div className="locationPeople">{locationStaff.slice(0,4).map((member) => <i title={member.fullName} key={member.id}>{member.fullName[0]}</i>)}</div>
-              </article>;
-            })}
-          </div>
-        </section>}
+        {active === "Локації" && <LocationsView
+          locations={locations}
+          staff={staff}
+          groups={groups}
+          canManageLocations={canManageLocations}
+          onCreate={openLocationCreation}
+          onEdit={openLocationEdit}
+        />}
 
                 {active === "Налаштування" && <section className="settingsLayout">
           <div className="settingsPrimaryColumn">
