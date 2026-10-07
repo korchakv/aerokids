@@ -1,3 +1,5 @@
+import type { EntityId } from "../leads/model";
+
 export type PlanDemo = {
   id: EntityId;
   name: string;
