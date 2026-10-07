@@ -1,74 +1,22 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, checkIntakeDuplicates, clearSession, getBootstrapStatus, getInvitationStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
+import { UiIcon, navigationIcon } from "./components/UiIcon";
+import { AuditHistory } from "./components/AuditHistory";
+import { LoginView } from "./features/auth/LoginView";
+import { LeadKanban, LeadTable } from "./features/leads/LeadBoard";
+import { canonicalLeadSource, leadActionMeta, leadActionPriority, leadDisplayStatus, leadIsDeferred, leadKanbanColumn, leadMissingDetails, leadPrimaryActionLabel, leadSourceLabel, type EntityId, type Lead, type LeadKanbanColumnId, type LeadStatus } from "./features/leads/model";
+import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
+import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
+import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
+import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
-type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
 
-type EntityId = string;
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
 const UI_SCALE_LEVELS: UiScale[] = [1, 1.1, 1.25, 1.4];
 
-type AvailabilitySlot = {
-  weekday: number;
-  start_time: string;
-  end_time: string;
-  preference: "preferred" | "possible" | "avoid";
-  note?: string | null;
-};
 
-type AvailabilityWindowDraft = {
-  id: string;
-  weekdays: number[];
-  start_time: string;
-  end_time: string;
-  preference: AvailabilitySlot["preference"];
-  note?: string | null;
-};
 
-type DraftScheduleSlot = { weekday: number; start_time: string; duration_minutes: number };
 
-type LeadKanbanColumnId = "new" | "contacted" | "trial" | "no_show" | "after_trial" | "waiting" | "deferred" | "closed";
 
-const leadKanbanColumns: Array<{ id: LeadKanbanColumnId; title: string; hint: string }> = [
-  { id: "new", title: "Нові", hint: "Перший контакт" },
-  { id: "contacted", title: "Зв’язались", hint: "В роботі" },
-  { id: "trial", title: "Пробне", hint: "Заплановано" },
-  { id: "no_show", title: "Не прийшов", hint: "Потрібна дія" },
-  { id: "after_trial", title: "Після пробного", hint: "Очікуємо рішення" },
-  { id: "waiting", title: "Очікує групу", hint: "Готовий до набору" },
-  { id: "deferred", title: "Повернутись пізніше", hint: "Нагадування на майбутнє" },
-  { id: "closed", title: "Закриті", hint: "Відмова / неактуально" },
-];
-
-type Lead = {
-  id: EntityId;
-  createdAt?: string;
-  firstName?: string;
-  lastName?: string;
-  child: string;
-  age: number;
-  parent: string;
-  phone: string;
-  childPhone?: string;
-  source: string;
-  status: LeadStatus;
-  comment?: string;
-  preferredLocationId?: string;
-  preferredLocationName?: string;
-  availability?: AvailabilitySlot[];
-  trialId?: string;
-  trialAt?: string;
-  trialLocationId?: string;
-  trialLocation?: string;
-  trialResult?: "scheduled" | "completed" | "no_show" | "cancelled";
-  recommendedLevel?: string;
-  teacherNotes?: string;
-  nextContactAt?: string;
-  deferredUntil?: string;
-  deferredReason?: string;
-  deferredNote?: string;
-  closeReason?: string;
-  closeNote?: string;
-};
 
 type GroupItem = {
   id: EntityId;
@@ -149,115 +97,6 @@ type StaffDemo = {
 };
 
 const allNav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти", "Налаштування"];
-
-type UiIconName = "home" | "leads" | "student" | "groups" | "calendar" | "attendance" | "wallet" | "staff" | "location" | "reports" | "settings" | "search" | "logout" | "login" | "plus" | "sun" | "moon" | "theme" | "edit" | "x" | "back";
-
-function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number }) {
-  const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
-  switch (name) {
-    case "home": return <svg {...common}><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>;
-    case "leads": return <svg {...common}><path d="M8 7h8"/><path d="M8 11h5"/><path d="M5 3h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>;
-    case "student": return <svg {...common}><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-4 3.1-6 7-6s6.2 2 7 6"/></svg>;
-    case "groups": return <svg {...common}><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3.5 20c.7-4 2.5-6 5.5-6s4.8 2 5.5 6"/><path d="M14 15c3.3-.6 5.5 1 6.5 4"/></svg>;
-    case "calendar": return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2"/></svg>;
-    case "attendance": return <svg {...common}><path d="M9 5H6a2 2 0 0 0-2 2v13h16V7a2 2 0 0 0-2-2h-3"/><path d="M9 3h6v4H9z"/><path d="m8 14 2.5 2.5L16 11"/></svg>;
-    case "wallet": return <svg {...common}><path d="M4 6h14a2 2 0 0 1 2 2v11H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/><path d="M15 11h6v5h-6a2.5 2.5 0 0 1 0-5Z"/></svg>;
-    case "staff": return <svg {...common}><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-4 2.5-6 5.5-6 1.7 0 3 .5 4 1.4"/><path d="M17 13v6M14 16h6"/></svg>;
-    case "location": return <svg {...common}><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>;
-    case "reports": return <svg {...common}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>;
-    case "settings": return <svg {...common}><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7-.7-1.7.9-1.9-2.1-2.1-1.9.9-1.7-.7L10.5 2h-3l-.7 2-1.7.7-1.9-.9L1.1 5.9l.9 1.9-.7 1.7-2 .7v3l2 .7.7 1.7-.9 1.9 2.1 2.1 1.9-.9 1.7.7.7 2h3l.7-2 1.7-.7 1.9.9 2.1-2.1-.9-1.9.7-1.7Z" transform="translate(2.5 0) scale(.78)"/></svg>;
-    case "search": return <svg {...common}><circle cx="11" cy="11" r="6.5"/><path d="m16 16 5 5"/></svg>;
-    case "logout": return <svg {...common}><path d="M10 4H5v16h5"/><path d="M14 8l4 4-4 4M18 12H9"/></svg>;
-    case "login": return <svg {...common}><path d="M14 4h5v16h-5"/><path d="m10 8-4 4 4 4M6 12h9"/></svg>;
-    case "plus": return <svg {...common}><path d="M12 5v14M5 12h14"/></svg>;
-    case "sun": return <svg {...common}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>;
-    case "moon": return <svg {...common}><path d="M20 15.5A8 8 0 1 1 8.5 4 6.5 6.5 0 0 0 20 15.5Z"/></svg>;
-    case "theme": return <svg {...common}><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/></svg>;
-    case "edit": return <svg {...common}><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="m13.8 8.2 3 3"/></svg>;
-    case "x": return <svg {...common}><path d="m6 6 12 12M18 6 6 18"/></svg>;
-    case "back": return <svg {...common}><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg>;
-  }
-}
-
-function navigationIcon(item: string): UiIconName {
-  const map: Record<string, UiIconName> = {
-    "Дашборд": "home", "Заявки": "leads", "Учні": "student", "Групи": "groups",
-    "Розклад": "calendar", "Відвідування": "attendance", "Оплати": "wallet",
-    "Працівники": "staff", "Локації": "location", "Звіти": "reports", "Налаштування": "settings",
-  };
-  return map[item] ?? "home";
-}
-
-
-function cleanSpaces(value: string) {
-  return value.trim().replace(/\s+/g, " ");
-}
-
-function personNameError(value: string, label = "Ім’я"): string {
-  const name = cleanSpaces(value);
-  if (!name) return label + " обов’язкове";
-  if (name.length < 2) return label + " має містити щонайменше 2 символи";
-  if (name.length > 160) return label + " занадто довге";
-  if (!/^[A-Za-zА-Яа-яІіЇїЄєҐґ'’\- ]+$/.test(name)) return label + ": лише літери, пробіл, апостроф або дефіс";
-  if (/^[ '’\-]|[ '’\-]$|[ '’\-]{2,}/.test(name)) return "Перевірте написання поля «" + label + "»";
-  return "";
-}
-
-function fullNameError(value: string, label: string): string {
-  const basic = personNameError(value, label);
-  if (basic) return basic;
-  if (cleanSpaces(value).split(" ").filter(Boolean).length < 2) return label + ": вкажіть ім’я та прізвище";
-  return "";
-}
-
-
-function normalizeUaPhone(value: string): string | null {
-  const digits = value.replace(/\D/g, "");
-  let national = "";
-  if (digits.startsWith("380") && digits.length === 12) national = digits.slice(3);
-  else if (digits.startsWith("0") && digits.length === 10) national = digits.slice(1);
-  else if (digits.length === 9) national = digits;
-  else return null;
-  if (!/^[3-9]\d{8}$/.test(national)) return null;
-  return "+380" + national;
-}
-
-function uaPhoneError(value: string, required = true): string {
-  if (!value.trim()) return required ? "Телефон обов’язковий" : "";
-  return normalizeUaPhone(value) ? "" : "Некоректний номер України. Приклад: +380 67 123 45 67";
-}
-
-function formatUaPhone(value: string): string {
-  const normalized = normalizeUaPhone(value);
-  if (!normalized) return value;
-  const n = normalized.slice(4);
-  return "+380 " + n.slice(0, 2) + " " + n.slice(2, 5) + " " + n.slice(5, 7) + " " + n.slice(7, 9);
-}
-
-function normalizedSearch(value: string) {
-  return cleanSpaces(value).toLocaleLowerCase("uk-UA");
-}
-
-function searchMatches(query: string, value: string | null | undefined) {
-  if (!value) return false;
-  if (normalizedSearch(value).includes(query)) return true;
-  const queryDigits = query.replace(/\D/g, "");
-  const valueDigits = value.replace(/\D/g, "");
-  return queryDigits.length >= 3 && valueDigits.includes(queryDigits);
-}
-
-function dayOffsetForDate(value: string | Date) {
-  const current = new Date();
-  current.setHours(0, 0, 0, 0);
-  const target = typeof value === "string" ? new Date(value) : new Date(value);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - current.getTime()) / (24 * 60 * 60 * 1000));
-}
-
-function weekdayLong(value: string) {
-  const text = new Date(value).toLocaleDateString("uk-UA", { weekday: "long" });
-  return text ? text.charAt(0).toLocaleUpperCase("uk-UA") + text.slice(1) : "";
-}
 
 function tariffHistoryDetail(event: ApiAuditEvent) {
   const payload = event.payload ?? {};
@@ -4155,7 +3994,7 @@ function App() {
             <span>Службова дія</span>
             <button className="subtleDangerAction" type="button" disabled={studentDeleteSaving} onClick={deleteSelectedStudent}>{studentDeleteSaving ? "Видаляємо…" : "Видалити учня"}</button>
           </div>}
-          {apiEnabled ? <AuditHistory title="Історія учня" events={entityEvents} loading={historyLoading} /> : <div className="history">
+          {apiEnabled ? <AuditHistory title="Історія учня" events={entityEvents} loading={historyLoading} labelForEvent={auditEventLabel} detailForEvent={auditEventDetail} /> : <div className="history">
             <h3>Історія учня</h3>
             <div><i></i><p><b>Пробне заняття</b><span>{selectedStudent.recommendedLevel ?? "Рівень не вказано"}</span></p></div>
             <div><i></i><p><b>Зараховано</b><span>{studentGroup(selectedStudent.id)?.name ?? "Групу не вказано"}</span></p></div>
@@ -4481,7 +4320,7 @@ function App() {
             <span>Службова дія</span>
             <button className="subtleDangerAction" type="button" disabled={leadDeleteSaving} onClick={deleteSelectedLead}>{leadDeleteSaving ? "Видаляємо…" : "Видалити заявку"}</button>
           </div>}
-          {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} /> : <div className="history">
+          {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} labelForEvent={auditEventLabel} detailForEvent={auditEventDetail} /> : <div className="history">
             <h3>Історія</h3>
             <div><i></i><p><b>Заявка створена</b><span>Джерело: {leadSourceLabel(selected.source)}</span></p></div>
             {selected.trialAt && <div><i></i><p><b>Пробне заплановано</b><span>{new Date(selected.trialAt).toLocaleString("uk-UA")}</span></p></div>}
@@ -4492,10 +4331,6 @@ function App() {
       </div>}
     </div>
   );
-}
-
-function leadIsDeferred(lead: Lead): boolean {
-  return Boolean(lead.deferredUntil && dateValue(lead.deferredUntil) > Date.now());
 }
 
 function deferReasonLabel(reason: string | null | undefined): string {
@@ -4511,160 +4346,6 @@ function deferReasonLabel(reason: string | null | undefined): string {
   return reason ? (labels[reason] ?? reason) : "Причину не вказано";
 }
 
-function leadKanbanColumn(lead: Lead): LeadKanbanColumnId {
-  if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return "closed";
-  if (leadIsDeferred(lead)) return "deferred";
-  if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "no_show";
-  if (lead.status === "Після пробного") return "after_trial";
-  if (lead.status === "Пробне заплановано") return "trial";
-  if (lead.status === "Очікує групу") return "waiting";
-  if (lead.status === "Нова") return "new";
-  return "contacted";
-}
-
-function leadUrgency(lead: Lead): "overdue" | "today" | "planned" | "none" {
-  const now = new Date();
-  if (lead.nextContactAt) {
-    const action = new Date(lead.nextContactAt);
-    if (action.getTime() < now.getTime()) return "overdue";
-    if (action.toDateString() === now.toDateString()) return "today";
-    return "planned";
-  }
-  if (lead.trialResult === "no_show" || lead.status === "Після пробного" || lead.status === "Нова") return "today";
-  if (lead.status === "Пробне заплановано") return "planned";
-  return "none";
-}
-
-function LeadKanban({
-  leads,
-  onOpen,
-  onMove,
-  movingId,
-}: {
-  leads: Lead[];
-  onOpen: (id: EntityId) => void;
-  onMove: (lead: Lead, target: LeadKanbanColumnId) => void;
-  movingId: EntityId | null;
-}) {
-  const [draggedId, setDraggedId] = useState<EntityId | null>(null);
-  const [overColumn, setOverColumn] = useState<LeadKanbanColumnId | null>(null);
-  const [deferredExpanded, setDeferredExpanded] = useState(false);
-  const [closedExpanded, setClosedExpanded] = useState(false);
-  const activeColumns = leadKanbanColumns.filter((column) => column.id !== "closed" && column.id !== "deferred");
-  const deferredColumn = leadKanbanColumns.find((column) => column.id === "deferred")!;
-  const closedColumn = leadKanbanColumns.find((column) => column.id === "closed")!;
-  const deferredItems = leads.filter((lead) => leadKanbanColumn(lead) === "deferred").sort((a, b) => dateValue(a.deferredUntil) - dateValue(b.deferredUntil));
-  const closedItems = leads.filter((lead) => leadKanbanColumn(lead) === "closed");
-
-  const renderColumn = (column: (typeof leadKanbanColumns)[number], items: Lead[], compact = false) => <section
-    className={"kanbanColumn column-" + column.id + (compact ? " closedKanbanColumn" : "") + (overColumn === column.id ? " dragOver" : "")}
-    key={column.id}
-    onDragOver={(event) => { event.preventDefault(); setOverColumn(column.id); }}
-    onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
-    onDrop={(event) => {
-      event.preventDefault();
-      const id = event.dataTransfer.getData("text/lead-id") || draggedId;
-      const lead = leads.find((item) => item.id === id);
-      setDraggedId(null);
-      setOverColumn(null);
-      if (lead) void onMove(lead, column.id);
-    }}
-  >
-    <header className="kanbanColumnHead">
-      <div><i></i><b>{column.title}</b><span>{column.hint}</span></div>
-      <strong>{items.length}</strong>
-    </header>
-    <div className="kanbanCards">
-      {items.length === 0 && <div className="kanbanEmpty">Перетягніть сюди заявку</div>}
-      {items.map((lead) => {
-        const urgency = leadUrgency(lead);
-        const missingDetails = leadMissingDetails(lead);
-        return <article
-          key={lead.id}
-          draggable={movingId !== lead.id}
-          className={"leadKanbanCard urgency-" + urgency + (movingId === lead.id ? " saving" : "")}
-          onDragStart={(event) => {
-            setDraggedId(lead.id);
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/lead-id", lead.id);
-          }}
-          onDragEnd={() => { setDraggedId(null); setOverColumn(null); }}
-          onClick={() => onOpen(lead.id)}
-        >
-          <div className="kanbanCardTop">
-            <span className="leadMiniAvatar">{lead.child.slice(0, 1)}</span>
-            <div><b>{lead.child}</b><small>{lead.age ? lead.age + " років" : "Вік не вказано"}</small></div>
-            <button className="kanbanMore" aria-label="Відкрити заявку" onClick={(event) => { event.stopPropagation(); onOpen(lead.id); }}>•••</button>
-          </div>
-          <div className="kanbanMeta">
-            <span className="sourceBadge">{leadSourceLabel(lead.source)}</span>
-            {lead.preferredLocationName && <span className="locationBadge">{lead.preferredLocationName}</span>}
-            {lead.recommendedLevel && <span className="levelBadge">{lead.recommendedLevel}</span>}
-            {missingDetails.length > 0 && <span className="incompleteDataBadge" title={"Не заповнено: " + missingDetails.join(", ")}>! Доповнити дані</span>}
-          </div>
-          {(() => { const action = leadActionMeta(lead); return <div className={"kanbanNextAction action-" + action.type + " " + urgency}><i>{urgency === "overdue" ? "!" : action.icon}</i><span><b>{urgency === "overdue" ? "Прострочено" : action.label}</b><small>{leadNextAction(lead)}</small></span></div>; })()}
-          {(lead.parent || lead.phone) && <div className="kanbanContact">
-            {lead.parent && <b>{lead.parent}</b>}
-            {lead.phone && <small>{formatUaPhone(lead.phone)}</small>}
-          </div>}
-          {movingId === lead.id && <div className="kanbanSaving">Оновлюємо…</div>}
-        </article>;
-      })}
-    </div>
-  </section>;
-
-  return <div className="kanbanBoard">
-    <div className="leadKanban">{activeColumns.map((column) => renderColumn(column, leads.filter((lead) => leadKanbanColumn(lead) === column.id)))}</div>
-    <div
-      className={"closedKanbanDock deferredKanbanDock " + (deferredExpanded ? "expanded " : "") + (overColumn === "deferred" ? "dragOver" : "")}
-      onDragOver={(event) => { event.preventDefault(); setOverColumn("deferred"); }}
-      onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
-      onDrop={(event) => {
-        event.preventDefault();
-        const id = event.dataTransfer.getData("text/lead-id") || draggedId;
-        const lead = leads.find((item) => item.id === id);
-        setDraggedId(null);
-        setOverColumn(null);
-        if (lead) void onMove(lead, "deferred");
-      }}
-    >
-      <button className="closedKanbanToggle" onClick={() => setDeferredExpanded((value) => !value)}>
-        <span><i></i><b>{deferredColumn.title}</b><small>{deferredColumn.hint}</small></span>
-        <span><strong>{deferredItems.length}</strong><em>{deferredExpanded ? "Згорнути ↑" : "Розгорнути ↓"}</em></span>
-      </button>
-      {deferredExpanded && <div className="closedKanbanContent">{renderColumn(deferredColumn, deferredItems, true)}</div>}
-    </div>
-    <div
-      className={"closedKanbanDock " + (closedExpanded ? "expanded " : "") + (overColumn === "closed" ? "dragOver" : "")}
-      onDragOver={(event) => { event.preventDefault(); setOverColumn("closed"); }}
-      onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
-      onDrop={(event) => {
-        event.preventDefault();
-        const id = event.dataTransfer.getData("text/lead-id") || draggedId;
-        const lead = leads.find((item) => item.id === id);
-        setDraggedId(null);
-        setOverColumn(null);
-        if (lead) void onMove(lead, "closed");
-      }}
-    >
-      <button className="closedKanbanToggle" onClick={() => setClosedExpanded((value) => !value)}>
-        <span><i></i><b>{closedColumn.title}</b><small>{closedColumn.hint}</small></span>
-        <span><strong>{closedItems.length}</strong><em>{closedExpanded ? "Згорнути ↑" : "Розгорнути ↓"}</em></span>
-      </button>
-      {closedExpanded && <div className="closedKanbanContent">{renderColumn(closedColumn, closedItems, true)}</div>}
-    </div>
-  </div>;
-}
-
-function LeadTable({ leads, onOpen }: { leads: Lead[]; onOpen: (id: EntityId) => void }) {
-  return <div className="table leadTable">
-    <div className="row tableHead"><span>Дитина</span><span>Вік</span><span>Батьки</span><span>Джерело</span><span>Статус</span><span>Наступна дія</span></div>
-    {leads.length === 0 && <div className="emptyState">За цим фільтром заявок немає.</div>}
-    {leads.map((lead) => <button className="row rowButton" key={lead.id} onClick={() => onOpen(lead.id)}>
-      <b>{lead.child}</b><span>{lead.age}</span><span>{lead.parent}</span><span>{leadSourceLabel(lead.source)}</span><span className="pill">{leadDisplayStatus(lead)}</span>{(() => { const action = leadActionMeta(lead); const overdue = Boolean(lead.nextContactAt && dateValue(lead.nextContactAt) < Date.now()); return <span className={"nextAction actionTag action-" + action.type + (overdue ? " overdue" : "")}><i>{overdue ? "!" : action.icon}</i><span>{leadNextAction(lead)}</span></span>; })()}
-    </button>)}
-  </div>;
-}
 
 function applyTeaching(
   bundle: TeachingBundle,
@@ -4790,85 +4471,6 @@ function staffRoleValue(role: StaffRoleDemo) {
   return values[role];
 }
 
-function dateValue(value?: string, fallback = 0) {
-  if (!value) return fallback;
-  const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) ? timestamp : fallback;
-}
-
-function lessonWeekdayLabel(value: string) {
-  const names = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : names[date.getDay()];
-}
-
-function leadActionPriority(lead: Lead) {
-  const now = Date.now();
-  if (lead.nextContactAt && dateValue(lead.nextContactAt) <= now) return 0;
-  if (lead.trialResult === "no_show") return 1;
-  if (lead.trialResult === "cancelled") return 2;
-  if (lead.status === "Після пробного" && !lead.nextContactAt) return 3;
-  if (lead.status === "Нова") return 4;
-  if (lead.status === "Пробне заплановано") return 5;
-  if (lead.nextContactAt) return 6;
-  if (lead.status === "Зв'язались") return 7;
-  if (lead.status === "Очікує групу") return 8;
-  return 9;
-}
-
-function leadDisplayStatus(lead: Lead) {
-  if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "Не прийшов";
-  if (lead.trialResult === "cancelled" && lead.status === "Зв'язались") return "Скасували пробне";
-  return lead.status;
-}
-
-function leadPrimaryActionLabel(lead: Lead) {
-  if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return "Повернути в роботу";
-  if (lead.status === "Зарахований") return "Відкрити картку учня";
-  if (lead.status === "Нова") return "Позначити «Зв'язались»";
-  if (lead.trialResult === "no_show" || lead.trialResult === "cancelled") return "Перезаписати на пробне";
-  if (lead.status === "Пробне заплановано") return "Внести результат пробного";
-  if (lead.status === "Після пробного") return "Рішення після пробного";
-  if (lead.status === "Очікує групу") return "Зарахувати учня";
-  return "Записати на пробне";
-}
-
-function leadNextAction(lead: Lead) {
-  if (leadIsDeferred(lead) && lead.deferredUntil) {
-    const when = new Date(lead.deferredUntil);
-    return `Повернутись: ${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit" })}`;
-  }
-  if (lead.status === "Відмовились") return "Закрито: відмовились";
-  if (lead.status === "Не відповідає") return "Закрито: не відповідає";
-  if (lead.status === "Неактуально") return "Закрито: неактуально";
-  if (lead.status === "Зарахований") return "Учень зарахований";
-  if (lead.nextContactAt) {
-    const when = new Date(lead.nextContactAt);
-    const overdue = when.getTime() < Date.now();
-    return `${overdue ? "Прострочено: " : "Зв'язатися: "}${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · ${when.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}`;
-  }
-  if (lead.trialResult === "no_show") return "Зателефонувати / перезаписати";
-  if (lead.trialResult === "cancelled") return "Узгодити нову дату";
-  if (lead.status === "Після пробного") return "Уточнити рішення";
-  if (lead.status === "Нова") return "Перший контакт";
-  if (lead.status === "Пробне заплановано" && lead.trialAt) {
-    const when = new Date(lead.trialAt);
-    return `Пробне ${when.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })} · ${when.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}`;
-  }
-  if (lead.status === "Очікує групу") return "Підібрати групу";
-  return "Продовжити контакт";
-}
-
-function leadActionMeta(lead: Lead): { type: "call" | "trial" | "decision" | "group" | "closed" | "general"; icon: string; label: string } {
-  if (leadIsDeferred(lead)) return { type: "general", icon: "◷", label: "Пізніше" };
-  if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return { type: "closed", icon: "×", label: "Закрито" };
-  if (lead.status === "Пробне заплановано") return { type: "trial", icon: "◷", label: "Пробне" };
-  if (lead.trialResult === "no_show" || lead.trialResult === "cancelled" || lead.nextContactAt || lead.status === "Нова" || lead.status === "Зв'язались") return { type: "call", icon: "☎", label: "Контакт" };
-  if (lead.status === "Після пробного") return { type: "decision", icon: "?", label: "Рішення" };
-  if (lead.status === "Очікує групу") return { type: "group", icon: "→", label: "Група" };
-  return { type: "general", icon: "•", label: "Дія" };
-}
-
 function closeReasonLabel(reason: string | null | undefined) {
   const labels: Record<string, string> = {
     price: "Ціна",
@@ -4881,56 +4483,6 @@ function closeReasonLabel(reason: string | null | undefined) {
   };
   return reason ? (labels[reason] ?? reason) : "Не вказано";
 }
-
-function canonicalLeadSource(source: string | null | undefined) {
-  const value = (source ?? "").trim().toLowerCase();
-  const aliases: Record<string, string> = {
-    iphone: "phone",
-    телефон: "phone",
-    дзвінок: "phone",
-    site: "website",
-    сайт: "website",
-    insta: "instagram",
-    referral: "recommendation",
-    рекомендація: "recommendation",
-    "walk_in": "walk-in",
-    "walk in": "walk-in",
-    "google maps": "maps",
-  };
-  return aliases[value] ?? value;
-}
-
-function leadMissingDetails(lead: Lead): string[] {
-  const missing: string[] = [];
-  if (!lead.lastName?.trim()) missing.push("прізвище дитини");
-  const contactName = cleanSpaces(lead.parent ?? "");
-  if (!contactName || contactName === "Контакт не вказано") {
-    missing.push("ім’я відповідальної особи");
-  } else if (contactName.split(" ").filter(Boolean).length < 2) {
-    missing.push("прізвище відповідальної особи");
-  }
-  return missing;
-}
-
-function leadSourceLabel(source: string | null | undefined) {
-  const labels: Record<string, string> = {
-    phone: "Телефон",
-    website: "Сайт",
-    instagram: "Instagram",
-    recommendation: "Рекомендація",
-    "walk-in": "Зайшли особисто",
-    walk_in: "Зайшли особисто",
-    facebook: "Facebook",
-    tiktok: "TikTok",
-    google: "Google",
-    maps: "Google Maps",
-    other: "Інше",
-  };
-  if (!source) return "Не вказано";
-  const canonical = canonicalLeadSource(source);
-  return labels[canonical] ?? source;
-}
-
 
 function paymentMethodLabel(method: string | null | undefined): PaymentDemo["method"] {
   const labels: Record<string, PaymentDemo["method"]> = {
@@ -5055,21 +4607,6 @@ function ageLabel(min: number | null, max: number | null) {
   return String(min ?? max);
 }
 
-function AuditHistory({ title, events, loading }: { title: string; events: ApiAuditEvent[]; loading: boolean }) {
-  return <div className="history">
-    <h3>{title}</h3>
-    {loading && <div className="historyEmpty">Завантажуємо історію…</div>}
-    {!loading && events.length === 0 && <div className="historyEmpty">Подій поки немає.</div>}
-    {!loading && events.map((event) => <div key={event.id}>
-      <i></i>
-      <p>
-        <b>{auditEventLabel(event.event_type)}</b>
-        <span>{auditEventDetail(event)} · {new Date(event.created_at).toLocaleString("uk-UA")}{event.actor_name ? " · " + event.actor_name : ""}</span>
-      </p>
-    </div>)}
-  </div>;
-}
-
 function auditEventLabel(type: string) {
   const labels: Record<string, string> = {
     "lead.created": "Заявка створена",
@@ -5117,201 +4654,6 @@ function auditEventDetail(event: ApiAuditEvent) {
   return "CRM";
 }
 
-function LoginView({ onAuthenticated, theme, onToggleTheme }: { onAuthenticated: (session: Session) => void; theme: "dark" | "light"; onToggleTheme: () => void }) {
-  const params = new URLSearchParams(window.location.search);
-  const inviteToken = params.get("invite");
-  const resetToken = params.get("reset");
-  const [inviteName, setInviteName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [bootstrapAvailable, setBootstrapAvailable] = useState(false);
-  const [checkingBootstrap, setCheckingBootstrap] = useState(true);
-  const [organizationName, setOrganizationName] = useState("AeroKids");
-  const [organizationSlug, setOrganizationSlug] = useState("aerokids");
-  const [ownerName, setOwnerName] = useState("");
-  const [bootstrapSecret, setBootstrapSecret] = useState("");
-  const [inviteStatus, setInviteStatus] = useState<"checking" | "valid" | "accepted" | "expired" | "invalid" | "error">(inviteToken ? "checking" : "valid");
-
-  useEffect(() => {
-    document.body.classList.add("crmLoginActive");
-    return () => document.body.classList.remove("crmLoginActive");
-  }, []);
-
-  useEffect(() => {
-    if (inviteToken) {
-      setCheckingBootstrap(false);
-      setInviteStatus("checking");
-      getInvitationStatus(inviteToken)
-        .then((status) => setInviteStatus(status))
-        .catch(() => setInviteStatus("error"));
-      return;
-    }
-    if (resetToken) {
-      setCheckingBootstrap(false);
-      return;
-    }
-    getBootstrapStatus()
-      .then(setBootstrapAvailable)
-      .catch(() => setBootstrapAvailable(false))
-      .finally(() => setCheckingBootstrap(false));
-  }, [inviteToken, resetToken]);
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      onAuthenticated(await login(email, password));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не вдалося увійти");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const acceptInvitation = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!inviteToken) return;
-    setError("");
-    setLoading(true);
-    try {
-      const nextSession = await acceptInvite({
-        invite_token: inviteToken,
-        full_name: inviteName.trim(),
-        password,
-      });
-      window.history.replaceState({}, "", window.location.pathname);
-      onAuthenticated(nextSession);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Не вдалося прийняти запрошення";
-      if (message.includes("already been accepted")) {
-        setInviteStatus("accepted");
-        setError("");
-      } else {
-        setError(message);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const completePasswordReset = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!resetToken) return;
-    setError("");
-    setLoading(true);
-    try {
-      const nextSession = await resetPassword({
-        reset_token: resetToken,
-        password,
-      });
-      window.history.replaceState({}, "", window.location.pathname);
-      onAuthenticated(nextSession);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не вдалося змінити пароль");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const setup = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      onAuthenticated(await bootstrapOwner({
-        organization_name: organizationName.trim(),
-        organization_slug: organizationSlug.trim().toLowerCase(),
-        full_name: ownerName.trim(),
-        email,
-        password,
-      }, bootstrapSecret.trim() || undefined));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не вдалося створити першу організацію");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return <div className="loginScreen">
-    <button className="loginThemeToggle" type="button" aria-label={theme === "dark" ? "Увімкнути світлу тему" : "Увімкнути темну тему"} title={theme === "dark" ? "Світла тема" : "Темна тема"} onClick={onToggleTheme}><UiIcon name="theme" size={18} /><span>Тема</span></button>
-    <div className="loginCard">
-      <div className="loginBrand"><img className="brandLogo brandLogoLarge" src="/aerokids-logo-master-v1.png" alt="AeroKids" /><div><b>AeroKids CRM</b><small>Керування школою в одному місці</small></div></div>
-
-      {resetToken ? <>
-        <p className="eyebrow">Новий пароль</p>
-        <h1>Створіть новий пароль</h1>
-        <p className="loginIntro">Посилання одноразове. Після збереження ви одразу ввійдете у CRM.</p>
-        <form onSubmit={completePasswordReset}>
-          <label>Новий пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-          {error && <div className="loginError">{error}</div>}
-          <button className="primary full" disabled={loading}>{loading ? "Зберігаємо…" : "Змінити пароль"}</button>
-        </form>
-      </> : inviteToken ? inviteStatus === "checking" ? <>
-        <div className="loginChecking">Перевіряємо запрошення…</div>
-      </> : inviteStatus === "accepted" ? <>
-        <p className="eyebrow">Запрошення використано</p>
-        <h1>Вже зареєстровано</h1>
-        <p className="loginIntro">За цим посиланням уже зареєстровано користувача. Запрошення одноразове і більше не активне.</p>
-        <a className="primary full inviteLoginLink" href="/">Перейти до входу</a>
-      </> : inviteStatus === "expired" ? <>
-        <p className="eyebrow">Запрошення неактивне</p>
-        <h1>Термін дії минув</h1>
-        <p className="loginIntro">Це посилання на запрошення вже прострочене. Попросіть адміністратора створити нове.</p>
-        <a className="primary full inviteLoginLink" href="/">Перейти до входу</a>
-      </> : inviteStatus === "invalid" ? <>
-        <p className="eyebrow">Запрошення недійсне</p>
-        <h1>Посилання не працює</h1>
-        <p className="loginIntro">Перевірте, чи посилання скопійовано повністю, або попросіть адміністратора створити нове запрошення.</p>
-        <a className="primary full inviteLoginLink" href="/">Перейти до входу</a>
-      </> : inviteStatus === "error" ? <>
-        <p className="eyebrow">Не вдалося перевірити</p>
-        <h1>Спробуйте ще раз</h1>
-        <p className="loginIntro">CRM тимчасово не змогла перевірити це запрошення.</p>
-        <button className="primary full" type="button" onClick={() => window.location.reload()}>Повторити перевірку</button>
-      </> : <>
-        <p className="eyebrow">Запрошення</p>
-        <h1>Створіть свій доступ</h1>
-        <p className="loginIntro">Вкажіть ім’я та пароль. Роль і організація вже задані запрошенням. Це посилання можна використати лише один раз.</p>
-        <form onSubmit={acceptInvitation}>
-          <label>Ваше ім’я<input autoComplete="name" value={inviteName} onChange={(e) => setInviteName(e.target.value)} required /></label>
-          <label>Пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-          {error && <div className="loginError">{error}</div>}
-          <button className="primary full" disabled={loading}>{loading ? "Створюємо доступ…" : "Прийняти запрошення"}</button>
-        </form>
-      </> : checkingBootstrap ? <div className="loginChecking">Перевіряємо CRM…</div> : bootstrapAvailable ? <>
-        <p className="eyebrow">Перший запуск</p>
-        <h1>Створіть першу організацію</h1>
-        <p className="loginIntro">Це виконується один раз. Після цього ви станете власником організації та зможете запрошувати команду.</p>
-        <form onSubmit={setup}>
-          <label>Назва організації<input value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} required /></label>
-          <label>Короткий slug<input value={organizationSlug} onChange={(e) => setOrganizationSlug(e.target.value.replace(/[^a-z0-9-]/g, ""))} required /></label>
-          <label>Ваше ім’я<input autoComplete="name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} required /></label>
-          <label>Email<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-          <label>Пароль<input type="password" minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-          <label>Ключ першого запуску<input type="password" autoComplete="off" value={bootstrapSecret} onChange={(e) => setBootstrapSecret(e.target.value)} placeholder="Задається в Render → aerokids-crm-api → Environment" required /></label>
-          <small className="setupHint">Введіть значення BOOTSTRAP_SECRET із налаштувань backend у Render.</small>
-          {error && <div className="loginError">{error}</div>}
-          <button className="primary full" disabled={loading}>{loading ? "Створюємо…" : "Створити CRM"}</button>
-        </form>
-      </> : <>
-        <p className="eyebrow">Вхід</p>
-        <h1>Увійдіть у CRM</h1>
-        <p className="loginIntro">Використовуйте email і пароль вашого облікового запису.</p>
-        <form onSubmit={submit}>
-          <label>Email<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-          <label>Пароль<input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-          {error && <div className="loginError">{error}</div>}
-          <button className="primary full loginAction" disabled={loading}><UiIcon name="login" size={18} /><span>{loading ? "Входимо…" : "Увійти"}</span></button>
-        </form>
-        <small className="loginNote">Доступ визначається роллю в конкретній організації.</small>
-      </>}
-    </div>
-  </div>;
-}
-
 function overviewFunnelCount(report: OverviewReport | null, status: WorkspaceBundle["leads"][number]["crm_status"], fallback: number) {
   return report?.funnel.find((item) => item.status === status)?.count ?? fallback;
 }
@@ -5337,37 +4679,6 @@ function roleLabel(role?: string) {
     accountant: "Бухгалтер",
   };
   return role ? labels[role] ?? role : "Demo";
-}
-
-function addLocalDays(value: Date, amount: number) {
-  const next = new Date(value);
-  next.setHours(12, 0, 0, 0);
-  next.setDate(next.getDate() + amount);
-  return next;
-}
-
-function startOfLocalWeek(value: Date) {
-  const next = new Date(value);
-  next.setHours(12, 0, 0, 0);
-  const mondayOffset = (next.getDay() + 6) % 7;
-  next.setDate(next.getDate() - mondayOffset);
-  return next;
-}
-
-function localDateInput(value: Date) {
-  const offset = value.getTimezoneOffset() * 60_000;
-  return new Date(value.getTime() - offset).toISOString().slice(0, 10);
-}
-
-function defaultPaymentDueDate() {
-  const now = new Date();
-  return localDateInput(new Date(now.getFullYear(), now.getMonth() + 1, 0));
-}
-
-function toLocalDateTimeInput(value: string) {
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function formatMoney(value: number, locale = "uk-UA", currency = "UAH") {
@@ -5499,79 +4810,7 @@ function availabilityLabel(slots: AvailabilitySlot[]) {
   return [...groups.entries()].map(([time, days]) => `${days.join("/")} · ${time}`).join("; ");
 }
 
-const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
 const SCHEDULE_DAY_NAMES = ["Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя"];
-const TIME_OPTIONS = Array.from({ length: 56 }, (_, index) => `${String(8 + Math.floor(index / 4)).padStart(2, "0")}:${String((index % 4) * 15).padStart(2, "0")}`);
-
-function TimeSelect({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label>{label}<select value={value.slice(0, 5)} onChange={(event) => onChange(event.target.value)}>{TIME_OPTIONS.map((time) => <option key={time}>{time}</option>)}</select></label>;
-}
-
-function WeekdayPicker({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  return <label>День<select value={value} onChange={(event) => onChange(Number(event.target.value))}>{DAY_NAMES.map((day, index) => <option value={index} key={day}>{day}</option>)}</select></label>;
-}
-
-function DurationSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  return <label>Тривалість<select value={value} onChange={(event) => onChange(Number(event.target.value))}>{[45, 60, 75, 90].map((minutes) => <option value={minutes} key={minutes}>{minutes} хв</option>)}</select></label>;
-}
-
-function ScheduleSlotEditor({ value, onChange }: { value: DraftScheduleSlot[]; onChange: (value: DraftScheduleSlot[]) => void }) {
-  const update = (index: number, patch: Partial<DraftScheduleSlot>) => onChange(value.map((slot, i) => i === index ? { ...slot, ...patch } : slot));
-  return <fieldset className="slotEditor"><legend>Розклад групи</legend>{value.map((slot, index) => <div className="slotRow" key={index}>
-    <WeekdayPicker value={slot.weekday} onChange={(weekday) => update(index, { weekday })} />
-    <TimeSelect label="Початок" value={slot.start_time} onChange={(start_time) => update(index, { start_time })} />
-    <DurationSelect value={slot.duration_minutes} onChange={(duration_minutes) => update(index, { duration_minutes })} />
-    <button type="button" className="link danger" onClick={() => onChange(value.filter((_, i) => i !== index))}>Видалити</button>
-  </div>)}<button type="button" className="search" onClick={() => onChange([...value, { weekday: (value.at(-1)?.weekday ?? -1) + 1 > 6 ? 0 : (value.at(-1)?.weekday ?? -1) + 1, start_time: "17:00", duration_minutes: 60 }])}>+ Додати день</button></fieldset>;
-}
-
-function AvailabilityWindowEditor({ value, onChange }: { value: AvailabilityWindowDraft[]; onChange: (value: AvailabilityWindowDraft[]) => void }) {
-  const update = (index: number, patch: Partial<AvailabilityWindowDraft>) => onChange(value.map((window, i) => i === index ? { ...window, ...patch } : window));
-  const toggleDay = (index: number, weekday: number) => {
-    const window = value[index];
-    if (!window) return;
-    const weekdays = window.weekdays.includes(weekday)
-      ? window.weekdays.filter((day) => day !== weekday)
-      : [...window.weekdays, weekday].sort((a, b) => a - b);
-    update(index, { weekdays });
-  };
-
-  return <div className="availabilityEditor">
-    {value.map((window, index) => <div className="availabilityRow availabilityWindowRow" key={window.id}>
-      <div className="availabilityWeekdays">
-        <span>Дні</span>
-        <div className="availabilityDayChecks">
-          {DAY_NAMES.map((day, weekday) => <label className={"availabilityDayCheck" + (window.weekdays.includes(weekday) ? " checked" : "")} key={day}>
-            <input type="checkbox" checked={window.weekdays.includes(weekday)} onChange={() => toggleDay(index, weekday)} />
-            <span>{day}</span>
-          </label>)}
-        </div>
-        {window.weekdays.length === 0 && <small className="availabilityDayError">Оберіть хоча б один день</small>}
-      </div>
-      <div className="availabilityTimes">
-        <TimeSelect label="Від" value={window.start_time} onChange={(start_time) => update(index, { start_time })} />
-        <TimeSelect label="До" value={window.end_time} onChange={(end_time) => update(index, { end_time })} />
-      </div>
-      <label>Пріоритет<select value={window.preference ?? "preferred"} onChange={(e) => update(index, { preference: e.target.value as AvailabilitySlot["preference"] })}><option value="preferred">Бажано</option><option value="possible">Можливо</option><option value="avoid">Небажано</option></select></label>
-      <label className="windowNote">Коментар<input value={window.note ?? ""} onChange={(e) => update(index, { note: e.target.value || null })} placeholder="Необов’язково" /></label>
-      <button type="button" className="link danger availabilityDeleteWindow" onClick={() => onChange(value.filter((_, i) => i !== index))}>Видалити</button>
-    </div>)}
-    <button type="button" className="search availabilityAddWindow" onClick={() => onChange([...value, {
-      id: crypto.randomUUID(),
-      weekdays: [],
-      start_time: "17:00",
-      end_time: "19:00",
-      preference: "preferred",
-      note: null,
-    }])}>+ Додати бажаний час</button>
-  </div>;
-}
-
-function DateTimeEditor({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  const [date, clock = "17:00"] = value.split("T");
-  return <div className="dateTimeEditor"><label>Дата<input type="date" aria-label={label + ": дата"} value={date} onChange={(e) => onChange(`${e.target.value}T${clock}`)} /></label><TimeSelect label="Час" value={clock} onChange={(time) => onChange(`${date}T${time}`)} /></div>;
-}
-
 function scheduleDraftLabel(slots: DraftScheduleSlot[]) { return slots.map((slot) => `${SCHEDULE_DAY_NAMES[slot.weekday] ?? "Невідомий день"} · ${slot.start_time.slice(0, 5)}`).join("; "); }
 function hasDuplicateSlots(slots: DraftScheduleSlot[]) { return new Set(slots.map((slot) => `${slot.weekday}:${slot.start_time}`)).size !== slots.length; }
 
