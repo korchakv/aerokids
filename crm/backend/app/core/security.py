@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -23,25 +24,44 @@ def verify_password(password: str, hashed: str | None) -> bool:
     return password_hash.verify(password, hashed)
 
 
-def create_access_token(user_id: UUID) -> str:
+def credential_fingerprint(hashed: str | None) -> str:
+    if not hashed:
+        return "no-password"
+    return hashlib.sha256(hashed.encode("utf-8")).hexdigest()[:32]
+
+
+def create_access_token(user_id: UUID, current_password_hash: str | None = None) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
         "type": "access",
+        "cv": credential_fingerprint(current_password_hash),
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_minutes),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> UUID:
+def _decode_access_payload(token: str) -> dict:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         if payload.get("type") != "access":
             raise HTTPException(status_code=401, detail="Invalid token type")
-        return UUID(payload["sub"])
+        UUID(payload["sub"])
+        return payload
     except (jwt.InvalidTokenError, KeyError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired access token") from exc
+
+
+def decode_access_token(token: str) -> UUID:
+    payload = _decode_access_payload(token)
+    return UUID(payload["sub"])
+
+
+def validate_access_token_credential(token: str, current_password_hash: str | None) -> None:
+    payload = _decode_access_payload(token)
+    if payload.get("cv") != credential_fingerprint(current_password_hash):
+        raise HTTPException(status_code=401, detail="Session expired after credential change")
 
 
 def auth_is_required() -> bool:
