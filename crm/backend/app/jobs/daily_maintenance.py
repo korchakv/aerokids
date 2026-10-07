@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.core import Group, Organization
-from app.services import billing_hardening, hardening, notifications
+from app.services import billing_hardening, hardening, notifications, tariff_hardening
 
 
 def run_daily_maintenance() -> dict:
@@ -22,6 +22,7 @@ def run_daily_maintenance() -> dict:
                 "reconciled_groups": 0,
                 "created_lesson_sessions": 0,
                 "billing": None,
+                "rule_snapshots_created": 0,
                 "errors": [],
             }
             try:
@@ -50,6 +51,8 @@ def run_daily_maintenance() -> dict:
                         through_date=None,
                         actor_user_id=None,
                     )
+                    org_result["rule_snapshots_created"] = tariff_hardening.ensure_missing_snapshots(db, organization.id)
+                    db.commit()
                 except Exception as exc:
                     db.rollback()
                     org_result["errors"].append({"billing": str(exc)})
