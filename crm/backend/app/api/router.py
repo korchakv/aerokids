@@ -11,7 +11,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, crm, location_service, organization_service, reporting_service, staff_service
+from app.services import audit_service, crm, location_service, organization_service, reporting_service, staff_service, student_service
 
 router = APIRouter()
 
@@ -194,12 +194,12 @@ def contacts(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole
 
 @router.post("/students", response_model=StudentRead, status_code=201)
 def create_student(data: StudentCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.create_student(db, org_id, data)
+    return student_service.create_student(db, org_id, data)
 
 
 @router.get("/students", response_model=list[StudentRead])
 def students(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.list_students(db, org_id)
+    return student_service.list_students(db, org_id)
 
 
 @router.delete("/students/{student_id}", status_code=204)
@@ -208,12 +208,12 @@ def delete_student(
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    crm.delete_student(db, access.organization_id, student_id, access.user_id)
+    student_service.delete_student(db, access.organization_id, student_id, access.user_id)
 
 
 @router.post("/students/{student_id}/contacts", status_code=201)
 def add_student_contact(student_id: UUID, data: StudentContactCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    item = crm.attach_contact(db, org_id, student_id, data.contact_id, data.relation, data.is_primary)
+    item = student_service.attach_contact(db, org_id, student_id, data.contact_id, data.relation, data.is_primary)
     return {"id": str(item.id)}
 
 
