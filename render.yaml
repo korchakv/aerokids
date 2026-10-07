@@ -38,6 +38,8 @@ services:
         value: "10"
       - key: READ_ONLY_MODE
         value: "false"
+      - key: MAINTENANCE_SECRET
+        sync: false
       - key: TRANSACTIONAL_EMAIL_ENABLED
         value: "false"
       - key: SMTP_HOST
