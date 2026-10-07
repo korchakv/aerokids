@@ -1,5 +1,6 @@
 from app.api import operations_router
 from app.core.config import settings
+from app.services import operations_auth
 
 
 def _ok_result():
@@ -18,10 +19,10 @@ def _ok_result():
     }
 
 
-def test_daily_maintenance_is_closed_when_not_configured(client, monkeypatch):
+def test_daily_maintenance_requires_identity(client, monkeypatch):
     monkeypatch.setattr(settings, "maintenance_secret", None)
     response = client.post("/internal/operations/daily-maintenance")
-    assert response.status_code == 503
+    assert response.status_code == 401
 
 
 def test_daily_maintenance_rejects_wrong_secret(client, monkeypatch):
@@ -33,12 +34,28 @@ def test_daily_maintenance_rejects_wrong_secret(client, monkeypatch):
     assert response.status_code == 401
 
 
-def test_daily_maintenance_runs_with_valid_secret(client, monkeypatch):
+def test_daily_maintenance_runs_with_valid_emergency_secret(client, monkeypatch):
     monkeypatch.setattr(settings, "maintenance_secret", "m" * 40)
     monkeypatch.setattr(operations_router, "run_daily_maintenance", _ok_result)
     response = client.post(
         "/internal/operations/daily-maintenance",
         headers={"X-Maintenance-Secret": "m" * 40},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "ok"
+
+
+def test_daily_maintenance_runs_with_valid_github_oidc(client, monkeypatch):
+    monkeypatch.setattr(settings, "maintenance_secret", None)
+    monkeypatch.setattr(
+        operations_router,
+        "verify_github_actions_token",
+        lambda token: {"repository": "korchakv/aerokids", "ref": "refs/heads/main"},
+    )
+    monkeypatch.setattr(operations_router, "run_daily_maintenance", _ok_result)
+    response = client.post(
+        "/internal/operations/daily-maintenance",
+        headers={"Authorization": "Bearer test-oidc-token"},
     )
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "ok"
@@ -65,3 +82,47 @@ def test_read_only_mode_blocks_daily_maintenance(client, monkeypatch):
         headers={"X-Maintenance-Secret": "m" * 40},
     )
     assert response.status_code == 503
+
+
+def test_github_oidc_claims_are_strict(monkeypatch):
+    class Key:
+        key = "public-key"
+
+    monkeypatch.setattr(operations_auth._jwks_client, "get_signing_key_from_jwt", lambda token: Key())
+    monkeypatch.setattr(
+        operations_auth.jwt,
+        "decode",
+        lambda *args, **kwargs: {
+            "sub": "repo:korchakv/aerokids:ref:refs/heads/main",
+            "repository": "korchakv/aerokids",
+            "ref": "refs/heads/main",
+            "event_name": "schedule",
+            "workflow_ref": "korchakv/aerokids/.github/workflows/crm-maintenance.yml@refs/heads/main",
+        },
+    )
+    claims = operations_auth.verify_github_actions_token("test-token")
+    assert claims["repository"] == "korchakv/aerokids"
+
+
+def test_github_oidc_rejects_other_workflow(monkeypatch):
+    class Key:
+        key = "public-key"
+
+    monkeypatch.setattr(operations_auth._jwks_client, "get_signing_key_from_jwt", lambda token: Key())
+    monkeypatch.setattr(
+        operations_auth.jwt,
+        "decode",
+        lambda *args, **kwargs: {
+            "sub": "repo:korchakv/aerokids:ref:refs/heads/main",
+            "repository": "korchakv/aerokids",
+            "ref": "refs/heads/main",
+            "event_name": "schedule",
+            "workflow_ref": "korchakv/aerokids/.github/workflows/other.yml@refs/heads/main",
+        },
+    )
+    try:
+        operations_auth.verify_github_actions_token("test-token")
+    except operations_auth.MaintenanceIdentityError:
+        pass
+    else:
+        raise AssertionError("unexpected workflow must be rejected")
