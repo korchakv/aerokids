@@ -16,6 +16,7 @@ type ReportsViewProps = {
   pendingAmount: string;
   overdueAmount: string;
   funnel: FunnelItem[];
+  funnelMax: number;
   attendance: {
     present: number;
     late: number;
@@ -41,14 +42,13 @@ export function ReportsView({
   pendingAmount,
   overdueAmount,
   funnel,
+  funnelMax,
   attendance,
   activeLocations,
   activeStaff,
   activeGroups,
   activeStudents,
 }: ReportsViewProps) {
-  const funnelMax = Math.max(1, funnel.reduce((sum, item) => sum + item.count, 0));
-
   return <section className="reportsPage">
     <section className="reportStats">
       <article><span>Конверсія в учні</span><strong>{conversionPercent}%</strong><small>{activeStudentCount} з {leadCount} записів</small></article>
