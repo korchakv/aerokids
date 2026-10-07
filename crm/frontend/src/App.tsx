@@ -2,10 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { UiIcon, navigationIcon } from "./components/UiIcon";
 import { AuditHistory } from "./components/AuditHistory";
 import { LoginView } from "./features/auth/LoginView";
+import { allNav, roleLabel, visibleNavigation } from "./features/shell/navigation";
 import { LeadKanban, LeadTable } from "./features/leads/LeadBoard";
 import { initialLeads, statuses } from "./features/leads/demo";
+import { availabilityLabel, flattenAvailabilityWindows, groupAvailabilitySlots } from "./features/leads/availability";
 import { canonicalLeadSource, leadActionMeta, leadActionPriority, leadDisplayStatus, leadIsDeferred, leadKanbanColumn, leadMissingDetails, leadPrimaryActionLabel, leadSourceLabel, type EntityId, type Lead, type LeadKanbanColumnId, type LeadStatus } from "./features/leads/model";
 import type { GroupItem } from "./features/groups/types";
+import { candidateCompatibility, MatchBadge, MatchExplanation } from "./features/groups/matching";
+import { ageRange, hasDuplicateSlots, scheduleDraftLabel, scheduleSlots } from "./features/groups/helpers";
 import { applyTeaching, SCHEDULE_DAY_NAMES, type LessonItem } from "./features/teaching/model";
 import { type PaymentDemo, type PlanDemo } from "./features/billing/model";
 import type { LocationDemo } from "./features/locations/types";
@@ -41,7 +45,6 @@ type AttendanceValue = "present" | "absent" | "late" | "excused";
 
 
 
-const allNav = ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Оплати", "Працівники", "Локації", "Звіти", "Налаштування"];
 
 function tariffHistoryDetail(event: ApiAuditEvent) {
   const payload = event.payload ?? {};
@@ -4345,176 +4348,11 @@ function overviewFunnelCount(report: OverviewReport | null, status: WorkspaceBun
   return report?.funnel.find((item) => item.status === status)?.count ?? fallback;
 }
 
-function visibleNavigation(role?: string) {
-  if (!apiEnabled || !role) return allNav;
-  const byRole: Record<string, string[]> = {
-    owner: allNav,
-    admin: allNav,
-    manager: ["Дашборд", "Заявки", "Учні", "Групи", "Розклад", "Відвідування", "Локації", "Звіти"],
-    teacher: ["Дашборд", "Учні", "Групи", "Розклад", "Відвідування"],
-    accountant: ["Дашборд", "Оплати", "Звіти"],
-  };
-  return byRole[role] ?? ["Дашборд"];
-}
-
-function roleLabel(role?: string) {
-  const labels: Record<string,string> = {
-    owner: "Власник",
-    admin: "Адміністратор",
-    manager: "Менеджер",
-    teacher: "Викладач",
-    accountant: "Бухгалтер",
-  };
-  return role ? labels[role] ?? role : "Demo";
-}
 
 function formatMoney(value: number, locale = "uk-UA", currency = "UAH") {
   return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
 }
 
-type CandidateMatch = {
-  state: "match" | "partial" | "conflict" | "unknown";
-  icon: string;
-  label: string;
-  detail: string;
-};
 
-function candidateCompatibility(
-  lead: Lead,
-  schedule: Array<{ weekday: number; start_time: string; duration_minutes: number }>,
-  locationId: string | null,
-): CandidateMatch {
-  if (!schedule.length || !(lead.availability?.length)) {
-    return { state: "unknown", icon: "?", label: "Побажаний час не вказаний", detail: "Уточнити графік у батьків" };
-  }
-  let full = 0, partial = 0, conflicts = 0, preferred = 0;
-  const details: string[] = [];
-  schedule.forEach((lesson) => {
-    const lessonStart = timeToMinutes(lesson.start_time);
-    const lessonEnd = lessonStart + lesson.duration_minutes;
-    const sameDay = lead.availability!.filter((x) => x.weekday === lesson.weekday);
-    const acceptable = sameDay.filter((x) => (x.preference ?? "preferred") !== "avoid");
-    const avoided = sameDay.filter((x) => (x.preference ?? "preferred") === "avoid");
-    const fits = acceptable.filter((x) => timeToMinutes(x.start_time) <= lessonStart && timeToMinutes(x.end_time) >= lessonEnd);
-    const avoidOverlap = avoided.some((x) => lessonStart < timeToMinutes(x.end_time) && lessonEnd > timeToMinutes(x.start_time));
-    if (avoidOverlap && !fits.length) {
-      conflicts++;
-      details.push(`${DAY_NAMES[lesson.weekday]} ${lesson.start_time} — потрапляє в небажаний час`);
-      return;
-    }
-    if (fits.length) {
-      full++;
-      if (fits.some((x) => (x.preference ?? "preferred") === "preferred")) preferred++;
-      details.push(`${DAY_NAMES[lesson.weekday]} ${lesson.start_time} — підходить`);
-      if (avoidOverlap) {
-        partial++;
-        details.push(`${DAY_NAMES[lesson.weekday]} ${lesson.start_time} — також перетинає небажаний час`);
-      }
-      return;
-    }
-    const close = acceptable.find((x) => {
-      const start = timeToMinutes(x.start_time), end = timeToMinutes(x.end_time);
-      return (lessonStart < end && lessonEnd > start) || Math.max(start - lessonEnd, lessonStart - end, 0) <= 60;
-    });
-    if (close) {
-      partial++;
-      details.push(`${DAY_NAMES[lesson.weekday]}: сім’я бажає ${close.start_time.slice(0, 5)}–${close.end_time.slice(0, 5)}`);
-    } else conflicts++;
-  });
-  const locationMismatch = Boolean(lead.preferredLocationId && locationId && lead.preferredLocationId !== locationId);
-  const locationDetail = locationMismatch ? "Бажана локація відрізняється" : "";
-  const explanation = [...details, locationDetail].filter(Boolean).join("; ");
-  if (!full && !partial) return { state: "conflict", icon: "!", label: "Потрібне узгодження", detail: explanation || "Збігів немає" };
-  if (partial || conflicts || locationMismatch || preferred === 0) {
-    const possibleOnly = matchingOnlyPossible(full, preferred) ? "Час позначений лише як можливий" : "";
-    return { state: "partial", icon: "⚠", label: "Частковий збіг", detail: [explanation, possibleOnly].filter(Boolean).join("; ") || "Потрібне уточнення" };
-  }
-  return { state: "match", icon: "✓", label: "Графік підходить", detail: explanation };
-}
-
-function matchingOnlyPossible(full: number, preferred: number) {
-  return full > 0 && preferred === 0;
-}
-
-function MatchBadge({ match }: { match: CandidateMatch }) {
-  return <span className={"candidateSource candidateCompatibility " + match.state}>{match.icon} {match.label}</span>;
-}
-
-function MatchExplanation({ match }: { match: CandidateMatch }) {
-  return <small className={"matchExplanation " + match.state}>{match.detail}</small>;
-}
-
-function timeToMinutes(value: string) {
-  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
-  return hours * 60 + minutes;
-}
-
-function groupAvailabilitySlots(slots: AvailabilitySlot[]): AvailabilityWindowDraft[] {
-  const grouped = new Map<string, AvailabilityWindowDraft>();
-  slots.forEach((slot) => {
-    const preference = slot.preference ?? "preferred";
-    const note = slot.note ?? null;
-    const key = [slot.start_time.slice(0, 5), slot.end_time.slice(0, 5), preference, note ?? ""].join("|");
-    const existing = grouped.get(key);
-    if (existing) {
-      if (!existing.weekdays.includes(slot.weekday)) existing.weekdays.push(slot.weekday);
-      return;
-    }
-    grouped.set(key, {
-      id: `availability-${grouped.size + 1}-${slot.weekday}`,
-      weekdays: [slot.weekday],
-      start_time: slot.start_time.slice(0, 5),
-      end_time: slot.end_time.slice(0, 5),
-      preference,
-      note,
-    });
-  });
-  return [...grouped.values()].map((window) => ({ ...window, weekdays: [...window.weekdays].sort((a, b) => a - b) }));
-}
-
-function flattenAvailabilityWindows(windows: AvailabilityWindowDraft[]): AvailabilitySlot[] {
-  return windows.flatMap((window) =>
-    [...new Set(window.weekdays)].sort((a, b) => a - b).map((weekday) => ({
-      weekday,
-      start_time: window.start_time,
-      end_time: window.end_time,
-      preference: window.preference,
-      note: window.note ?? null,
-    }))
-  );
-}
-
-function availabilityLabel(slots: AvailabilitySlot[]) {
-  if (!slots.length) return "Не вказано";
-  const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
-  const groups = new Map<string, string[]>();
-  slots.forEach((slot) => {
-    const key = `${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`;
-    const days = groups.get(key) ?? [];
-    days.push(dayNames[slot.weekday] ?? "?");
-    groups.set(key, days);
-  });
-  return [...groups.entries()].map(([time, days]) => `${days.join("/")} · ${time}`).join("; ");
-}
-
-function scheduleDraftLabel(slots: DraftScheduleSlot[]) { return slots.map((slot) => `${SCHEDULE_DAY_NAMES[slot.weekday] ?? "Невідомий день"} · ${slot.start_time.slice(0, 5)}`).join("; "); }
-function hasDuplicateSlots(slots: DraftScheduleSlot[]) { return new Set(slots.map((slot) => `${slot.weekday}:${slot.start_time}`)).size !== slots.length; }
-
-function scheduleSlots(group: GroupItem) {
-  if (!group.schedule || group.schedule === "Розклад не задано") return [];
-  return group.schedule.split(";").flatMap((part) => {
-    const [daysPart, timePart] = part.split("·").map((x) => x.trim());
-    const time = timePart || "—";
-    return (daysPart || "").split("/").map((day) => ({ day: day.trim(), time })).filter((item) => item.day);
-  });
-}
-
-function ageRange(items: Lead[]) {
-  const ages = items.map((x) => x.age);
-  if (!ages.length) return "—";
-  const min = Math.min(...ages);
-  const max = Math.max(...ages);
-  return min === max ? String(min) : min + "–" + max;
-}
 
 export default App;
