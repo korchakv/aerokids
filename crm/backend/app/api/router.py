@@ -11,7 +11,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, crm, staff_service
+from app.services import audit_service, crm, location_service, staff_service
 
 router = APIRouter()
 
@@ -165,12 +165,12 @@ def update_current_organization(
 
 @router.post("/locations", response_model=LocationRead, status_code=201)
 def create_location(data: LocationCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
-    return crm.create_location(db, org_id, data)
+    return location_service.create_location(db, org_id, data)
 
 
 @router.get("/locations", response_model=list[LocationRead])
 def locations(org_id: UUID = Depends(get_org_id), db: Session = Depends(get_db)):
-    return crm.list_locations(db, org_id)
+    return location_service.list_locations(db, org_id)
 
 
 @router.delete("/locations/{location_id}", status_code=204)
@@ -179,7 +179,7 @@ def delete_location(
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    crm.delete_location(db, access.organization_id, location_id, access.user_id)
+    location_service.delete_location(db, access.organization_id, location_id, access.user_id)
 
 
 @router.post("/contacts", response_model=ContactRead, status_code=201)
@@ -808,7 +808,7 @@ def create_organization_membership(data: OrganizationMembershipCreate, org_id: U
 
 @router.patch("/locations/{location_id}", response_model=LocationRead)
 def update_location(location_id: UUID, data: LocationUpdate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN)), db: Session = Depends(get_db)):
-    return crm.update_location(db, org_id, location_id, data)
+    return location_service.update_location(db, org_id, location_id, data)
 
 
 @router.get("/reports/overview", response_model=OverviewReport)
