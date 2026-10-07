@@ -47,7 +47,9 @@ export type Lead = {
   deferredNote?: string;
   closeReason?: string;
   closeNote?: string;
-};function leadIsDeferred(lead: Lead): boolean {
+};
+
+export function leadIsDeferred(lead: Lead): boolean {
   return Boolean(lead.deferredUntil && dateValue(lead.deferredUntil) > Date.now());
 }
 
