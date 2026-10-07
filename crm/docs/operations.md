@@ -17,22 +17,23 @@ The production HTTP trigger is:
 
 `POST /internal/operations/daily-maintenance`
 
-It requires the `X-Maintenance-Secret` header to exactly match `MAINTENANCE_SECRET`.
+The primary authentication mechanism is GitHub Actions OIDC. The scheduled workflow requests a short-lived token from GitHub and sends it as a Bearer token. The API verifies:
+- GitHub's OIDC signature and issuer;
+- audience `aerokids-crm-maintenance`;
+- repository `korchakv/aerokids`;
+- ref `refs/heads/main`;
+- event `schedule` or `workflow_dispatch`;
+- exact workflow `.github/workflows/crm-maintenance.yml`.
+
+No shared production secret is required for the normal scheduler. An optional 32+ character `MAINTENANCE_SECRET` may be configured only as an emergency/manual fallback and must never be committed.
 
 The endpoint:
-- refuses to run if the secret is not configured;
+- refuses unauthenticated or incorrectly scoped identities;
 - refuses to run in `READ_ONLY_MODE`;
 - returns a non-2xx result if organization maintenance or email delivery is degraded;
-- never exposes the configured secret;
 - is intended for a server-side scheduler only.
 
 The repository contains `.github/workflows/crm-maintenance.yml`. GitHub scheduled workflows execute only from the repository default branch, so the scheduler workflow must also exist on `main` even though the CRM application code is deployed from `crm-v1`.
-
-Activation requires the same random 32+ character value in:
-- Render API environment variable `MAINTENANCE_SECRET`;
-- GitHub Actions repository secret `CRM_MAINTENANCE_SECRET`.
-
-Do not place this value in source, docs, issue comments, workflow YAML or chat logs.
 
 ## What maintenance performs
 
