@@ -366,3 +366,42 @@ def test_transfer_date_belongs_only_to_target_group(client):
     assert second_roster.status_code == 200, second_roster.text
     assert first_roster.json() == []
     assert [row["student_id"] for row in second_roster.json()] == [student["id"]]
+
+
+def test_delete_draft_student_cleans_trial_resource_links(client):
+    org = create_org(client, slug="delete-draft-trial-resource")
+    location = client.post("/locations", headers=headers(org), json={"name": "Trial Location"}).json()
+    room = client.post("/rooms", headers=headers(org), json={
+        "location_id": location["id"],
+        "name": "Trial Room",
+        "capacity": 8,
+    })
+    assert room.status_code == 201, room.text
+    student = create_student(client, org, "Draft Trial Student")
+    trial = client.post("/trial-lessons", headers=headers(org), json={
+        "student_id": student["id"],
+        "location_id": location["id"],
+        "room_id": room.json()["id"],
+        "starts_at": f"{(date.today() + timedelta(days=1)).isoformat()}T17:00:00+03:00",
+    })
+    assert trial.status_code == 201, trial.text
+
+    deleted = client.delete(f"/students/{student['id']}", headers=headers(org))
+    assert deleted.status_code == 204, deleted.text
+    trials = client.get("/trial-lessons", headers=headers(org))
+    assert all(row["student_id"] != student["id"] for row in trials.json())
+
+
+def test_location_with_room_cannot_be_deleted(client):
+    org = create_org(client, slug="location-room-delete-guard")
+    location = client.post("/locations", headers=headers(org), json={"name": "Protected Location"}).json()
+    room = client.post("/rooms", headers=headers(org), json={
+        "location_id": location["id"],
+        "name": "Room A",
+        "capacity": 8,
+    })
+    assert room.status_code == 201, room.text
+
+    deleted = client.delete(f"/locations/{location['id']}", headers=headers(org))
+    assert deleted.status_code == 409, deleted.text
+    assert "кімнат" in deleted.json()["detail"].lower()
