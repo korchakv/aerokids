@@ -1,6 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-async function login(page: Parameters<typeof test>[0]["page"]) {
+async function login(page: Page) {
   await page.goto("/");
   await expect(page.getByTestId("crm-config-error")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Увійдіть у CRM" })).toBeVisible();
