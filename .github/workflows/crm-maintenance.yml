@@ -1,0 +1,30 @@
+name: CRM Daily Maintenance
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crm-daily-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Run production maintenance
+        env:
+          CRM_MAINTENANCE_SECRET: ${{ secrets.CRM_MAINTENANCE_SECRET }}
+          CRM_MAINTENANCE_URL: https://aerokids-crm-api.onrender.com/internal/operations/daily-maintenance
+        run: |
+          set -euo pipefail
+          if [ -z "$CRM_MAINTENANCE_SECRET" ]; then
+            echo "::notice::CRM_MAINTENANCE_SECRET is not configured; scheduled maintenance is intentionally inactive."
+            exit 0
+          fi
+          curl             --fail-with-body             --silent             --show-error             --retry 3             --retry-all-errors             --max-time 120             -X POST             -H "X-Maintenance-Secret: $CRM_MAINTENANCE_SECRET"             "$CRM_MAINTENANCE_URL"
