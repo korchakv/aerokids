@@ -11,7 +11,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, crm, location_service, staff_service
+from app.services import audit_service, crm, location_service, reporting_service, staff_service
 
 router = APIRouter()
 
@@ -813,7 +813,7 @@ def update_location(location_id: UUID, data: LocationUpdate, org_id: UUID = Depe
 
 @router.get("/reports/overview", response_model=OverviewReport)
 def report_overview(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
-    return crm.overview_report(db, org_id)
+    return reporting_service.overview_report(db, org_id)
 
 
 @router.get("/workspace/leads", response_model=list[LeadListItem])
