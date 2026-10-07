@@ -325,6 +325,16 @@ def form_group_hardened(
 ):
     _preflight_recurring_slots(db, access.organization_id, data)
     group, ids = crm.form_group(db, access.organization_id, data, access.user_id)
+    # crm.form_group is kept for compatibility, but its legacy date.today()
+    # default is server-local. Normalize newly-created enrollments to the
+    # organization's own calendar date before any historical roster is used.
+    formed_on = hardening.organization_today(db, access.organization_id)
+    for enrollment in db.scalars(select(Enrollment).where(
+        Enrollment.organization_id == access.organization_id,
+        Enrollment.group_id == group.id,
+        Enrollment.student_id.in_(ids),
+    )):
+        enrollment.started_at = formed_on
     if data.room_id is not None:
         hardening.assign_group_room(db, access.organization_id, group.id, data.room_id)
     active = list(db.scalars(select(GroupSchedule).where(
