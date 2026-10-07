@@ -16,6 +16,7 @@ import type { LocationDemo } from "./features/locations/types";
 import { LocationsView } from "./features/locations/LocationsView";
 import { staffRoleValue, type StaffDemo, type StaffRoleDemo } from "./features/staff/model";
 import { StaffView } from "./features/staff/StaffView";
+import { SettingsView } from "./features/settings/SettingsView";
 import { applyOperations } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
 import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
@@ -3350,48 +3351,27 @@ function App() {
           onEdit={openLocationEdit}
         />}
 
-                {active === "Налаштування" && <section className="settingsLayout">
-          <div className="settingsPrimaryColumn">
-            <article className="panel settingsPanel">
-              <div className="panelHead"><div><p className="eyebrow">Організація</p><h2>Основні налаштування</h2></div></div>
-              <p className="settingsIntro">Ці значення належать конкретній школі або гуртку й не впливають на інші організації в CRM.</p>
-              <label>Назва організації<input value={organizationName} onChange={(e) => setOrganizationName(e.target.value)} /></label>
-              <div className="formTwo">
-                <label>Часовий пояс<input value={organizationTimezone} onChange={(e) => setOrganizationTimezone(e.target.value)} placeholder="Europe/Kyiv" /></label>
-                <label>Валюта<input value={organizationCurrency} maxLength={3} onChange={(e) => setOrganizationCurrency(e.target.value.toUpperCase())} placeholder="UAH" /></label>
-              </div>
-              <label>Локаль<input value={organizationLocale} onChange={(e) => setOrganizationLocale(e.target.value)} placeholder="uk-UA" /></label>
-              <button className="primary" disabled={organizationSaving || !organizationName.trim()} onClick={saveOrganizationSettings}>{organizationSaving ? "Зберігаємо…" : "Зберегти налаштування"}</button>
-            </article>
-
-            <article className="panel settingsPanel appearanceSettings">
-              <div className="panelHead"><div><p className="eyebrow">Інтерфейс</p><h2>Вигляд інтерфейсу</h2></div></div>
-              <p className="settingsIntro">Тема та масштаб зберігаються для цього браузера. Це зручно, якщо потрібно зробити CRM контрастнішою або збільшити всі елементи для кращої читабельності.</p>
-              <div className="appearanceSettingRow">
-                <div><b>Тема</b><small>Світла або темна схема</small></div>
-                <div className="appearanceThemeSwitch" role="group" aria-label="Тема інтерфейсу">
-                  <button type="button" className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")}>Світла</button>
-                  <button type="button" className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")}>Темна</button>
-                </div>
-              </div>
-              <div className="appearanceSettingRow">
-                <div><b>Масштаб</b><small>Пропорційно збільшує текст, кнопки, поля та відступи</small></div>
-                <div className="uiScaleControl settingsScaleControl" aria-label="Масштаб інтерфейсу">
-                  <button type="button" aria-label="Зменшити масштаб" title="Зменшити" disabled={uiScale === UI_SCALE_LEVELS[0]} onClick={() => changeUiScale(-1)}>A−</button>
-                  <span><b>{Math.round(uiScale * 100)}%</b><small>масштаб</small></span>
-                  <button type="button" aria-label="Збільшити масштаб" title="Збільшити" disabled={uiScale === UI_SCALE_LEVELS[UI_SCALE_LEVELS.length - 1]} onClick={() => changeUiScale(1)}>A+</button>
-                </div>
-              </div>
-            </article>
-          </div>
-          <aside className="panel settingsHelp">
-            <p className="eyebrow">SaaS</p><h2>Налаштування tenant</h2>
-            <p>Часовий пояс використовується для дат і розкладу, валюта — для фінансів, локаль — для форматування чисел та дат.</p>
-            <div className="summaryMetric"><span>Slug</span><strong>{currentMembership?.organization_slug ?? "—"}</strong></div>
-            <div className="summaryMetric"><span>Ваша роль</span><strong>{roleLabel(currentMembership?.role)}</strong></div>
-          </aside>
-        </section>}
-
+                {active === "Налаштування" && <SettingsView
+          organizationName={organizationName}
+          organizationTimezone={organizationTimezone}
+          organizationCurrency={organizationCurrency}
+          organizationLocale={organizationLocale}
+          organizationSaving={organizationSaving}
+          onOrganizationName={setOrganizationName}
+          onOrganizationTimezone={setOrganizationTimezone}
+          onOrganizationCurrency={setOrganizationCurrency}
+          onOrganizationLocale={setOrganizationLocale}
+          onSaveOrganization={saveOrganizationSettings}
+          theme={theme}
+          onTheme={setTheme}
+          uiScale={uiScale}
+          canScaleDown={uiScale !== UI_SCALE_LEVELS[0]}
+          canScaleUp={uiScale !== UI_SCALE_LEVELS[UI_SCALE_LEVELS.length - 1]}
+          onScaleDown={() => changeUiScale(-1)}
+          onScaleUp={() => changeUiScale(1)}
+          organizationSlug={currentMembership?.organization_slug ?? ""}
+          roleName={roleLabel(currentMembership?.role)}
+        />}
         {active === "Звіти" && <section className="reportsPage">
           <section className="reportStats">
             <article><span>Конверсія в учні</span><strong>{leads.length ? Math.round(activeStudents.length / leads.length * 100) : 0}%</strong><small>{activeStudents.length} з {leads.length} записів</small></article>
