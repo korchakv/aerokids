@@ -30,7 +30,7 @@ test("owner can open modular staff locations and settings workspaces", async ({ 
   await login(page);
 
   await page.getByText("Працівники", { exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Працівники" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Працівники", level: 1 })).toBeVisible();
 
   await page.getByText("Локації", { exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Локації школи" })).toBeVisible();
