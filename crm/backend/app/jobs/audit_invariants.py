@@ -27,6 +27,17 @@ from app.models.core import (
     StudentSubscription,
     SubscriptionPlan,
 )
+from app.models.hardening import (
+    EnrollmentHistory,
+    GroupRoomAssignment,
+    IndividualAttendance,
+    IndividualLessonSession,
+    LessonResourceAssignment,
+    Room,
+    StaffCapability,
+    TrialResourceAssignment,
+)
+from app.models.hardening_extensions import SubscriptionRuleSnapshot
 from app.services import crm
 
 
@@ -120,6 +131,114 @@ def audit_organization(db, org: Organization) -> list[Finding]:
     ))
     if cross_group_staff:
         findings.append(Finding("critical", "cross_tenant_group_staff", cross_group_staff, "GroupStaff has a foreign tenant relation"))
+
+    cross_room = _count(db, select(Room.id).join(
+        Location, Location.id == Room.location_id
+    ).where(Room.organization_id == org.id, Location.organization_id != org.id))
+    if cross_room:
+        findings.append(Finding("critical", "cross_tenant_room", cross_room, "Room points to a foreign location"))
+
+    cross_group_room = _count(db, select(GroupRoomAssignment.id).join(
+        Group, Group.id == GroupRoomAssignment.group_id
+    ).join(
+        Room, Room.id == GroupRoomAssignment.room_id
+    ).where(
+        GroupRoomAssignment.organization_id == org.id,
+        ((Group.organization_id != org.id) | (Room.organization_id != org.id)),
+    ))
+    if cross_group_room:
+        findings.append(Finding("critical", "cross_tenant_group_room", cross_group_room, "Group room assignment crosses organizations"))
+
+    cross_lesson_resource = _count(db, select(LessonResourceAssignment.id).join(
+        LessonSession, LessonSession.id == LessonResourceAssignment.session_id
+    ).outerjoin(
+        Staff, Staff.id == LessonResourceAssignment.staff_id
+    ).outerjoin(
+        Room, Room.id == LessonResourceAssignment.room_id
+    ).where(
+        LessonResourceAssignment.organization_id == org.id,
+        (
+            (LessonSession.organization_id != org.id)
+            | ((LessonResourceAssignment.staff_id.is_not(None)) & (Staff.organization_id != org.id))
+            | ((LessonResourceAssignment.room_id.is_not(None)) & (Room.organization_id != org.id))
+        ),
+    ))
+    if cross_lesson_resource:
+        findings.append(Finding("critical", "cross_tenant_lesson_resource", cross_lesson_resource, "Lesson resource assignment crosses organizations"))
+
+    cross_trial_resource = _count(db, select(TrialResourceAssignment.id).join(
+        crm.TrialLesson, crm.TrialLesson.id == TrialResourceAssignment.trial_id
+    ).outerjoin(
+        Staff, Staff.id == TrialResourceAssignment.staff_id
+    ).outerjoin(
+        Room, Room.id == TrialResourceAssignment.room_id
+    ).where(
+        TrialResourceAssignment.organization_id == org.id,
+        (
+            (crm.TrialLesson.organization_id != org.id)
+            | ((TrialResourceAssignment.staff_id.is_not(None)) & (Staff.organization_id != org.id))
+            | ((TrialResourceAssignment.room_id.is_not(None)) & (Room.organization_id != org.id))
+        ),
+    ))
+    if cross_trial_resource:
+        findings.append(Finding("critical", "cross_tenant_trial_resource", cross_trial_resource, "Trial resource assignment crosses organizations"))
+
+    cross_enrollment_history = _count(db, select(EnrollmentHistory.id).join(
+        Student, Student.id == EnrollmentHistory.student_id
+    ).join(
+        Group, Group.id == EnrollmentHistory.group_id
+    ).where(
+        EnrollmentHistory.organization_id == org.id,
+        ((Student.organization_id != org.id) | (Group.organization_id != org.id)),
+    ))
+    if cross_enrollment_history:
+        findings.append(Finding("critical", "cross_tenant_enrollment_history", cross_enrollment_history, "Enrollment history crosses organizations"))
+
+    cross_individual_lesson = _count(db, select(IndividualLessonSession.id).join(
+        Student, Student.id == IndividualLessonSession.student_id
+    ).outerjoin(
+        Location, Location.id == IndividualLessonSession.location_id
+    ).outerjoin(
+        Staff, Staff.id == IndividualLessonSession.staff_id
+    ).outerjoin(
+        Room, Room.id == IndividualLessonSession.room_id
+    ).where(
+        IndividualLessonSession.organization_id == org.id,
+        (
+            (Student.organization_id != org.id)
+            | ((IndividualLessonSession.location_id.is_not(None)) & (Location.organization_id != org.id))
+            | ((IndividualLessonSession.staff_id.is_not(None)) & (Staff.organization_id != org.id))
+            | ((IndividualLessonSession.room_id.is_not(None)) & (Room.organization_id != org.id))
+        ),
+    ))
+    if cross_individual_lesson:
+        findings.append(Finding("critical", "cross_tenant_individual_lesson", cross_individual_lesson, "Individual lesson crosses organizations"))
+
+    cross_individual_attendance = _count(db, select(IndividualAttendance.id).join(
+        IndividualLessonSession, IndividualLessonSession.id == IndividualAttendance.session_id
+    ).join(
+        Student, Student.id == IndividualAttendance.student_id
+    ).where(
+        IndividualAttendance.organization_id == org.id,
+        ((IndividualLessonSession.organization_id != org.id) | (Student.organization_id != org.id)),
+    ))
+    if cross_individual_attendance:
+        findings.append(Finding("critical", "cross_tenant_individual_attendance", cross_individual_attendance, "Individual attendance crosses organizations"))
+
+    cross_staff_capability = _count(db, select(StaffCapability.id).join(
+        Staff, Staff.id == StaffCapability.staff_id
+    ).where(StaffCapability.organization_id == org.id, Staff.organization_id != org.id))
+    if cross_staff_capability:
+        findings.append(Finding("critical", "cross_tenant_staff_capability", cross_staff_capability, "Staff capability points outside its organization"))
+
+    cross_rule_snapshot = _count(db, select(SubscriptionRuleSnapshot.id).join(
+        StudentSubscription, StudentSubscription.id == SubscriptionRuleSnapshot.subscription_id
+    ).where(
+        SubscriptionRuleSnapshot.organization_id == org.id,
+        StudentSubscription.organization_id != org.id,
+    ))
+    if cross_rule_snapshot:
+        findings.append(Finding("critical", "cross_tenant_subscription_rule_snapshot", cross_rule_snapshot, "Subscription rule snapshot crosses organizations"))
 
     capacity_rows = db.execute(
         select(Group.id, Group.name, Group.capacity, func.count(Enrollment.id))
