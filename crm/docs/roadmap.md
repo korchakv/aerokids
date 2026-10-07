@@ -88,7 +88,8 @@ Goal: reduce regression risk before adding more commercial SaaS features.
 
 Progress:
 - PR #48 merged: API contracts/client/auth split, shared UI/date/contact utilities extracted, LoginView, AuditHistory, schedule editors and lead Kanban/table moved out of App.tsx; App.tsx reduced substantially with full CI/E2E green.
-- Current Stage 2 domain-module branch: group, teaching, billing, staff, location and workspace/operations projection models/adapters are being extracted from App.tsx.
+- PR #49 merged: group, teaching, billing, staff and location UI projection models plus workspace/operations adapters extracted from App.tsx.
+- Current Stage 2 slice: role-aware navigation, lead availability transforms, group schedule helpers and candidate matching UI/logic are being extracted.
 
 Required:
 1. Continue splitting `frontend/src/App.tsx` into feature modules without changing behavior. **In progress.**
