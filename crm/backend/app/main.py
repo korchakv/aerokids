@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth_hardening_router import router as auth_hardening_router
 from app.api.billing_hardening_router import router as billing_hardening_router
 from app.api.enrollment_hardening_router import router as enrollment_hardening_router
 from app.api.privacy_router import router as privacy_router
@@ -90,6 +91,7 @@ async def add_security_headers(request: Request, call_next):
 
 # Most specific handlers go first, followed by the compatibility hardening
 # overlay and then all untouched legacy routes.
+app.include_router(auth_hardening_router)
 app.include_router(billing_hardening_router)
 app.include_router(enrollment_hardening_router)
 app.include_router(privacy_router)
