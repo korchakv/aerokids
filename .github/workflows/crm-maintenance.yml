@@ -1,0 +1,31 @@
+name: CRM Daily Maintenance
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: crm-daily-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Request GitHub OIDC identity and run production maintenance
+        env:
+          OIDC_AUDIENCE: aerokids-crm-maintenance
+          CRM_MAINTENANCE_URL: https://aerokids-crm-api.onrender.com/internal/operations/daily-maintenance
+        run: |
+          set -euo pipefail
+          response="$(curl             --fail-with-body             --silent             --show-error             -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN"             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OIDC_AUDIENCE}")"
+          token="$(python -c 'import json,sys; print(json.load(sys.stdin)["value"])' <<<"$response")"
+          test -n "$token"
+          echo "::add-mask::$token"
+          curl             --fail-with-body             --silent             --show-error             --retry 3             --retry-all-errors             --max-time 120             -X POST             -H "Authorization: Bearer $token"             "$CRM_MAINTENANCE_URL"
