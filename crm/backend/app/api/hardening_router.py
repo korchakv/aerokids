@@ -209,6 +209,17 @@ def _require_capability(capability: str):
     return dependency
 
 
+def _require_any_capability(*capabilities: str):
+    def dependency(access: OrgAccess = Depends(get_org_access), db: Session = Depends(get_db)) -> OrgAccess:
+        if not any(
+            hardening.has_capability(db, access.organization_id, access.user_id, access.role, capability)
+            for capability in capabilities
+        ):
+            raise HTTPException(status_code=403, detail="Недостатньо прав для цієї дії")
+        return access
+    return dependency
+
+
 def _require_owner(access: OrgAccess = Depends(get_org_access)) -> OrgAccess:
     if access.role != StaffRole.OWNER:
         raise HTTPException(status_code=403, detail="Ця дія доступна лише власнику організації")
@@ -393,7 +404,7 @@ def group_detail_hardened(
 @router.post("/lesson-sessions", response_model=LessonSessionRead, status_code=201)
 def create_lesson_session_hardened(
     data: HardenedLessonCreate,
-    access: OrgAccess = Depends(_require_capability("schedule.manage")),
+    access: OrgAccess = Depends(_require_any_capability("schedule.manage", "teaching")),
     db: Session = Depends(get_db),
 ):
     return hardening.create_lesson_session_hardened(db, access.organization_id, data, access.user_id, access.role)
