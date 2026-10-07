@@ -157,7 +157,9 @@ def update_plan(db: Session, org_id: UUID, plan_id: UUID, data, actor_user_id: U
     after = {field: getattr(plan, field) for field in (
         "name", "price_minor", "period_days", "lessons_included", *RULE_FIELDS, "is_active",
     )}
-    crm.record_audit(db, org_id, "subscription_plan", plan.id, "subscription_plan.updated_hardened", {
+    changed_fields = [key for key in before if before[key] != after[key]]
+    crm.record_audit(db, org_id, "subscription_plan", plan.id, "subscription_plan.updated", {
+        "changed_fields": changed_fields,
         "before": before,
         "after": after,
     }, actor_user_id)
