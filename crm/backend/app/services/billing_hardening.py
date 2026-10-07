@@ -4,16 +4,17 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.core import (
     Enrollment,
     EnrollmentStatus,
+    LessonSession,
+    LessonStatus,
     Payment,
+    PaymentReminder,
     PaymentStatus,
-    PaymentTransaction,
     Student,
     StudentStatus,
     StudentSubscription,
@@ -67,11 +68,11 @@ def eligible_subscription(
 
 def _next_start(db: Session, org_id: UUID, subscription: StudentSubscription, not_before: date) -> date:
     if subscription.group_id is not None:
-        sessions = list(db.scalars(select(crm.LessonSession).where(
-            crm.LessonSession.organization_id == org_id,
-            crm.LessonSession.group_id == subscription.group_id,
-            crm.LessonSession.status != crm.LessonStatus.CANCELLED,
-        ).order_by(crm.LessonSession.starts_at)))
+        sessions = list(db.scalars(select(LessonSession).where(
+            LessonSession.organization_id == org_id,
+            LessonSession.group_id == subscription.group_id,
+            LessonSession.status != LessonStatus.CANCELLED,
+        ).order_by(LessonSession.starts_at)))
         for lesson in sessions:
             local_date = hardening._local_date(db, org_id, lesson.starts_at)
             if local_date >= not_before:
@@ -153,7 +154,7 @@ def run_renewals(
     created_payment_ids: list[UUID] = []
     created_subscriptions = 0
     skipped_stale_subscriptions = 0
-    candidates = list(db.scalars(select(StudentSubscription).where(
+    candidate_ids = list(db.scalars(select(StudentSubscription.id).where(
         StudentSubscription.organization_id == org_id,
         StudentSubscription.auto_renew.is_(True),
         StudentSubscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED]),
@@ -161,14 +162,28 @@ def run_renewals(
         StudentSubscription.ends_on <= horizon,
     ).order_by(StudentSubscription.ends_on, StudentSubscription.created_at)))
 
-    for original in candidates:
-        current = original
+    for candidate_id in candidate_ids:
+        current = db.scalar(select(StudentSubscription).where(
+            StudentSubscription.organization_id == org_id,
+            StudentSubscription.id == candidate_id,
+        ).with_for_update())
+        if current is None:
+            continue
         while (
             current.auto_renew
             and current.status in {SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED}
             and current.ends_on is not None
             and current.ends_on <= horizon
         ):
+            # Serialize the parent renewal row. On PostgreSQL this guarantees
+            # only one worker can pass the child-existence check at a time;
+            # the partial unique index remains the database backstop.
+            current = db.scalar(select(StudentSubscription).where(
+                StudentSubscription.organization_id == org_id,
+                StudentSubscription.id == current.id,
+            ).with_for_update())
+            if current is None:
+                break
             if _open_pause(db, org_id, current.id) is not None:
                 break
             existing_child = db.scalar(select(StudentSubscription).where(
@@ -216,21 +231,7 @@ def run_renewals(
                 renewal_of_id=current.id,
             )
             db.add(child)
-            try:
-                db.flush()
-            except IntegrityError:
-                db.rollback()
-                # Another worker created the same renewal. The database unique
-                # index is the final idempotency guard; continue from its row.
-                existing_child = db.scalar(select(StudentSubscription).where(
-                    StudentSubscription.organization_id == org_id,
-                    StudentSubscription.renewal_of_id == current.id,
-                    StudentSubscription.status != SubscriptionStatus.CANCELLED,
-                ))
-                if existing_child is None:
-                    raise
-                current = existing_child
-                continue
+            db.flush()
             payment = Payment(
                 organization_id=org_id,
                 student_id=student.id,
@@ -284,21 +285,19 @@ def reminder_queue(db: Session, org_id: UUID) -> list[dict]:
         if stage_info is None:
             continue
         stage, label = stage_info
-        already_sent = db.scalar(select(crm.PaymentReminder.id).where(
-            crm.PaymentReminder.organization_id == org_id,
-            crm.PaymentReminder.payment_id == payment.id,
-            crm.PaymentReminder.stage == stage,
+        already_sent = db.scalar(select(PaymentReminder.id).where(
+            PaymentReminder.organization_id == org_id,
+            PaymentReminder.payment_id == payment.id,
+            PaymentReminder.stage == stage,
         ))
         if already_sent is not None:
             continue
         student = crm.scoped_get(db, Student, org_id, payment.student_id)
         contact = crm._primary_contact_for_student(db, org_id, student.id)
-        last_reminder_at = db.scalar(select(func.max(crm.PaymentReminder.sent_at)).where(
-            crm.PaymentReminder.organization_id == org_id,
-            crm.PaymentReminder.payment_id == payment.id,
-        )) if False else None
-        # Avoid an additional aggregate dependency here; the UI only needs the
-        # current actionable stage. Legacy history remains available elsewhere.
+        last_reminder_at = db.scalar(select(func.max(PaymentReminder.sent_at)).where(
+            PaymentReminder.organization_id == org_id,
+            PaymentReminder.payment_id == payment.id,
+        ))
         result.append({
             "payment_id": payment.id,
             "student_id": student.id,
