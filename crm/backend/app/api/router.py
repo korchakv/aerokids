@@ -11,7 +11,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import crm, staff_service
+from app.services import audit_service, crm, staff_service
 
 router = APIRouter()
 
@@ -849,4 +849,4 @@ def audit_events(
     org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    return crm.list_audit_events(db, org_id, entity_type, entity_id, min(max(limit, 1), 500))
+    return audit_service.list_audit_events(db, org_id, entity_type, entity_id, min(max(limit, 1), 500))
