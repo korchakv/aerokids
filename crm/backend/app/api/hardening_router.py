@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import OrgAccess, get_db, get_org_access
@@ -29,6 +29,7 @@ from app.models.core import (
 )
 from app.models.hardening import (
     GroupRoomAssignment,
+    GroupScheduleHistory,
     IndividualAttendance,
     IndividualLessonSession,
     LessonResourceAssignment,
@@ -277,6 +278,36 @@ def rooms(
     db: Session = Depends(get_db),
 ):
     return hardening.list_rooms(db, access.organization_id, location_id)
+
+
+@router.delete("/groups/{group_id}", status_code=204)
+def delete_group_hardened(
+    group_id: UUID,
+    access: OrgAccess = Depends(_require_capability("groups.manage")),
+    db: Session = Depends(get_db),
+):
+    group = crm.scoped_get(db, Group, access.organization_id, group_id)
+    lesson_ids = list(db.scalars(select(LessonSession.id).where(
+        LessonSession.organization_id == access.organization_id,
+        LessonSession.group_id == group.id,
+    )))
+    if lesson_ids:
+        db.execute(delete(LessonResourceAssignment).where(
+            LessonResourceAssignment.organization_id == access.organization_id,
+            LessonResourceAssignment.session_id.in_(lesson_ids),
+        ))
+    db.execute(delete(GroupRoomAssignment).where(
+        GroupRoomAssignment.organization_id == access.organization_id,
+        GroupRoomAssignment.group_id == group.id,
+    ))
+    db.execute(delete(GroupScheduleHistory).where(
+        GroupScheduleHistory.organization_id == access.organization_id,
+        GroupScheduleHistory.group_id == group.id,
+    ))
+    # Legacy delete_group contains the authoritative history guards. If one
+    # rejects deletion, this request transaction is rolled back on session close.
+    crm.delete_group(db, access.organization_id, group.id, access.user_id)
+    return None
 
 
 @router.put("/groups/{group_id}", response_model=GroupRead)
