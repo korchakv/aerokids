@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { UiIcon, navigationIcon } from "./components/UiIcon";
+import { AuditHistory } from "./components/AuditHistory";
 import { LoginView } from "./features/auth/LoginView";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
 import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
@@ -4100,7 +4101,7 @@ function App() {
             <span>Службова дія</span>
             <button className="subtleDangerAction" type="button" disabled={studentDeleteSaving} onClick={deleteSelectedStudent}>{studentDeleteSaving ? "Видаляємо…" : "Видалити учня"}</button>
           </div>}
-          {apiEnabled ? <AuditHistory title="Історія учня" events={entityEvents} loading={historyLoading} /> : <div className="history">
+          {apiEnabled ? <AuditHistory title="Історія учня" events={entityEvents} loading={historyLoading} labelForEvent={auditEventLabel} detailForEvent={auditEventDetail} /> : <div className="history">
             <h3>Історія учня</h3>
             <div><i></i><p><b>Пробне заняття</b><span>{selectedStudent.recommendedLevel ?? "Рівень не вказано"}</span></p></div>
             <div><i></i><p><b>Зараховано</b><span>{studentGroup(selectedStudent.id)?.name ?? "Групу не вказано"}</span></p></div>
@@ -4426,7 +4427,7 @@ function App() {
             <span>Службова дія</span>
             <button className="subtleDangerAction" type="button" disabled={leadDeleteSaving} onClick={deleteSelectedLead}>{leadDeleteSaving ? "Видаляємо…" : "Видалити заявку"}</button>
           </div>}
-          {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} /> : <div className="history">
+          {apiEnabled ? <AuditHistory title="Історія" events={entityEvents} loading={historyLoading} labelForEvent={auditEventLabel} detailForEvent={auditEventDetail} /> : <div className="history">
             <h3>Історія</h3>
             <div><i></i><p><b>Заявка створена</b><span>Джерело: {leadSourceLabel(selected.source)}</span></p></div>
             {selected.trialAt && <div><i></i><p><b>Пробне заплановано</b><span>{new Date(selected.trialAt).toLocaleString("uk-UA")}</span></p></div>}
@@ -4998,21 +4999,6 @@ function ageLabel(min: number | null, max: number | null) {
   if (min == null && max == null) return "—";
   if (min != null && max != null) return min === max ? String(min) : `${min}–${max}`;
   return String(min ?? max);
-}
-
-function AuditHistory({ title, events, loading }: { title: string; events: ApiAuditEvent[]; loading: boolean }) {
-  return <div className="history">
-    <h3>{title}</h3>
-    {loading && <div className="historyEmpty">Завантажуємо історію…</div>}
-    {!loading && events.length === 0 && <div className="historyEmpty">Подій поки немає.</div>}
-    {!loading && events.map((event) => <div key={event.id}>
-      <i></i>
-      <p>
-        <b>{auditEventLabel(event.event_type)}</b>
-        <span>{auditEventDetail(event)} · {new Date(event.created_at).toLocaleString("uk-UA")}{event.actor_name ? " · " + event.actor_name : ""}</span>
-      </p>
-    </div>)}
-  </div>;
 }
 
 function auditEventLabel(type: string) {
