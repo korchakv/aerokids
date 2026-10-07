@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     auth_required: bool = False
     bootstrap_secret: str | None = None
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
+    frontend_url: str = "http://localhost:8080"
     public_intake_window_minutes: int = 10
     public_intake_ip_limit: int = 20
     public_intake_phone_limit: int = 5
@@ -21,6 +22,13 @@ class Settings(BaseSettings):
     auth_login_email_limit: int = 10
     read_only_mode: bool = False
     strict_rbac: bool = False
+    transactional_email_enabled: bool = False
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_starttls: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -44,8 +52,21 @@ class Settings(BaseSettings):
                 raise ValueError("Production CORS_ORIGINS must explicitly list trusted HTTPS origins")
             if any(not origin.startswith("https://") for origin in origins):
                 raise ValueError("Production CORS_ORIGINS must use HTTPS")
+            if not self.frontend_url.startswith("https://"):
+                raise ValueError("Production FRONTEND_URL must use HTTPS")
             if self.access_token_minutes > 240:
                 raise ValueError("Production access tokens must not live longer than 4 hours")
+            if self.transactional_email_enabled:
+                missing = [
+                    name for name, value in {
+                        "SMTP_HOST": self.smtp_host,
+                        "SMTP_USERNAME": self.smtp_username,
+                        "SMTP_PASSWORD": self.smtp_password,
+                        "SMTP_FROM_EMAIL": self.smtp_from_email,
+                    }.items() if not value
+                ]
+                if missing:
+                    raise ValueError(f"Transactional email enabled but missing: {', '.join(missing)}")
             self.strict_rbac = True
         return self
 
