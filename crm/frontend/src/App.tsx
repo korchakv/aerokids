@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { UiIcon, navigationIcon } from "./components/UiIcon";
+import { AvailabilityWindowEditor, DateTimeEditor, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
 import { acceptInvite, apiDelete, apiEnabled, apiPatch, apiPost, apiPut, bootstrapOwner, changeOrganization, checkIntakeDuplicates, clearSession, getBootstrapStatus, getInvitationStatus, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, login, recordPaymentReminder, refreshMe, resetPassword, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OperationsBundle, type OverviewReport, type Session, type TeachingBundle, type WorkspaceBundle } from "./api";
 
 type LeadStatus = "Нова" | "Зв'язались" | "Пробне заплановано" | "Після пробного" | "Очікує групу" | "Зарахований" | "Не відповідає" | "Відмовились" | "Неактуально";
@@ -7,25 +8,6 @@ type LeadStatus = "Нова" | "Зв'язались" | "Пробне запла�
 type EntityId = string;
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
 const UI_SCALE_LEVELS: UiScale[] = [1, 1.1, 1.25, 1.4];
-
-type AvailabilitySlot = {
-  weekday: number;
-  start_time: string;
-  end_time: string;
-  preference: "preferred" | "possible" | "avoid";
-  note?: string | null;
-};
-
-type AvailabilityWindowDraft = {
-  id: string;
-  weekdays: number[];
-  start_time: string;
-  end_time: string;
-  preference: AvailabilitySlot["preference"];
-  note?: string | null;
-};
-
-type DraftScheduleSlot = { weekday: number; start_time: string; duration_minutes: number };
 
 type LeadKanbanColumnId = "new" | "contacted" | "trial" | "no_show" | "after_trial" | "waiting" | "deferred" | "closed";
 
@@ -5461,79 +5443,7 @@ function availabilityLabel(slots: AvailabilitySlot[]) {
   return [...groups.entries()].map(([time, days]) => `${days.join("/")} · ${time}`).join("; ");
 }
 
-const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
 const SCHEDULE_DAY_NAMES = ["Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя"];
-const TIME_OPTIONS = Array.from({ length: 56 }, (_, index) => `${String(8 + Math.floor(index / 4)).padStart(2, "0")}:${String((index % 4) * 15).padStart(2, "0")}`);
-
-function TimeSelect({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label>{label}<select value={value.slice(0, 5)} onChange={(event) => onChange(event.target.value)}>{TIME_OPTIONS.map((time) => <option key={time}>{time}</option>)}</select></label>;
-}
-
-function WeekdayPicker({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  return <label>День<select value={value} onChange={(event) => onChange(Number(event.target.value))}>{DAY_NAMES.map((day, index) => <option value={index} key={day}>{day}</option>)}</select></label>;
-}
-
-function DurationSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
-  return <label>Тривалість<select value={value} onChange={(event) => onChange(Number(event.target.value))}>{[45, 60, 75, 90].map((minutes) => <option value={minutes} key={minutes}>{minutes} хв</option>)}</select></label>;
-}
-
-function ScheduleSlotEditor({ value, onChange }: { value: DraftScheduleSlot[]; onChange: (value: DraftScheduleSlot[]) => void }) {
-  const update = (index: number, patch: Partial<DraftScheduleSlot>) => onChange(value.map((slot, i) => i === index ? { ...slot, ...patch } : slot));
-  return <fieldset className="slotEditor"><legend>Розклад групи</legend>{value.map((slot, index) => <div className="slotRow" key={index}>
-    <WeekdayPicker value={slot.weekday} onChange={(weekday) => update(index, { weekday })} />
-    <TimeSelect label="Початок" value={slot.start_time} onChange={(start_time) => update(index, { start_time })} />
-    <DurationSelect value={slot.duration_minutes} onChange={(duration_minutes) => update(index, { duration_minutes })} />
-    <button type="button" className="link danger" onClick={() => onChange(value.filter((_, i) => i !== index))}>Видалити</button>
-  </div>)}<button type="button" className="search" onClick={() => onChange([...value, { weekday: (value.at(-1)?.weekday ?? -1) + 1 > 6 ? 0 : (value.at(-1)?.weekday ?? -1) + 1, start_time: "17:00", duration_minutes: 60 }])}>+ Додати день</button></fieldset>;
-}
-
-function AvailabilityWindowEditor({ value, onChange }: { value: AvailabilityWindowDraft[]; onChange: (value: AvailabilityWindowDraft[]) => void }) {
-  const update = (index: number, patch: Partial<AvailabilityWindowDraft>) => onChange(value.map((window, i) => i === index ? { ...window, ...patch } : window));
-  const toggleDay = (index: number, weekday: number) => {
-    const window = value[index];
-    if (!window) return;
-    const weekdays = window.weekdays.includes(weekday)
-      ? window.weekdays.filter((day) => day !== weekday)
-      : [...window.weekdays, weekday].sort((a, b) => a - b);
-    update(index, { weekdays });
-  };
-
-  return <div className="availabilityEditor">
-    {value.map((window, index) => <div className="availabilityRow availabilityWindowRow" key={window.id}>
-      <div className="availabilityWeekdays">
-        <span>Дні</span>
-        <div className="availabilityDayChecks">
-          {DAY_NAMES.map((day, weekday) => <label className={"availabilityDayCheck" + (window.weekdays.includes(weekday) ? " checked" : "")} key={day}>
-            <input type="checkbox" checked={window.weekdays.includes(weekday)} onChange={() => toggleDay(index, weekday)} />
-            <span>{day}</span>
-          </label>)}
-        </div>
-        {window.weekdays.length === 0 && <small className="availabilityDayError">Оберіть хоча б один день</small>}
-      </div>
-      <div className="availabilityTimes">
-        <TimeSelect label="Від" value={window.start_time} onChange={(start_time) => update(index, { start_time })} />
-        <TimeSelect label="До" value={window.end_time} onChange={(end_time) => update(index, { end_time })} />
-      </div>
-      <label>Пріоритет<select value={window.preference ?? "preferred"} onChange={(e) => update(index, { preference: e.target.value as AvailabilitySlot["preference"] })}><option value="preferred">Бажано</option><option value="possible">Можливо</option><option value="avoid">Небажано</option></select></label>
-      <label className="windowNote">Коментар<input value={window.note ?? ""} onChange={(e) => update(index, { note: e.target.value || null })} placeholder="Необов’язково" /></label>
-      <button type="button" className="link danger availabilityDeleteWindow" onClick={() => onChange(value.filter((_, i) => i !== index))}>Видалити</button>
-    </div>)}
-    <button type="button" className="search availabilityAddWindow" onClick={() => onChange([...value, {
-      id: crypto.randomUUID(),
-      weekdays: [],
-      start_time: "17:00",
-      end_time: "19:00",
-      preference: "preferred",
-      note: null,
-    }])}>+ Додати бажаний час</button>
-  </div>;
-}
-
-function DateTimeEditor({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  const [date, clock = "17:00"] = value.split("T");
-  return <div className="dateTimeEditor"><label>Дата<input type="date" aria-label={label + ": дата"} value={date} onChange={(e) => onChange(`${e.target.value}T${clock}`)} /></label><TimeSelect label="Час" value={clock} onChange={(time) => onChange(`${date}T${time}`)} /></div>;
-}
-
 function scheduleDraftLabel(slots: DraftScheduleSlot[]) { return slots.map((slot) => `${SCHEDULE_DAY_NAMES[slot.weekday] ?? "Невідомий день"} · ${slot.start_time.slice(0, 5)}`).join("; "); }
 function hasDuplicateSlots(slots: DraftScheduleSlot[]) { return new Set(slots.map((slot) => `${slot.weekday}:${slot.start_time}`)).size !== slots.length; }
 
