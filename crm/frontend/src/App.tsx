@@ -17,6 +17,7 @@ import { LocationsView } from "./features/locations/LocationsView";
 import { staffRoleValue, type StaffDemo, type StaffRoleDemo } from "./features/staff/model";
 import { StaffView } from "./features/staff/StaffView";
 import { SettingsView } from "./features/settings/SettingsView";
+import { ReportsView } from "./features/reports/ReportsView";
 import { applyOperations } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
 import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
@@ -3372,62 +3373,36 @@ function App() {
           organizationSlug={currentMembership?.organization_slug ?? ""}
           roleName={roleLabel(currentMembership?.role)}
         />}
-        {active === "Звіти" && <section className="reportsPage">
-          <section className="reportStats">
-            <article><span>Конверсія в учні</span><strong>{leads.length ? Math.round(activeStudents.length / leads.length * 100) : 0}%</strong><small>{activeStudents.length} з {leads.length} записів</small></article>
-            <article><span>Заповненість груп</span><strong>{occupancy}%</strong><small>{occupiedSeats} з {totalCapacity} місць</small></article>
-            <article><span>Відвідуваність</span><strong>{attendanceRate}%</strong><small>{overviewReport?.attendance.total ?? attendanceValues.length} відміток</small></article>
-            <article><span>Сплачено</span><strong>{money(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}</strong><small>зафіксовані платежі</small></article>
-          </section>
-
-          <section className="reportsGrid">
-            <article className="panel">
-              <div className="panelHead"><div><p className="eyebrow">Воронка</p><h2>Заявка → учень</h2></div></div>
-              <div className="funnelBars">
-                {[
-                  ["Нова", overviewFunnelCount(overviewReport, "new", leads.filter((x) => x.status === "Нова").length)],
-                  ["Пробне", overviewFunnelCount(overviewReport, "trial_scheduled", leads.filter((x) => x.status === "Пробне заплановано").length)],
-                  ["Очікує групу", overviewFunnelCount(overviewReport, "waiting_for_group", waiting.length)],
-                  ["Зарахований", overviewFunnelCount(overviewReport, "enrolled", activeStudents.length)],
-                ].map(([label,count]) => {
-                  const numeric = Number(count);
-                  const max = Math.max(1, overviewReport ? overviewReport.funnel.reduce((sum, item) => sum + item.count, 0) : leads.length);
-                  return <div className="funnelBar" key={String(label)}><span><b>{label}</b><i>{numeric}</i></span><div><em style={{width: Math.max(4, numeric / max * 100) + "%"}} /></div></div>;
-                })}
-              </div>
-            </article>
-
-            <article className="panel">
-              <div className="panelHead"><div><p className="eyebrow">Навчання</p><h2>Відвідування</h2></div><strong className="reportBig">{attendanceRate}%</strong></div>
-              <div className="attendanceSummary">
-                <span><i className="dot present"></i>Був <b>{overviewReport?.attendance.present ?? attendanceStats.present}</b></span>
-                <span><i className="dot late"></i>Запізнився <b>{overviewReport?.attendance.late ?? attendanceStats.late}</b></span>
-                <span><i className="dot absent"></i>Відсутній <b>{overviewReport?.attendance.absent ?? attendanceStats.absent}</b></span>
-                <span><i className="dot excused"></i>Поважна <b>{overviewReport?.attendance.excused ?? attendanceStats.excused}</b></span>
-              </div>
-            </article>
-
-            <article className="panel">
-              <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати</h2></div></div>
-              <div className="financeRows">
-                <span><i>Сплачено</i><b>{money(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}</b></span>
-                <span><i>Очікується</i><b>{money(overviewReport ? overviewReport.payments.pending_minor / 100 : paymentTotals.pending)}</b></span>
-                <span><i>Прострочено</i><b>{money(overviewReport ? overviewReport.payments.overdue_minor / 100 : paymentTotals.overdue)}</b></span>
-              </div>
-            </article>
-
-            <article className="panel">
-              <div className="panelHead"><div><p className="eyebrow">Масштаб</p><h2>Організація</h2></div></div>
-              <div className="organizationReport">
-                <span><strong>{overviewReport?.active_locations ?? locations.filter((x) => x.isActive).length}</strong><small>локацій</small></span>
-                <span><strong>{overviewReport?.active_staff ?? staff.filter((x) => x.isActive).length}</strong><small>працівників</small></span>
-                <span><strong>{overviewReport?.active_groups ?? groups.length}</strong><small>груп</small></span>
-                <span><strong>{overviewReport?.active_students ?? activeStudents.length}</strong><small>учнів</small></span>
-              </div>
-            </article>
-          </section>
-        </section>}
-
+        {active === "Звіти" && <ReportsView
+          conversionPercent={leads.length ? Math.round(activeStudents.length / leads.length * 100) : 0}
+          activeStudentCount={activeStudents.length}
+          leadCount={leads.length}
+          occupancyPercent={occupancy}
+          occupiedSeats={occupiedSeats}
+          totalCapacity={totalCapacity}
+          attendanceRate={attendanceRate}
+          attendanceTotal={overviewReport?.attendance.total ?? attendanceValues.length}
+          paidAmount={money(overviewReport ? overviewReport.payments.paid_minor / 100 : paymentTotals.paid)}
+          pendingAmount={money(overviewReport ? overviewReport.payments.pending_minor / 100 : paymentTotals.pending)}
+          overdueAmount={money(overviewReport ? overviewReport.payments.overdue_minor / 100 : paymentTotals.overdue)}
+          funnel={[
+            { label: "Нова", count: overviewFunnelCount(overviewReport, "new", leads.filter((x) => x.status === "Нова").length) },
+            { label: "Пробне", count: overviewFunnelCount(overviewReport, "trial_scheduled", leads.filter((x) => x.status === "Пробне заплановано").length) },
+            { label: "Очікує групу", count: overviewFunnelCount(overviewReport, "waiting_for_group", waiting.length) },
+            { label: "Зарахований", count: overviewFunnelCount(overviewReport, "enrolled", activeStudents.length) },
+          ]}
+          funnelMax={Math.max(1, overviewReport ? overviewReport.funnel.reduce((sum, item) => sum + item.count, 0) : leads.length)}
+          attendance={{
+            present: overviewReport?.attendance.present ?? attendanceStats.present,
+            late: overviewReport?.attendance.late ?? attendanceStats.late,
+            absent: overviewReport?.attendance.absent ?? attendanceStats.absent,
+            excused: overviewReport?.attendance.excused ?? attendanceStats.excused,
+          }}
+          activeLocations={overviewReport?.active_locations ?? locations.filter((x) => x.isActive).length}
+          activeStaff={overviewReport?.active_staff ?? staff.filter((x) => x.isActive).length}
+          activeGroups={overviewReport?.active_groups ?? groups.length}
+          activeStudents={overviewReport?.active_students ?? activeStudents.length}
+        />}
                 {active === "Групи" && <section className="groupsPage">
           <article className="panel groupsPrimary">
             <div className="panelHead groupsPrimaryHead">
