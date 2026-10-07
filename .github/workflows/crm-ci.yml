@@ -51,11 +51,15 @@ jobs:
           cache: pip
           cache-dependency-path: crm/backend/requirements.txt
       - run: pip install -r requirements.txt
+      - name: Compile backend modules
+        run: python -m compileall -q app
       - run: pytest -q
       - name: Verify Alembic migrations
         env:
           DATABASE_URL: sqlite:///./migration-ci.db
         run: alembic upgrade head
+      - name: Verify invariant auditor on empty database
+        run: python -m app.jobs.audit_invariants
 
   frontend-build:
     runs-on: ubuntu-latest
@@ -74,7 +78,6 @@ jobs:
       - run: npm install
       - run: npm run build
 
-
   docker-build:
     runs-on: ubuntu-latest
     steps:
@@ -88,7 +91,6 @@ jobs:
         run: docker build -t schoolcrm-api-ci crm/backend
       - name: Build frontend image
         run: docker build --build-arg VITE_API_URL=http://localhost:8000 -t schoolcrm-web-ci crm/frontend
-
 
   postgres-tests:
     runs-on: ubuntu-latest
@@ -133,8 +135,6 @@ jobs:
           PY
           alembic upgrade head
 
-
-
   full-stack-smoke:
     runs-on: ubuntu-latest
     steps:
@@ -144,8 +144,26 @@ jobs:
       - name: Build and start full CRM stack
         working-directory: crm
         run: docker compose up -d --build
-      - name: Run end-to-end smoke flow
+      - name: Run API end-to-end smoke flow
         run: python crm/scripts/smoke.py
+      - name: Audit live smoke database invariants
+        working-directory: crm
+        run: docker compose exec -T api python -m app.jobs.audit_invariants
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: crm/frontend/package.json
+      - name: Install browser test dependencies
+        working-directory: crm/frontend
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+      - name: Run desktop and mobile browser smoke tests
+        working-directory: crm/frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
+        run: npm run test:e2e
       - name: Show stack logs on failure
         if: failure()
         working-directory: crm
@@ -154,7 +172,6 @@ jobs:
         if: always()
         working-directory: crm
         run: docker compose down -v
-
 
   security-audit:
     runs-on: ubuntu-latest
@@ -186,7 +203,6 @@ jobs:
         run: |
           npm install
           npm audit --audit-level=high
-
 
   secrets-scan:
     runs-on: ubuntu-latest
