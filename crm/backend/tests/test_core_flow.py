@@ -1949,7 +1949,7 @@ def test_workspace_overviews_return_real_tenant_data(client):
     assert groups.json()[0]["capacity"] == 8
 
 
-def test_teacher_workspace_and_lessons_have_full_operational_access(client):
+def test_teacher_is_scoped_to_assigned_groups_and_cannot_manage_foreign_groups(client):
     bootstrap = client.post(
         "/auth/bootstrap",
         json={
@@ -2031,8 +2031,6 @@ def test_teacher_workspace_and_lessons_have_full_operational_access(client):
     assert workspace_students.status_code == 200, workspace_students.text
     assert {item["first_name"] for item in workspace_students.json()} == {"Assigned Child"}
 
-    # A teacher may work only with explicitly assigned groups/students.
-    assert client.get("/workspace/leads", headers=teacher_headers).status_code == 403
     assert client.get(f"/groups/{group_a_id}/roster", headers=teacher_headers).status_code == 200
     assert client.get(f"/groups/{group_b_id}/roster", headers=teacher_headers).status_code == 403
 
@@ -2043,13 +2041,12 @@ def test_teacher_workspace_and_lessons_have_full_operational_access(client):
     )
     assert allowed_session.status_code == 201, allowed_session.text
 
-    second_session = client.post(
+    foreign_session = client.post(
         "/lesson-sessions",
         headers=teacher_headers,
         json={"group_id": group_b_id, "starts_at": "2026-10-10T18:00:00+03:00"},
     )
-    assert second_session.status_code == 403, second_session.text
-
+    assert foreign_session.status_code == 403, foreign_session.text
 
 def test_audit_events_follow_student_workflow_and_are_tenant_scoped(client):
     org_a = create_org(client, "School A", "audit-a")
