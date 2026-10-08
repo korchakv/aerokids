@@ -38,6 +38,10 @@ test("owner can open modular groups workspace", async ({ page }) => {
   await page.getByText("Групи", { exact: true }).first().click();
   await expect(page.getByTestId("groups-workspace")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Активні групи" })).toBeVisible();
+  await page.locator(".groupCardButton").first().click();
+  await expect(page.getByTestId("group-detail-drawer")).toBeVisible();
+  await page.getByTestId("group-detail-drawer").getByRole("button", { name: "Закрити групу" }).click();
+  await expect(page.getByTestId("group-detail-drawer")).toHaveCount(0);
 });
 
 test("owner can open modular schedule workspace", async ({ page }) => {
