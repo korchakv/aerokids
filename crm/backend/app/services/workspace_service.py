@@ -275,7 +275,9 @@ def paginate_student_overview(
     if status is not None:
         filters.append(Student.student_status == status)
 
-    allowed_groups = assigned_group_ids_for_user(db, org_id, user_id, role)
+    # Preserve the legacy finance workflow: accountants can resolve students
+    # across the organization for billing, while teachers remain assigned-group scoped.
+    allowed_groups = None if role == StaffRole.ACCOUNTANT else assigned_group_ids_for_user(db, org_id, user_id, role)
     if allowed_groups is not None:
         if not allowed_groups:
             return {"items": [], "total": 0, "limit": limit, "offset": offset}
