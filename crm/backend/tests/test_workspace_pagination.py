@@ -171,3 +171,61 @@ def test_student_page_preserves_accountant_finance_visibility(client):
     assert page.status_code == 200, page.text
     assert page.json()["total"] == 1
     assert page.json()["items"][0]["first_name"] == "Finance Child"
+
+
+def test_teacher_student_page_never_projects_a_foreign_active_group(client):
+    bootstrap, owner_headers = _bootstrap(client, "teacher-page-group-projection")
+    assigned_group = client.post(
+        "/groups", headers=owner_headers, json={"name": "Assigned Group", "capacity": 8}
+    ).json()
+    foreign_group = client.post(
+        "/groups", headers=owner_headers, json={"name": "Foreign Group", "capacity": 8}
+    ).json()
+    student = _create_student(client, owner_headers, "Shared Child")
+
+    first_enrollment = client.post(
+        "/enrollments",
+        headers=owner_headers,
+        json={"student_id": student["id"], "group_id": assigned_group["id"], "started_at": "2026-10-01"},
+    )
+    assert first_enrollment.status_code == 201, first_enrollment.text
+    second_enrollment = client.post(
+        "/enrollments",
+        headers=owner_headers,
+        json={"student_id": student["id"], "group_id": foreign_group["id"], "started_at": "2026-10-02"},
+    )
+    assert second_enrollment.status_code == 201, second_enrollment.text
+
+    invite = client.post(
+        "/organization-invitations",
+        headers=owner_headers,
+        json={"email": "projection-teacher@example.com", "role": "teacher"},
+    )
+    assert invite.status_code == 201, invite.text
+    accepted = client.post(
+        "/auth/accept-invite",
+        json={
+            "invite_token": invite.json()["invite_token"],
+            "full_name": "Projection Teacher",
+            "password": "teacher-secure-password",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+    staff = client.get("/staff", headers=owner_headers)
+    teacher = next(item for item in staff.json() if item["email"] == "projection-teacher@example.com")
+    assignment = client.post(
+        f"/staff/{teacher['id']}/groups",
+        headers=owner_headers,
+        json={"group_id": assigned_group["id"], "is_primary": True},
+    )
+    assert assignment.status_code == 201, assignment.text
+
+    teacher_headers = {
+        "Authorization": f"Bearer {accepted.json()['access_token']}",
+        "X-Organization-Id": bootstrap["organization_id"],
+    }
+    page = client.get("/workspace/students/page?limit=10", headers=teacher_headers)
+    assert page.status_code == 200, page.text
+    assert page.json()["total"] == 1
+    assert page.json()["items"][0]["group_id"] == assigned_group["id"]
+    assert page.json()["items"][0]["group_name"] == "Assigned Group"
