@@ -27,7 +27,7 @@ export type LeadCreateDialogProps = {
   setLeadSource: Setter<string>;
   setLeadComment: Setter<string>;
   onClose: () => void;
-  onCheckDuplicates: () => MaybePromise;
+  onCheckDuplicates: () => void | Promise<IntakeDuplicateMatch[]>;
   onOpenDuplicate: (match: IntakeDuplicateMatch) => void;
   onCreate: () => MaybePromise;
 };
