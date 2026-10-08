@@ -20,7 +20,7 @@ import { PaymentsView } from "./features/billing/PaymentsView";
 import type { LocationDemo } from "./features/locations/types";
 import { LocationsView } from "./features/locations/LocationsView";
 import { staffRoleValue, type StaffDemo, type StaffRoleDemo } from "./features/staff/model";
-import { StaffView } from "./features/staff/StaffView";
+import { StaffDrawer, StaffView } from "./features/staff/StaffView";
 import { SettingsView } from "./features/settings/SettingsView";
 import { ReportsView } from "./features/reports/ReportsView";
 import { StudentDrawer, StudentsView, type StudentFilter, type StudentLifecycleLabel } from "./features/students/StudentsView";
@@ -3407,50 +3407,41 @@ function App() {
         </aside>
       </div>}
 
-      {selectedStaff && <div className="drawerBackdrop" onClick={() => setSelectedStaffId(null)}>
-        <aside className="drawer studentDrawer" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setSelectedStaffId(null)}>×</button>
-          <p className="eyebrow">Працівник</p>
-          <div className="studentHero"><span>{selectedStaff.fullName[0]}</span><div><h2>{selectedStaff.fullName}</h2><p>{selectedStaff.role}{selectedStaff.canTeach ? " · Викладає" : ""}</p></div></div>
-          <div className="contactCard"><span>Контакти</span><b>{selectedStaff.email || "Email не вказано"}</b><a href={"tel:" + selectedStaff.phone.replace(/\s/g,"")}>{selectedStaff.phone || "Телефон не вказано"}</a></div>
-          <div className="studentSection"><h3>Обов’язки</h3><label className="toggleRow responsibilityToggle"><input type="checkbox" checked={selectedStaff.canTeach || selectedStaff.role === "Викладач"} disabled={selectedStaff.role === "Викладач"} onChange={async (e) => {
-            const next = e.target.checked;
-            if (apiEnabled && session) {
-              try {
-                await apiPatch(`/staff/${selectedStaff.id}`, { can_teach: next }, session);
-                await syncWorkspace(session);
-              } catch (error) {
-                setWorkspaceError(error instanceof Error ? error.message : "Не вдалося змінити обов’язки працівника.");
-              }
+      {selectedStaff && <StaffDrawer
+        staff={selectedStaff}
+        locations={locations}
+        groups={groups}
+        apiEnabled={apiEnabled}
+        resetLink={staffResetLink}
+        onClose={() => setSelectedStaffId(null)}
+        onToggleTeaching={async (next) => {
+          if (apiEnabled && session) {
+            try {
+              await apiPatch(`/staff/${selectedStaff.id}`, { can_teach: next }, session);
+              await syncWorkspace(session);
+            } catch (error) {
+              setWorkspaceError(error instanceof Error ? error.message : "Не вдалося змінити обов’язки працівника.");
+            }
+            return;
+          }
+          setStaff((items) => items.map((item) => item.id === selectedStaff.id ? { ...item, canTeach: next } : item));
+        }}
+        onToggleLocation={(locationId) => toggleStaffLocation(selectedStaff.id, locationId)}
+        onToggleGroup={(groupId) => toggleStaffGroup(selectedStaff.id, groupId)}
+        onToggleActive={async () => {
+          if (apiEnabled && session) {
+            try {
+              await apiPatch(`/staff/${selectedStaff.id}`, { is_active: !selectedStaff.isActive }, session);
+              await syncWorkspace(session);
+            } catch {
               return;
             }
-            setStaff((items) => items.map((item) => item.id === selectedStaff.id ? { ...item, canTeach: next } : item));
-          }} /><span><b>Може викладати</b><small>Можна призначати викладачем груп незалежно від ролі доступу.</small></span></label></div>
-          <div className="studentSection"><h3>Локації</h3><div className="assignmentList">{locations.map((location) => <label key={location.id}><input type="checkbox" checked={selectedStaff.locationIds.includes(location.id)} onChange={() => toggleStaffLocation(selectedStaff.id, location.id)} /><span>{location.name}<small>{location.address}</small></span></label>)}</div></div>
-          <div className="studentSection"><h3>Групи</h3>{!selectedStaff.canTeach && selectedStaff.role !== "Викладач" && <div className="formNotice">Щоб призначати групи, увімкніть обов’язок «Може викладати».</div>}<div className="assignmentList">{groups.map((group) => <label key={group.id} className={!selectedStaff.canTeach && selectedStaff.role !== "Викладач" ? "assignmentDisabled" : ""}><input type="checkbox" disabled={!selectedStaff.canTeach && selectedStaff.role !== "Викладач"} checked={selectedStaff.groupIds.includes(group.id)} onChange={() => toggleStaffGroup(selectedStaff.id, group.id)} /><span>{group.name}<small>{group.schedule}</small></span></label>)}</div></div>
-          <div className="studentSection"><h3>Статус</h3><button className="search full" onClick={async () => {
-            if (apiEnabled && session) {
-              try {
-                await apiPatch(`/staff/${selectedStaff.id}`, { is_active: !selectedStaff.isActive }, session);
-                await syncWorkspace(session);
-                return;
-              } catch {
-                return;
-              }
-            }
-            setStaff((items) => items.map((item) => item.id === selectedStaff.id ? {...item,isActive:!item.isActive} : item));
-          }}>{selectedStaff.isActive ? "Деактивувати працівника" : "Активувати працівника"}</button></div>
-          {apiEnabled && selectedStaff.email && <div className="studentSection">
-            <h3>Доступ до CRM</h3>
-            {!staffResetLink ? <button className="search full" onClick={createStaffPasswordReset}>Створити посилання для нового пароля</button> : <div className="inviteSuccess">
-              <b>Посилання готове</b>
-              <p>Воно одноразове та діє 1 годину. Надішліть його працівнику приватно.</p>
-              <code>{staffResetLink}</code>
-              <button className="primary full" onClick={() => navigator.clipboard?.writeText(staffResetLink)}>Копіювати посилання</button>
-            </div>}
-          </div>}
-        </aside>
-      </div>}
+            return;
+          }
+          setStaff((items) => items.map((item) => item.id === selectedStaff.id ? { ...item, isActive: !item.isActive } : item));
+        }}
+        onCreatePasswordReset={createStaffPasswordReset}
+      />}
 
             {showPlanForm && <div className="modalBackdrop">
         <div className="groupModal tariffEditModal" onClick={(e) => e.stopPropagation()}>
