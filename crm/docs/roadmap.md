@@ -44,7 +44,7 @@ Completed:
 
 ## IN PROGRESS — Stage 2 maintainability/UI architecture
 
-Merged through PR #74:
+Merged through PR #75:
 - frontend API contracts/client/auth foundation;
 - shared utilities and editor primitives;
 - Login, AuditHistory, Leads board/table;
@@ -63,17 +63,19 @@ Completed slices:
 - PaymentsView extraction — PR #73.
 
 Completed since the previous roadmap update:
-- StaffDrawer extraction — PR #74.
+- StaffDrawer extraction — PR #74;
+- BillingDialogs extraction — PR #75.
 
 Current active slice:
-- extract billing dialogs from App into the billing feature module;
-- preserve financial behavior;
+- extract GroupDetailDrawer from App into the groups feature module;
+- preserve group business behavior;
 - browser smoke coverage;
 - refresh persistent handoff/roadmap.
 
 Next slices, in order:
-1. Remaining large lead/group/location/billing drawers and modals from App.
-2. Re-measure App.tsx and extract the largest remaining behavior-preserving UI block.
+1. LeadDrawer extraction.
+2. Remaining group-create/location/staff/invite/lead-create dialogs.
+3. Re-measure App.tsx and extract any remaining oversized UI block.
 3. Scheduling service extraction from legacy `crm.py`.
 4. Billing legacy-service extraction.
 5. Re-measure `App.tsx` and `crm.py`; Stage 2 ends only when remaining orchestration is readable and domain logic is not concentrated in either file.

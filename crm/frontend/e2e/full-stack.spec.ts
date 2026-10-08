@@ -38,6 +38,18 @@ test("owner can open modular groups workspace", async ({ page }) => {
   await page.getByText("Групи", { exact: true }).first().click();
   await expect(page.getByTestId("groups-workspace")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Активні групи" })).toBeVisible();
+  const groupCards = page.locator(".groupCardButton");
+  if (await groupCards.count() === 0) {
+    await page.getByRole("button", { name: "+ Створити групу" }).click();
+    await expect(page.getByRole("heading", { name: "Створити групу" })).toBeVisible();
+    await page.getByLabel("Назва групи").fill(`Smoke Group ${Date.now()}`);
+    await page.getByRole("button", { name: "Створити групу", exact: true }).click();
+    await expect(groupCards.first()).toBeVisible();
+  }
+  await groupCards.first().click();
+  await expect(page.getByTestId("group-detail-drawer")).toBeVisible();
+  await page.getByTestId("group-detail-drawer").getByRole("button", { name: "Закрити групу" }).click();
+  await expect(page.getByTestId("group-detail-drawer")).toHaveCount(0);
 });
 
 test("owner can open modular schedule workspace", async ({ page }) => {
