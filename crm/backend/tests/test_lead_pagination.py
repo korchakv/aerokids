@@ -139,7 +139,9 @@ def test_lead_page_is_tenant_scoped(client):
         json={"name": "Second", "slug": "lead-page-second"},
     )
     assert second.status_code == 201, second.text
-    second_headers = {**first_headers, "X-Organization-Id": second.json()["id"]}
+    # Test mode allows an unauthenticated owner scope; do not reuse the first
+    # tenant's bearer token for the second tenant.
+    second_headers = {"X-Organization-Id": second.json()["id"]}
     _lead(client, second_headers, "Другий")
 
     first_page = client.get("/workspace/leads/page?limit=10", headers=first_headers)
