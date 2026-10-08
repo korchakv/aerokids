@@ -55,3 +55,11 @@ export function searchMatches(query: string, value: string | null | undefined) {
   return queryDigits.length >= 3 && valueDigits.includes(queryDigits);
 }
 
+
+
+export function emailError(value: string, required = false): string {
+  const email = value.trim().toLowerCase();
+  if (!email) return required ? "Email обов’язковий" : "";
+  if (email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return "Некоректна email-адреса";
+  return "";
+}
