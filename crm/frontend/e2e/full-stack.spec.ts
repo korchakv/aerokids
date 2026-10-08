@@ -55,7 +55,7 @@ test("owner can open extracted CRM creation dialogs", async ({ page }) => {
   await page.getByRole("button", { name: "Закрити локацію" }).click();
 
   await page.getByText("Групи", { exact: true }).first().click();
-  await page.getByRole("button", { name: "+ Створити групу" }).click();
+  await page.getByRole("button", { name: /\+ (Нова|Створити) групу/ }).first().click();
   await expect(page.getByTestId("group-create-dialog")).toBeVisible();
   await page.getByRole("button", { name: "Закрити створення групи" }).click();
 });
