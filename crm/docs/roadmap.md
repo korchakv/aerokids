@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-08
 Target branch: `crm-v1`
-Current canonical head before active slice: `81e7e04a08de8c72bd8e44e9cd6273d445672a11`
+Current canonical head before active slice: `6bf9b65aee8c3d3328d9b08207587d95d7af527b`
 Current observed production live commit before active slice: `c92b43d98d25b45417037886d6cba5adc24cd994`
 
 This file is the canonical staged plan. Read together with `HANDOFF.md`. Do not restart the analysis from zero after a chat reset.
@@ -72,7 +72,8 @@ Current work:
 - stable page envelope `{items,total,limit,offset}`;
 - database-side student/group pagination;
 - database-side search, status filters and sorting;
-- teacher assigned-group regression coverage.
+- teacher assigned-group regression coverage;
+- preserved accountant student visibility for finance workflows.
 
 Next slices, in order:
 1. registry frontend page-state and loading/empty/error UX;
@@ -91,14 +92,6 @@ Rules:
 - each slice must pass SQLite, PostgreSQL, browser and security CI.
 
 
-
-- server-side pagination/filtering/sorting for students/groups/leads/payments/audit;
-- stable list contracts;
-- N+1 removal in student/group detail;
-- query-count/performance tests;
-- index review;
-- bounded reports;
-- paginated UX states.
 
 ## NEXT — Stage 4 permissions UX
 
