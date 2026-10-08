@@ -13,8 +13,13 @@ async function login(page: Page) {
 test("owner can sign in and see the real smoke lead", async ({ page }) => {
   await login(page);
   await page.getByText("Заявки", { exact: true }).first().click();
-  await expect(page.getByText(/Test Child/).first()).toBeVisible();
+  const smokeLead = page.getByText(/Test Child/).first();
+  await expect(smokeLead).toBeVisible();
   await expect(page.getByText(/Марта/)).toHaveCount(0);
+  await smokeLead.click();
+  await expect(page.getByTestId("lead-drawer")).toBeVisible();
+  await page.getByTestId("lead-drawer").getByRole("button", { name: "Закрити картку заявки" }).click();
+  await expect(page.getByTestId("lead-drawer")).toHaveCount(0);
 });
 
 test("mobile shell does not overflow horizontally", async ({ page }) => {
