@@ -65,6 +65,11 @@ test("owner can open modular staff locations and settings workspaces", async ({ 
 
   await page.getByText("Працівники", { exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Працівники", level: 1 })).toBeVisible();
+  await page.locator(".staffButton").first().click();
+  await expect(page.getByTestId("staff-drawer")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Обов’язки" })).toBeVisible();
+  await page.getByTestId("staff-drawer").getByRole("button", { name: "×" }).click();
+  await expect(page.getByTestId("staff-drawer")).toHaveCount(0);
 
   await page.getByText("Локації", { exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Локації школи" })).toBeVisible();
