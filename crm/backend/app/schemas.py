@@ -1200,6 +1200,24 @@ class LeadListItem(BaseModel):
     close_note: str | None
 
 
+class LeadPage(BaseModel):
+    items: list[LeadListItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class LeadColumnCounts(BaseModel):
+    new: int = 0
+    contacted: int = 0
+    trial: int = 0
+    no_show: int = 0
+    after_trial: int = 0
+    waiting: int = 0
+    deferred: int = 0
+    closed: int = 0
+
+
 class StudentOverviewItem(BaseModel):
     student_id: UUID
     first_name: str
