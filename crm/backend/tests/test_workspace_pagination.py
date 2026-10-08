@@ -75,8 +75,8 @@ def test_group_page_contract_searches_and_sorts_by_active_size(client):
         assert response.status_code == 201, response.text
         group_ids[name] = response.json()["id"]
 
-    for index, group_name in enumerate(("Beta", "Beta", "Gamma")):
-        student = _create_student(client, headers, f"Child{index}")
+    for student_name, group_name in zip(("Іван", "Олена", "Марко"), ("Beta", "Beta", "Gamma")):
+        student = _create_student(client, headers, student_name)
         enrolled = client.post(
             "/enrollments",
             headers=headers,
@@ -113,7 +113,7 @@ def test_workspace_service_teacher_scope_returns_only_assigned_groups(client):
         "/auth/accept-invite",
         json={
             "invite_token": invite.json()["invite_token"],
-            "full_name": "Stage 3 Teacher",
+            "full_name": "Викладач Тестовий",
             "password": "teacher-secure-password",
         },
     )
