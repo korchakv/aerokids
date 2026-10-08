@@ -67,8 +67,8 @@ Completed since the previous roadmap update:
 - BillingDialogs extraction — PR #75.
 
 Current active slice:
-- extract GroupDetailDrawer from App into the groups feature module;
-- preserve group business behavior;
+- extract LeadDrawer from App into the leads feature module;
+- preserve lead workflow behavior and App-owned commands;
 - browser smoke coverage;
 - refresh persistent handoff/roadmap.
 
