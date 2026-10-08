@@ -4,6 +4,7 @@ import { AuditHistory } from "./components/AuditHistory";
 import { LoginView } from "./features/auth/LoginView";
 import { allNav, roleLabel, visibleNavigation } from "./features/shell/navigation";
 import { DashboardView } from "./features/shell/DashboardView";
+import { GlobalSearch } from "./features/shell/GlobalSearch";
 import { LeadKanban, LeadTable } from "./features/leads/LeadBoard";
 import { LeadDrawer } from "./features/leads/LeadDrawer";
 import { LeadCreateDialog } from "./features/leads/LeadCreateDialog";
@@ -2788,36 +2789,25 @@ function App() {
               </select>
               <span>{roleLabel(currentMembership?.role)}</span>
             </div>}
-            <div
-              className={"globalSearchShell " + (showSearch ? "open" : "")}
-              onBlur={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                  setShowSearch(false);
-                }
-              }}
-            >
-              {showSearch ? <>
-                <div className="globalSearchBar">
-                  <span aria-hidden="true"><UiIcon name="search" size={16} /></span>
-                  <input
-                    autoFocus
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Пошук у CRM…"
-                    aria-label="Глобальний пошук"
-                  />
-                  <button type="button" aria-label="Закрити пошук" title="Закрити пошук" onClick={() => { setShowSearch(false); setSearchQuery(""); }}><UiIcon name="x" size={16} /></button>
-                </div>
-                <div className="globalSearchDropdown">
-                  {!searchTerm && <div className="searchHint compact">Ім’я, прізвище, телефон, відповідальний, група…</div>}
-                  {searchTerm && searchLeads.length + searchGroups.length + searchStaff.length + searchPayments.length === 0 && <div className="searchHint compact">Нічого не знайдено.</div>}
-                  {searchLeads.length > 0 && <div className="searchResults compactResults"><h3>Діти та заявки</h3>{searchLeads.map((item) => <button key={item.id} onClick={() => { if (item.status === "Зарахований") { setActive("Учні"); setSelectedStudentId(item.id); } else { setActive("Заявки"); setSelectedId(item.id); } setShowSearch(false); setSearchQuery(""); }}><span><b>{item.child}</b><small>{item.age} років · {item.parent}{item.phone ? " · " + formatUaPhone(item.phone) : ""}{item.childPhone ? " · дитина " + formatUaPhone(item.childPhone) : ""}</small></span><i>{item.status}</i></button>)}</div>}
-                  {searchGroups.length > 0 && <div className="searchResults compactResults"><h3>Групи</h3>{searchGroups.map((item) => <button key={item.id} onClick={() => { setActive("Групи"); setShowSearch(false); setSearchQuery(""); void openGroup(item.id); }}><span><b>{item.name}</b><small>{item.ages} · {item.location}{item.teacherName ? " · " + item.teacherName : ""}</small></span><i>{item.members.length}/{item.capacity}</i></button>)}</div>}
-                  {searchPayments.length > 0 && <div className="searchResults compactResults"><h3>Оплати</h3>{searchPayments.map((payment) => { const student = leads.find((lead) => lead.id === payment.studentId); const plan = plans.find((item) => item.id === payment.planId); return <button key={payment.id} onClick={() => { setShowSearch(false); setSearchQuery(""); goToPayment(payment.id); }}><span><b>{student?.child ?? "Учень"} · {plan?.name ?? "Оплата"}</b><small>{student?.parent ?? "Відповідальний не вказаний"}{student?.phone ? " · " + formatUaPhone(student.phone) : ""}</small></span><i>{payment.balanceAmount > 0 ? "Залишок " + money(payment.balanceAmount) : "Сплачено"}</i></button>; })}</div>}
-                  {searchStaff.length > 0 && <div className="searchResults compactResults"><h3>Працівники</h3>{searchStaff.map((item) => <button key={item.id} onClick={() => { setActive("Працівники"); setSelectedStaffId(item.id); setShowSearch(false); setSearchQuery(""); }}><span><b>{item.fullName}</b><small>{item.role} · {item.email || item.phone}</small></span><i>{item.isActive ? "Активний" : "Неактивний"}</i></button>)}</div>}
-                </div>
-              </> : <button className="search globalSearchTrigger" aria-label="Пошук" title="Пошук" onClick={() => { setSearchQuery(""); setShowSearch(true); }}><UiIcon name="search" size={17} /><span>Пошук</span></button>}
-            </div>
+            <GlobalSearch
+              open={showSearch}
+              query={searchQuery}
+              searchTerm={searchTerm}
+              searchLeads={searchLeads}
+              searchGroups={searchGroups}
+              searchStaff={searchStaff}
+              searchPayments={searchPayments}
+              leads={leads}
+              plans={plans}
+              money={money}
+              onOpenChange={setShowSearch}
+              onQueryChange={setSearchQuery}
+              onOpenLead={(id) => { setActive("Заявки"); setSelectedId(id); }}
+              onOpenStudent={(id) => { setActive("Учні"); setSelectedStudentId(id); }}
+              onOpenGroup={(id) => { setActive("Групи"); void openGroup(id); }}
+              onOpenPayment={goToPayment}
+              onOpenStaff={(id) => { setActive("Працівники"); setSelectedStaffId(id); }}
+            />
             {canManageLeads && <button className="primary headerPrimaryAction" onClick={() => setShowLeadForm(true)}><UiIcon name="plus" size={17} /><span>Нова заявка</span></button>}
             
             {session && <button className="search iconButton logoutButton" aria-label="Вийти" title="Вийти" onClick={() => { clearSession(); setSession(null); }}><UiIcon name="logout" size={18} /></button>}
