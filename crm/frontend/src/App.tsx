@@ -3267,7 +3267,7 @@ function App() {
 
       <GroupDetailDrawer
         groupId={selectedGroupId}
-        selectedGroup={selectedGroup}
+        selectedGroup={selectedGroup ?? undefined}
         groupDetail={groupDetail}
         groupDetailLoading={groupDetailLoading}
         apiEnabled={apiEnabled}
