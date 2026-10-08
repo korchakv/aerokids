@@ -18,6 +18,7 @@ import { staffRoleValue, type StaffDemo, type StaffRoleDemo } from "./features/s
 import { StaffView } from "./features/staff/StaffView";
 import { SettingsView } from "./features/settings/SettingsView";
 import { ReportsView } from "./features/reports/ReportsView";
+import { StudentDrawer, StudentsView, type StudentFilter, type StudentLifecycleLabel } from "./features/students/StudentsView";
 import { applyOperations } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
 import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
@@ -137,7 +138,7 @@ function App() {
   const [leadActionsOpen, setLeadActionsOpen] = useState(false);
   const [leadStatusMenuOpen, setLeadStatusMenuOpen] = useState(false);
   const [leadDeleteSaving, setLeadDeleteSaving] = useState(false);
-  const [studentFilter, setStudentFilter] = useState<"all" | "active" | "paused" | "archived">("all");
+  const [studentFilter, setStudentFilter] = useState<StudentFilter>("all");
   const [candidateAgeFilter, setCandidateAgeFilter] = useState<"all" | "8-10" | "11-13">("all");
   const [candidateLevelFilter, setCandidateLevelFilter] = useState("all");
   const [candidateLocationFilter, setCandidateLocationFilter] = useState("all");
@@ -290,7 +291,7 @@ function App() {
   const [selectedId, setSelectedId] = useState<EntityId | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<EntityId | null>(null);
   const [studentDeleteSaving, setStudentDeleteSaving] = useState(false);
-  const [studentStates, setStudentStates] = useState<Record<EntityId, "Активний" | "Пауза" | "Архів">>({});
+  const [studentStates, setStudentStates] = useState<Record<EntityId, StudentLifecycleLabel>>({});
   const [transferGroupId, setTransferGroupId] = useState<EntityId | null>(null);
   const [trialMode, setTrialMode] = useState<"schedule" | "complete" | null>(null);
   const [postTrialMode, setPostTrialMode] = useState<"thinking" | "defer" | "close" | null>(null);
@@ -2960,39 +2961,21 @@ function App() {
           <LeadKanban leads={visibleLeads.filter((lead) => lead.status !== "Зарахований")} onOpen={openLead} onMove={moveLeadOnBoard} movingId={leadMoveSavingId} />
         </section>}
 
-        {active === "Учні" && <section className="studentsLayout">
-          <article className="panel studentsPanel">
-            <div className="panelHead">
-              <div><p className="eyebrow">База учнів</p><h2>Активні учні</h2></div>
-              <div className="filters">
-                <button className={"chip " + (studentFilter === "all" ? "active" : "")} onClick={() => setStudentFilter("all")}>Усі</button>
-                <button className={"chip " + (studentFilter === "active" ? "active" : "")} onClick={() => setStudentFilter("active")}>Активні</button>
-                <button className={"chip " + (studentFilter === "paused" ? "active" : "")} onClick={() => setStudentFilter("paused")}>Пауза</button>
-                <button className={"chip " + (studentFilter === "archived" ? "active" : "")} onClick={() => setStudentFilter("archived")}>Архів</button>
-              </div>
-            </div>
-            <div className="studentTable">
-              <div className="studentRow studentHead"><span>Учень</span><span>Група</span><span>Контакт</span><span>Статус</span></div>
-              {visibleStudents.length === 0 && <div className="emptyState">За цим фільтром учнів немає.</div>}
-              {visibleStudents.map((student) => {
-                const group = studentGroup(student.id);
-                const state = studentStates[student.id] ?? "Активний";
-                return <button className="studentRow studentButton" key={student.id} onClick={() => { setSelectedStudentId(student.id); setTransferGroupId(group?.id ?? null); }}>
-                  <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років</small></b></span>
-                  <span>{group?.name ?? "Без групи"}</span>
-                  <span>{student.parent}<small>{student.phone}</small></span>
-                  <span className={"studentState " + state.toLowerCase()}>{state}</span>
-                </button>;
-              })}
-            </div>
-          </article>
-          <aside className="studentSummary panel">
-            <p className="eyebrow">Огляд</p><h2>{activeStudents.length} учнів</h2>
-            <div className="summaryMetric"><span>У групах</span><strong>{activeStudents.filter((x) => studentGroup(x.id)).length}</strong></div>
-            <div className="summaryMetric"><span>На паузі</span><strong>{Object.values(studentStates).filter((x) => x === "Пауза").length}</strong></div>
-            <div className="summaryMetric"><span>Груп</span><strong>{groups.length}</strong></div>
-          </aside>
-        </section>}
+        {active === "Учні" && <StudentsView
+          students={visibleStudents}
+          totalStudents={activeStudents.length}
+          groupedStudents={activeStudents.filter((student) => studentGroup(student.id)).length}
+          pausedStudents={Object.values(studentStates).filter((state) => state === "Пауза").length}
+          groupCount={groups.length}
+          studentFilter={studentFilter}
+          onFilterChange={setStudentFilter}
+          studentStates={studentStates}
+          groupForStudent={studentGroup}
+          onOpenStudent={(studentId, currentGroupId) => {
+            setSelectedStudentId(studentId);
+            setTransferGroupId(currentGroupId);
+          }}
+        />}
 
         {active === "Розклад" && <section className="scheduleWorkspace">
           <article className="panel schedulePanel scheduleCalendar">
@@ -3824,49 +3807,26 @@ function App() {
         </div>
       </div>}
 
-      {selectedStudent && <div className="drawerBackdrop" onClick={() => setSelectedStudentId(null)}>
-        <aside className="drawer studentDrawer" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setSelectedStudentId(null)}>×</button>
-          <p className="eyebrow">Картка учня</p>
-          <div className="studentHero">
-            <span>{selectedStudent.child[0]}</span>
-            <div><h2>{selectedStudent.child}</h2><p>{selectedStudent.age} років · {studentStates[selectedStudent.id] ?? "Активний"}</p></div>
-          </div>
-          <div className="studentInfoGrid">
-            <div><span>Група</span><b>{studentGroup(selectedStudent.id)?.name ?? "Без групи"}</b><small>{studentGroup(selectedStudent.id)?.schedule ?? "Розклад не задано"}</small></div>
-            <div><span>Локація</span><b>{studentGroup(selectedStudent.id)?.location ?? "Без локації"}</b></div>
-          </div>
-          <div className="contactCard"><span>Контакт</span><b>{selectedStudent.parent}</b><a href={"tel:" + selectedStudent.phone.replace(/\s/g, "")}>{selectedStudent.phone}</a></div>
-
-          {canManageStudents && <>
-            <div className="studentSection">
-              <h3>Статус учня</h3>
-              <div className="segmented">
-                {(["Активний","Пауза","Архів"] as const).map((state) => <button className={(studentStates[selectedStudent.id] ?? "Активний") === state ? "active" : ""} onClick={() => setStudentLifecycle(selectedStudent.id, state)} key={state}>{state}</button>)}
-              </div>
-            </div>
-
-            <div className="studentSection">
-              <h3>{studentGroup(selectedStudent.id) ? "Перевести в іншу групу" : "Додати до групи"}</h3>
-              <select className="transferSelect" value={transferGroupId ?? ""} onChange={(e) => setTransferGroupId(e.target.value || null)}>
-                <option value="">Оберіть групу</option>
-                {groups.map((group) => <option value={group.id} key={group.id}>{group.name} · {group.members.length}/{group.capacity}</option>)}
-              </select>
-              <button className="primary full" disabled={transferGroupId === null || transferGroupId === studentGroup(selectedStudent.id)?.id} onClick={transferStudent}>{studentGroup(selectedStudent.id) ? "Перевести учня" : "Додати учня до групи"}</button>
-            </div>
-          </>}
-
-          {canDeleteStudents && <div className="recordDangerZone">
-            <span>Службова дія</span>
-            <button className="subtleDangerAction" type="button" disabled={studentDeleteSaving} onClick={deleteSelectedStudent}>{studentDeleteSaving ? "Видаляємо…" : "Видалити учня"}</button>
-          </div>}
-          {apiEnabled ? <AuditHistory title="Історія учня" events={entityEvents} loading={historyLoading} labelForEvent={auditEventLabel} detailForEvent={auditEventDetail} /> : <div className="history">
-            <h3>Історія учня</h3>
-            <div><i></i><p><b>Пробне заняття</b><span>{selectedStudent.recommendedLevel ?? "Рівень не вказано"}</span></p></div>
-            <div><i></i><p><b>Зараховано</b><span>{studentGroup(selectedStudent.id)?.name ?? "Групу не вказано"}</span></p></div>
-          </div>}
-        </aside>
-      </div>}
+      <StudentDrawer
+        student={selectedStudent}
+        currentGroup={selectedStudent ? studentGroup(selectedStudent.id) : undefined}
+        studentState={selectedStudent ? (studentStates[selectedStudent.id] ?? "Активний") : "Активний"}
+        canManageStudents={canManageStudents}
+        canDeleteStudents={canDeleteStudents}
+        transferGroupId={transferGroupId}
+        groups={groups}
+        deleting={studentDeleteSaving}
+        apiEnabled={apiEnabled}
+        auditEvents={entityEvents}
+        historyLoading={historyLoading}
+        onClose={() => setSelectedStudentId(null)}
+        onLifecycleChange={(state) => { if (selectedStudent) void setStudentLifecycle(selectedStudent.id, state); }}
+        onTransferGroupChange={setTransferGroupId}
+        onTransfer={() => { void transferStudent(); }}
+        onDelete={() => { void deleteSelectedStudent(); }}
+        auditEventLabel={auditEventLabel}
+        auditEventDetail={auditEventDetail}
+      />
 
       {showGroupForm && <div className="modalBackdrop">
         <div className="groupModal groupCreateModal" onClick={(e) => e.stopPropagation()}>
