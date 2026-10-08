@@ -211,6 +211,12 @@ def paginate_student_overview(
     before rows are materialized. The returned item shape intentionally matches
     the existing workspace student contract.
     """
+    # Preserve the legacy finance workflow: accountants can resolve students
+    # across the organization for billing, while teachers remain assigned-group scoped.
+    allowed_groups = None if role == StaffRole.ACCOUNTANT else assigned_group_ids_for_user(db, org_id, user_id, role)
+    if allowed_groups is not None and not allowed_groups:
+        return {"items": [], "total": 0, "limit": limit, "offset": offset}
+
     contact_name = (
         select(Contact.full_name)
         .join(StudentContact, StudentContact.contact_id == Contact.id)
@@ -237,16 +243,20 @@ def paginate_student_overview(
         .correlate(Student)
         .scalar_subquery()
     )
+    group_projection_filters = [
+        Enrollment.organization_id == org_id,
+        Enrollment.student_id == Student.id,
+        Enrollment.status == EnrollmentStatus.ACTIVE,
+        Group.organization_id == org_id,
+        Group.is_active.is_(True),
+    ]
+    if allowed_groups is not None:
+        group_projection_filters.append(Group.id.in_(allowed_groups))
+
     current_group_id = (
         select(Group.id)
         .join(Enrollment, Enrollment.group_id == Group.id)
-        .where(
-            Enrollment.organization_id == org_id,
-            Enrollment.student_id == Student.id,
-            Enrollment.status == EnrollmentStatus.ACTIVE,
-            Group.organization_id == org_id,
-            Group.is_active.is_(True),
-        )
+        .where(*group_projection_filters)
         .order_by(Enrollment.started_at.desc(), Enrollment.id.desc())
         .limit(1)
         .correlate(Student)
@@ -255,13 +265,7 @@ def paginate_student_overview(
     current_group_name = (
         select(Group.name)
         .join(Enrollment, Enrollment.group_id == Group.id)
-        .where(
-            Enrollment.organization_id == org_id,
-            Enrollment.student_id == Student.id,
-            Enrollment.status == EnrollmentStatus.ACTIVE,
-            Group.organization_id == org_id,
-            Group.is_active.is_(True),
-        )
+        .where(*group_projection_filters)
         .order_by(Enrollment.started_at.desc(), Enrollment.id.desc())
         .limit(1)
         .correlate(Student)
@@ -275,12 +279,7 @@ def paginate_student_overview(
     if status is not None:
         filters.append(Student.student_status == status)
 
-    # Preserve the legacy finance workflow: accountants can resolve students
-    # across the organization for billing, while teachers remain assigned-group scoped.
-    allowed_groups = None if role == StaffRole.ACCOUNTANT else assigned_group_ids_for_user(db, org_id, user_id, role)
     if allowed_groups is not None:
-        if not allowed_groups:
-            return {"items": [], "total": 0, "limit": limit, "offset": offset}
         filters.append(exists(
             select(Enrollment.id).where(
                 Enrollment.organization_id == org_id,
