@@ -141,3 +141,33 @@ def test_workspace_service_teacher_scope_returns_only_assigned_groups(client):
 
     assert allowed == {UUID(group_a["id"])}
     assert UUID(group_b["id"]) not in allowed
+
+
+def test_student_page_preserves_accountant_finance_visibility(client):
+    bootstrap, owner_headers = _bootstrap(client, "accountant-student-pages")
+    _create_student(client, owner_headers, "Finance Child")
+
+    invite = client.post(
+        "/organization-invitations",
+        headers=owner_headers,
+        json={"email": "stage3-accountant@example.com", "role": "accountant"},
+    )
+    assert invite.status_code == 201, invite.text
+    accepted = client.post(
+        "/auth/accept-invite",
+        json={
+            "invite_token": invite.json()["invite_token"],
+            "full_name": "Бухгалтер Тестовий",
+            "password": "accountant-secure-password",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+    accountant_headers = {
+        "Authorization": f"Bearer {accepted.json()['access_token']}",
+        "X-Organization-Id": bootstrap["organization_id"],
+    }
+
+    page = client.get("/workspace/students/page?limit=10", headers=accountant_headers)
+    assert page.status_code == 200, page.text
+    assert page.json()["total"] == 1
+    assert page.json()["items"][0]["first_name"] == "Finance Child"
