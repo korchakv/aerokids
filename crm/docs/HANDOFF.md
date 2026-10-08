@@ -1,157 +1,199 @@
 # CRM canonical handoff
 
-Updated: 2026-10-07
+Updated: 2026-10-08
 Canonical product branch: `crm-v1`
-Current production-hardening merge: `c0f8ff24588a6e0a1995d28ba474a5f97c608522`
-Continuation branch: `crm-post-hardening-v1`
+Current canonical head before this continuation slice: `749bb89e6b9be99695a8a5b59ce5220178e3a7d0`
+Current production live commit observed before this slice: `c771cb43a25b0c38da8270667d0b7c191173b4c5`
+Continuation branch: `crm-stage2-schedule-view-and-handoff`
 
-This file is the canonical continuation point for future ChatGPT/project sessions. Read it together with `architecture.md`, `core-hardening.md`, `status.md`, and `backup-restore.md` before making structural CRM changes.
+This is the persistent continuation point for future ChatGPT/project sessions. Read this file together with `roadmap.md`, `architecture.md`, `core-hardening.md`, `operations.md`, `status.md` and `backup-restore.md`. Do not restart the CRM analysis from zero.
 
 ## Product direction
 
-The CRM is a generic SaaS-oriented product for schools, clubs and learning organizations. AeroKids is the first tenant, not a fork-specific implementation. The architecture must continue to support multiple organizations, locations, rooms, employees and teachers without breaking tenant isolation.
+The CRM is a generic SaaS-oriented product for schools, clubs, studios and learning organizations. AeroKids is the first tenant, not a separate fork. The system remains a modular monolith. Preserve support for multiple organizations, locations, rooms, employees and teachers and do not weaken tenant isolation.
 
-The system remains a modular monolith. Do not split it into microservices unless a measured production need appears.
+## DONE — Core Hardening
 
-## Core invariants already completed
-
-The Core Hardening phase was merged through PR #45 into `crm-v1`.
-
-Completed:
-- strict production RBAC;
-- teacher scope limited to assigned groups while teaching actions remain possible in assigned groups;
-- synchronized Staff / User / OrganizationMembership access state;
-- protection against removing the last organization owner;
-- JWT invalidation when credentials change;
-- shorter production JWT lifetime;
-- tenant-scoped validation for billing, groups, staff, locations and hardening resources;
-- rooms and room assignment groundwork;
-- lesson resource assignment with actual teacher/room snapshot;
+Merged through PR #45 and retained by all later changes:
+- strict production RBAC and assigned-group teacher scope;
+- Staff / User / OrganizationMembership synchronization and access revocation;
+- last-owner protection;
+- credential-bound JWT invalidation and shorter production token lifetime;
+- tenant-safe validation for billing/groups/staff/locations/resources;
+- rooms and resource conflict engine;
+- actual lesson staff/room snapshots;
 - trial resource conflicts;
 - recurring schedule reconciliation and schedule history;
-- no database mutation from lesson-session GET;
-- historical enrollment/roster logic;
-- non-overlapping transfer intervals;
-- pause/resume/archive learning workflows;
-- group archive lifecycle;
+- side-effect-free GET lesson reads;
+- historical enrollment episodes and lesson-date roster;
+- pause/resume/archive learning workflows and group archive;
 - individual lessons, attendance and subscription usage;
-- lesson finalization/reopen controls;
-- attendance decisions and deterministic billing reconciliation;
-- renewal idempotency and concurrency guard;
-- organization-local billing dates;
-- paused enrollments reserve capacity where configured;
-- subscription tariff rule snapshots;
-- privacy export and anonymization;
-- transactional notification outbox;
+- lesson finalization/reopen and deterministic attendance/billing reconciliation;
+- renewal idempotency/concurrency protection;
+- organization-local business dates;
+- tariff rule snapshots;
+- privacy export/anonymization;
+- notification outbox;
 - request IDs and hardened forwarded-IP handling;
-- explicit production demo-data guard;
-- search/pagination foundation;
-- read-only database invariant auditor;
-- daily maintenance job;
-- PostgreSQL backup and restore-drill scripts;
-- desktop/mobile Playwright smoke tests;
-- security/dependency/secrets CI;
-- updated canonical architecture documentation.
-
-## Validation already completed
-
-The PR and the post-merge commit both passed:
-- backend compile and pytest;
-- Alembic migrations;
+- production demo-data fail-closed behavior;
+- pagination/search foundation;
 - invariant auditor;
-- PostgreSQL full test suite;
-- clean PostgreSQL migration test;
-- frontend TypeScript/Vite build;
-- Docker Compose validation and backend/frontend image builds;
-- Python dependency/security audit;
-- frontend npm audit;
-- secret scan;
-- API end-to-end smoke flow;
-- live smoke-database invariant audit;
-- Playwright desktop and mobile browser smoke.
+- backup/restore scripts;
+- desktop/mobile Playwright, PostgreSQL and security CI.
 
-## Production deployment state at handoff
+## DONE — Production operations
 
-Render services:
-- API: `aerokids-crm-api`
-- frontend: `aerokids-crm`
-- branch: `crm-v1`
-- auto-deploy mode: checksPass
+Completed after Core Hardening:
+- API + frontend deployed on Render;
+- structured JSON application logs and request IDs;
+- `/health` and `/ready`;
+- idempotent daily maintenance endpoint;
+- GitHub Actions scheduler authenticated through GitHub OIDC, without a shared cron secret;
+- maintenance runs invariant audit and fails on critical findings;
+- incident-response documentation;
+- privacy-safe production DB audit.
 
-At the moment this handoff was written, Render still showed the previous live commit `86cbc739...`, while GitHub `crm-v1` already pointed to `c0f8ff2...` and all post-merge GitHub checks were green.
+Important scheduler rule: GitHub cron reads workflows from the default branch, so the maintenance workflow must remain available on `main` even while CRM application code is maintained on `crm-v1`.
 
-Therefore the first operational continuation task is to confirm Render has deployed `c0f8ff2...`. Do not claim production is updated until both Render services report the new commit as live.
+## IN PROGRESS — Stage 2 maintainability
 
-## Remaining Phase 2 work
+Merged Stage 2 work through PR #69 includes:
+- API contracts/client/auth split with compatibility barrel;
+- shared date/contact utilities;
+- LoginView and AuditHistory extraction;
+- lead Kanban/table and lead availability helpers;
+- schedule editor primitives;
+- role-aware navigation helpers;
+- group matching/candidate helpers;
+- UI projection/adapters for group, teaching, billing, staff, locations and workspace data;
+- StaffView, LocationsView, SettingsView, ReportsView;
+- GroupsView;
+- StudentsView and StudentDrawer;
+- backend domain services already extracted for audit, contacts, groups, locations, organizations, reporting, staff, students and trials;
+- legacy compatibility wrappers retained in `services/crm.py` to avoid breaking APIs.
 
-### P0 production operations
-1. Confirm API and frontend Render deployment of `c0f8ff2...`.
-2. Verify `/ready` and production login/bootstrap-safe behavior after deployment.
-3. Run a read-only invariant audit against the actual production database.
-4. Confirm Alembic production head equals repository head.
-5. Verify no tenant cross-links, over-capacity groups, contradictory Staff/Membership state, duplicate primary contacts, duplicate renewal chains or financial inconsistencies.
+Current baseline sizes before this slice:
+- `frontend/src/App.tsx`: ~4200 lines;
+- `backend/app/services/crm.py`: ~3180 lines.
 
-### P1 scheduled operations
-1. Run daily maintenance independently of a user opening the CRM.
-2. Maintenance includes renewal reconciliation, pause/resume lifecycle, reminder queue/outbox delivery, stale rate-limit cleanup and integrity checks as appropriate.
-3. GitHub Actions OIDC is the selected free scheduler identity; no shared cron secret is required for the normal path.
-4. Because GitHub cron reads workflows only from the default branch, keep `.github/workflows/crm-maintenance.yml` on `main` while CRM code remains on `crm-v1`.
-5. Never make GET endpoints perform scheduled writes and never copy database credentials into source code.
+Current continuation slice:
+- extract the complete Schedule workspace from `App.tsx` into `features/teaching/ScheduleView.tsx`;
+- preserve existing state/API callbacks in App;
+- add desktop/mobile browser regression coverage;
+- merge only with full CI green.
 
-### P1 observability
-1. Keep request IDs end-to-end.
-2. Add structured application logs for request failures and scheduled jobs.
-3. Define production error/5xx and failed-deploy checks using available Render monitoring.
-4. Keep health/readiness endpoints inexpensive and side-effect free.
-5. Document an incident checklist and rollback path.
+After ScheduleView, continue with:
+1. Attendance workspace extraction.
+2. Payments/Billing workspace extraction.
+3. Remaining staff/student/group drawers/modals still owned by App.
+4. Backend scheduling domain extraction from legacy `crm.py`.
+5. Backend billing compatibility extraction where legacy functions still dominate.
 
-### P1 transactional email
-1. Outbox logic exists, but production email transport must remain disabled until SMTP/provider settings are configured.
-2. Verify invite and password-reset delivery end-to-end once credentials exist.
-3. One-time auth tokens must not remain indefinitely in outbox payload after successful send.
+Every extraction must be behavior-preserving. Do not combine architectural refactors with business-rule changes in the same PR unless a regression requires it.
 
-### P1 code modularization
-Do this only after production hardening is live and stable.
-- split backend `services/crm.py` by domain without changing public behavior;
-- split frontend `App.tsx` into feature modules;
-- split `api.ts` by domain;
-- keep one shared API client/auth layer;
-- move feature-specific state and views under Leads, Students, Groups, Schedule, Attendance, Billing, Staff and Settings modules;
-- retain E2E coverage while moving code;
-- refactor in small PRs, never one giant rewrite.
+## NEXT — Stage 3 data scale and performance
 
-### P2 SaaS readiness
-- organization onboarding/presets;
-- role + capability UI;
-- room management UI;
-- scalable server-side filters/sorting/pagination;
-- operational backup/restore drills;
-- privacy/retention policy UI and support tooling;
-- payment-provider webhook idempotency layer before LiqPay/WayForPay integration;
-- transactional email provider;
-- monitoring/alerts;
-- optional MFA/session management later;
-- resource planning can later generalize rooms/teachers to equipment, but do not over-engineer it now.
+- real server-side pagination for student/group/lead/payment/audit lists;
+- server-side filtering and sorting;
+- stable pagination contract;
+- query/index review against actual paths;
+- remove N+1 group/student detail queries;
+- query-count/performance tests;
+- bounded reporting;
+- paginated loading/empty/error UI.
 
-## Important business rules to preserve
+## NEXT — Stage 4 organization permissions UX
 
-- Student CRM funnel status and learning lifecycle are different concepts.
+- permission preset editor;
+- Owner/Admin/Manager/Teacher/Accountant presets;
+- optional per-user capability overrides;
+- assigned-groups-only scope where applicable;
+- visible effective permissions;
+- audited access changes;
+- explicit access-removal UX on deactivation;
+- keep last-owner protection.
+
+## NEXT — Stage 5 organization onboarding
+
+- guided organization setup;
+- timezone/currency/locale;
+- optional locations/rooms;
+- first staff invite;
+- first tariff;
+- first group or individual-learning setup;
+- setup checklist;
+- no AeroKids-specific defaults in generic flows.
+
+## NEXT — Stage 6 production communication
+
+Outbox exists. Provider transport still depends on deployment credentials:
+- choose SMTP/transactional provider;
+- configure sender/domain;
+- enable transport;
+- verify invite/password-reset delivery;
+- retry/dead-letter visibility;
+- admin delivery status;
+- raw one-time tokens removed after successful delivery.
+
+## NEXT — Stage 7 monitoring, backups and DR
+
+Application mechanisms exist; external operations remain:
+- confirm managed DB backup policy;
+- private backup destination and cadence;
+- periodic restore drill;
+- alert ownership for API downtime/deploy failure/DB failure/invariant failures;
+- latency/5xx/saturation dashboard;
+- rollback decision rules.
+
+## NEXT — Stage 8 public intake migration
+
+Only after private production acceptance:
+- connect `aerokids.space` registration to CRM public intake;
+- preserve honeypot/rate-limit/duplicate/sibling behavior;
+- measure failures and retain rollback path.
+
+## LATER
+
+- payment-provider webhook layer with signature verification and unique event IDs before LiqPay/WayForPay;
+- SaaS organization plans/limits/billing;
+- MFA/passkeys/session management;
+- teacher payroll;
+- parent portal;
+- homework/content;
+- equipment/resource inventory;
+- advanced recurrence only when real requirements justify it.
+
+## Business rules that must never be lost
+
+- CRM funnel status and learning lifecycle are separate.
 - A student may learn without a group/location through individual lessons.
-- Historical lesson participation must be determined by the enrollment period at the lesson date, not only current group membership.
-- Completed/historical lessons must not be silently rewritten when a recurring schedule changes.
-- A finalized lesson is the billing boundary; reopening is an audited exceptional action.
-- Subscription price and behavior are snapshots; editing a tariff template must not retroactively alter sold subscriptions.
-- Financial history uses charges + immutable transactions/adjustments, not a mutable single balance field.
-- Organization-local timezone is authoritative for business dates.
-- Tenant-owned foreign keys must never cross organizations.
-- Production must fail closed when required API/auth configuration is missing; never show demo students as a production fallback.
+- Historical participation is determined by enrollment interval at lesson date.
+- Schedule edits never rewrite completed history.
+- Finalized lesson is the billing boundary; reopening is audited.
+- Sold subscription price and behavior are snapshots.
+- Financial history is charges + immutable transactions/adjustments, never one mutable balance.
+- Organization-local timezone governs business dates.
+- Tenant-owned references never cross organizations.
+- Production never displays demo students as fallback.
 
-## Workflow for all future changes
+## Release acceptance rule
 
-1. Start from current `crm-v1`.
-2. Work in a dedicated branch/PR.
-3. Preserve migrations and backward compatibility.
-4. Add regression tests for every corrected invariant.
-5. Require full CI green before merge.
-6. After merge, verify actual Render deployment and health.
-7. Update this handoff file when a phase is completed or priorities change.
+A stage/slice is DONE only when:
+1. code is merged to `crm-v1`;
+2. CI is green on the merged commit;
+3. affected Render API/frontend is live on that exact commit;
+4. `/ready` is healthy;
+5. Alembic is at repository head when schema changed;
+6. production invariant audit has no critical findings for schema/business changes;
+7. affected browser/API flows are smoke-tested.
+
+## Continuation protocol
+
+When context resets:
+1. read this file and `roadmap.md`;
+2. inspect current `crm-v1` head;
+3. inspect merged PRs after the head recorded here;
+4. inspect Render live commit for API and frontend;
+5. mark already-completed work DONE instead of rebuilding it;
+6. continue from the first unfinished Stage 2/next-stage item;
+7. update this handoff whenever priorities or completion state materially change.
