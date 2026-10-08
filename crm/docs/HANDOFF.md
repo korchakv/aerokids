@@ -4,7 +4,7 @@ Updated: 2026-10-08
 Canonical product branch: `crm-v1`
 Current canonical head before this continuation slice: `e4820454353f43c2c1f50b904d29f2f72cf62354`
 Current production live commit observed before this slice: `c92b43d98d25b45417037886d6cba5adc24cd994`
-Continuation branch: `crm-stage2-lead-drawer`
+Continuation branch: `crm-stage2-create-dialogs-v2`
 
 This is the persistent continuation point for future ChatGPT/project sessions. Read this file together with `roadmap.md`, `architecture.md`, `core-hardening.md`, `operations.md`, `status.md` and `backup-restore.md`. Do not restart the CRM analysis from zero.
 
@@ -57,7 +57,7 @@ Important scheduler rule: GitHub cron reads workflows from the default branch, s
 
 ## IN PROGRESS — Stage 2 maintainability
 
-Merged Stage 2 work through PR #76 includes:
+Merged Stage 2 work through PR #77 includes:
 - API contracts/client/auth split with compatibility barrel;
 - shared date/contact utilities;
 - LoginView and AuditHistory extraction;
@@ -85,18 +85,19 @@ Completed since the previous handoff:
 Completed since the previous handoff:
 - StaffDrawer extraction merged in PR #74;
 - billing dialogs extraction merged in PR #75;
-- GroupDetailDrawer extraction merged in PR #76.
+- GroupDetailDrawer extraction merged in PR #76;
+- LeadDrawer extraction merged in PR #77.
 
 Current continuation slice:
-- extract the full lead detail drawer from `App.tsx` into the leads feature module;
-- preserve workflow state and all API/business actions in App via typed callbacks;
-- cover desktop/mobile drawer open/close in browser smoke;
-- merge only with full CI green.
+- PR #80 extracts lead-create, staff/invite, location create/edit and group-create dialogs into their feature modules;
+- App keeps state and API commands; dialog components are typed/presentational;
+- full-stack browser smoke covers each extracted dialog;
+- PR #79 extracts scheduling into a dedicated backend service in parallel.
 
-After the lead detail drawer slice, continue with:
-1. Group-create and location/staff/invite/lead-create dialogs.
-2. Re-measure App.tsx before backend service extraction.
-3. Backend scheduling domain extraction from legacy `crm.py`.
+After the create-dialog slice, continue with:
+1. Merge/validate PR #79 scheduling service.
+2. Re-measure App.tsx and crm.py.
+3. Extract legacy billing domain from crm.py. from legacy `crm.py`.
 4. Backend billing compatibility extraction where legacy functions still dominate.
 5. Close Stage 2 only after App and crm.py are readable orchestration layers rather than domain containers.
 

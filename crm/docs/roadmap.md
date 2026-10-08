@@ -66,11 +66,9 @@ Completed since the previous roadmap update:
 - StaffDrawer extraction — PR #74;
 - BillingDialogs extraction — PR #75.
 
-Current active slice:
-- extract LeadDrawer from App into the leads feature module;
-- preserve lead workflow behavior and App-owned commands;
-- browser smoke coverage;
-- refresh persistent handoff/roadmap.
+Current active slices:
+- PR #80: create/edit dialogs extraction from App;
+- PR #79: scheduling domain service extraction from legacy backend facade.
 
 Next slices, in order:
 1. LeadDrawer extraction.
