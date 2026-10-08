@@ -1227,6 +1227,30 @@ class GroupOverviewItem(BaseModel):
     primary_teacher_name: str | None = None
 
 
+class LeadPage(BaseModel):
+    items: list[LeadListItem]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class StudentOverviewPage(BaseModel):
+    items: list[StudentOverviewItem]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
+class GroupOverviewPage(BaseModel):
+    items: list[GroupOverviewItem]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
+
+
 class AuditEventRead(ORMModel):
     id: UUID
     organization_id: UUID
