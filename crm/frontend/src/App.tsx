@@ -8,6 +8,7 @@ import { initialLeads, statuses } from "./features/leads/demo";
 import { availabilityLabel, flattenAvailabilityWindows, groupAvailabilitySlots } from "./features/leads/availability";
 import { canonicalLeadSource, leadActionMeta, leadActionPriority, leadDisplayStatus, leadIsDeferred, leadKanbanColumn, leadMissingDetails, leadPrimaryActionLabel, leadSourceLabel, type EntityId, type Lead, type LeadKanbanColumnId, type LeadStatus } from "./features/leads/model";
 import type { GroupItem } from "./features/groups/types";
+import { GroupsView } from "./features/groups/GroupsView";
 import { candidateCompatibility, MatchBadge, MatchExplanation } from "./features/groups/matching";
 import { ageRange, hasDuplicateSlots, scheduleDraftLabel, scheduleSlots } from "./features/groups/helpers";
 import { applyTeaching, SCHEDULE_DAY_NAMES, type LessonItem } from "./features/teaching/model";
@@ -3386,78 +3387,30 @@ function App() {
           activeGroups={overviewReport?.active_groups ?? groups.length}
           activeStudents={overviewReport?.active_students ?? activeStudents.length}
         />}
-                {active === "Групи" && <section className="groupsPage">
-          <article className="panel groupsPrimary">
-            <div className="panelHead groupsPrimaryHead">
-              <div><p className="eyebrow">Основне</p><h2>Активні групи</h2><p className="sectionLead">Відкрийте групу, щоб побачити учасників, відвідування, пропуски, оплати та історію.</p></div>
-              <div className="groupsHeadActions"><span className="counter">{groups.length}</span>{waiting.length > 0 && <button className="search" onClick={() => document.getElementById("waiting-groups")?.scrollIntoView({ behavior: "smooth" })}>Очікують: {waiting.length}</button>}<button className="primary compact" onClick={() => openGroupCreation("groups")}>+ Нова група</button></div>
-            </div>
-            {groups.length === 0 ? <div className="groupsEmptyPrimary">
-              <strong>Ще немає створених груп</strong>
-              <span>Створіть групу наперед, задайте локацію та регулярний час. Учнів можна додати пізніше.</span><button className="primary compact" onClick={() => openGroupCreation("groups")}>+ Створити групу</button>
-            </div> : <div className="groupCards groupCardsPrimary">
-              {groups.map((group) => {
-                const teacherName = group.teacherName ?? groupTeacher(group.id)?.fullName;
-                return <button className="groupCard groupCardButton groupCardPrimary groupCardWide" key={group.id} onClick={() => openGroup(group.id)}>
-                  <div className="groupCardTitleBlock">
-                    <span className="groupCardIcon">{group.name.slice(0,1)}</span>
-                    <div><b>{group.name}</b><small>{teacherName ? "Викладач: " + teacherName : "Викладач не призначений"}</small></div>
-                  </div>
-                  <div className="groupCardFact"><small>Розклад</small><b>{group.schedule}</b></div>
-                  <div className="groupCardFact"><small>Локація</small><b>{group.location}</b></div>
-                  <div className="groupCardFact groupCardStudents"><small>Учні</small><b>{group.members.length}/{group.capacity}</b></div>
-                  <strong className="groupCardOpen">Відкрити групу →</strong>
-                </button>;
-              })}
-            </div>}
-          </article>
-
-          <section className="waitingSecondary" id="waiting-groups">
-            <div className="waitingSecondaryHead">
-              <div><p className="eyebrow">Формування нових груп</p><h2>Очікують групу <span>{waiting.length}</span></h2><p>Допоміжний список кандидатів. Використовуйте його, коли потрібно сформувати нову групу або дозаповнити існуючу.</p></div>
-
-            </div>
-            <article className="panel waitingPanel">
-              <div className="candidateControls">
-                <label className="candidateSelect">Вік<select value={candidateAgeFilter} onChange={(e) => setCandidateAgeFilter(e.target.value as typeof candidateAgeFilter)}>
-                  <option value="all">Усі віки</option>
-                  <option value="8-10">8–10 років</option>
-                  <option value="11-13">11–13 років</option>
-                </select></label>
-                <label className="candidateSelect">Рівень<select value={candidateLevelFilter} onChange={(e) => setCandidateLevelFilter(e.target.value)}>
-                  <option value="all">Усі рівні</option>
-                  {candidateLevels.map((level) => <option value={level} key={level}>{level}</option>)}
-                </select></label>
-                <label className="candidateSelect">Бажана локація<select value={candidateLocationFilter} onChange={(e) => setCandidateLocationFilter(e.target.value)}>
-                  <option value="all">Усі локації</option>
-                  <option value="none">Не вказано</option>
-                  {locations.filter((location) => location.isActive).map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
-                </select></label>
-                <label className="candidateSelect">Сортування<select value={candidateSort} onChange={(e) => setCandidateSort(e.target.value as typeof candidateSort)}>
-                  <option value="match">Найкращий збіг</option>
-                  <option value="age">За віком</option>
-                  <option value="name">За ім’ям</option>
-                </select></label>
-              </div>
-              <div className="candidateFilters" aria-label="Фільтр за збігом графіка">
-                {([['all','Усі збіги'],['match','Підходить'],['partial','Частково'],['conflict','Узгодити'],['unknown','Невідомо']] as const).map(([value,label]) => <button className={"chip " + (candidateMatchFilter === value ? "active" : "")} onClick={() => setCandidateMatchFilter(value)} key={value}>{label}</button>)}
-              </div>
-              <div className="candidateList candidateListSecondary">
-                {visibleWaiting.length === 0 && <div className="emptyState">За цим фільтром кандидатів немає.</div>}
-                {visibleWaiting.map((lead) => { const match = candidateCompatibility(lead, groupSchedule, groupLocationId || null); return <label className={"candidate " + (selectedCandidates.includes(lead.id) ? "selected" : "")} key={lead.id}>
-                  <input type="checkbox" checked={selectedCandidates.includes(lead.id)} onChange={() => toggleCandidate(lead.id)} />
-                  <span className="candidateAvatar">{lead.child[0]}</span>
-                  <span className="candidateMain"><b>{lead.child}</b><small>{lead.age} років · {lead.recommendedLevel ?? "Рівень не вказано"}</small><small>{availabilityLabel(lead.availability ?? [])}{lead.preferredLocationName ? " · " + lead.preferredLocationName : ""}</small><MatchExplanation match={match} /></span>
-                  <MatchBadge match={match} />
-                </label>})}
-              </div>
-              <div className="selectionBar">
-                <span>Вибрано: <b>{selectedCandidates.length}</b></span>
-                <button className="primary" onClick={() => openGroupCreation("candidates")}>{selectedCandidates.length ? "Створити групу з вибраними" : "Створити порожню групу"}</button>
-              </div>
-            </article>
-          </section>
-        </section>}
+        {active === "Групи" && <GroupsView
+          groups={groups}
+          waiting={waiting}
+          visibleWaiting={visibleWaiting}
+          candidateLevels={candidateLevels}
+          locations={locations}
+          selectedCandidates={selectedCandidates}
+          candidateAgeFilter={candidateAgeFilter}
+          candidateLevelFilter={candidateLevelFilter}
+          candidateLocationFilter={candidateLocationFilter}
+          candidateMatchFilter={candidateMatchFilter}
+          candidateSort={candidateSort}
+          groupSchedule={groupSchedule}
+          groupLocationId={groupLocationId}
+          teacherNameForGroup={(groupId) => groupTeacher(groupId)?.fullName}
+          onOpenGroup={(groupId) => { void openGroup(groupId); }}
+          onOpenCreation={openGroupCreation}
+          onToggleCandidate={toggleCandidate}
+          onCandidateAgeFilterChange={setCandidateAgeFilter}
+          onCandidateLevelFilterChange={setCandidateLevelFilter}
+          onCandidateLocationFilterChange={setCandidateLocationFilter}
+          onCandidateMatchFilterChange={setCandidateMatchFilter}
+          onCandidateSortChange={setCandidateSort}
+        />}
 
         {active !== "Дашборд" && active !== "Заявки" && active !== "Учні" && active !== "Групи" && active !== "Розклад" && active !== "Відвідування" && active !== "Оплати" && active !== "Працівники" && active !== "Локації" && active !== "Звіти" && <section className="panel placeholder">
           <p className="eyebrow">Наступний модуль</p>
