@@ -1,3 +1,5 @@
+"""Core group CRUD domain service extracted from the legacy CRM facade."""
+
 from __future__ import annotations
 
 from datetime import time
