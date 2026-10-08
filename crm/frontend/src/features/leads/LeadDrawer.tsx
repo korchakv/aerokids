@@ -242,7 +242,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
   } = props;
 
   return <div className="drawerBackdrop leadDrawerBackdrop" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>
-        <aside className="drawer leadDrawer" onClick={(e) => e.stopPropagation()}>
+        <aside className="drawer leadDrawer" data-testid="lead-drawer" onClick={(e) => e.stopPropagation()}>
           <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>×</button>
           <p className="eyebrow">Картка заявки</p>
           <div className="leadDrawerTitleRow">
