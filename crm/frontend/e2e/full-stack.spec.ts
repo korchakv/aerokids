@@ -47,6 +47,12 @@ test("owner can open modular schedule workspace", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Додати заняття" })).toBeVisible();
 });
 
+test("owner can open modular attendance workspace", async ({ page }) => {
+  await login(page);
+  await page.getByText("Відвідування", { exact: true }).first().click();
+  await expect(page.getByTestId("attendance-workspace")).toBeVisible();
+});
+
 test("owner can open modular staff locations and settings workspaces", async ({ page }) => {
   await login(page);
 
