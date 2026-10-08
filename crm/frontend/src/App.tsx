@@ -16,6 +16,7 @@ import { AttendanceView } from "./features/teaching/AttendanceView";
 import { type AttendanceValue } from "./features/teaching/attendance";
 import { ScheduleView } from "./features/teaching/ScheduleView";
 import { type PaymentDemo, type PlanDemo } from "./features/billing/model";
+import { BillingDialogs } from "./features/billing/BillingDialogs";
 import { PaymentsView } from "./features/billing/PaymentsView";
 import type { LocationDemo } from "./features/locations/types";
 import { LocationsView } from "./features/locations/LocationsView";
@@ -3443,82 +3444,76 @@ function App() {
         onCreatePasswordReset={createStaffPasswordReset}
       />}
 
-            {showPlanForm && <div className="modalBackdrop">
-        <div className="groupModal tariffEditModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => { setShowPlanForm(false); setPlanEditId(null); }}>×</button>
-          <p className="eyebrow">Тарифи</p><h2>{planEditId ? "Редагувати тариф" : "Новий тариф"}</h2>
-          <p className="modalIntro">Тариф — шаблон для нових і наступних періодів. Уже створені абонементи зберігають свої умови до завершення.</p>
-          <label>Назва<input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="8 занять / 30 днів" /></label>
-          <div className="formTwo">
-            <label>Ціна, грн<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="2000" value={planPrice} onChange={(e) => setPlanPrice(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /></label>
-            <label>Днів<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="30" value={planDays} onChange={(e) => setPlanDays(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /><small className="fieldHint">Можна залишити порожнім, якщо обмеження тільки за відвідуваннями.</small></label>
-          </div>
-          <label>Відвідувань<input type="text" inputMode="numeric" pattern="[0-9]*" placeholder="8" value={planLessons} onChange={(e) => setPlanLessons(e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, ""))} /><small className="fieldHint">Можна залишити порожнім для необмежених відвідувань у межах днів.</small></label>
-          <div className="formNotice tariffRuleNotice">Потрібно заповнити хоча б одне: <b>дні</b> або <b>відвідування</b>. Якщо заповнені обидва — період завершується за правилом, що настане раніше.</div>
-          {planEditId && <label className="toggleRow"><input type="checkbox" checked={planActive} onChange={(e) => setPlanActive(e.target.checked)} /><span><b>Активний тариф</b><small>Неактивний тариф не можна призначити новому учню, але чинні абонементи залишаються в історії та довикористовуються.</small></span></label>}
-          <button className="primary full" disabled={planSaving || !planName.trim() || planPrice === "" || (!planDays && !planLessons)} onClick={savePlan}>{planSaving ? "Зберігаємо…" : planEditId ? "Зберегти зміни" : "Створити тариф"}</button>
-          {planEditId && <div className="tariffHistoryWrap">
-            <button className="subtleHistoryAction" type="button" disabled={planHistoryLoading} onClick={() => planHistoryOpen ? setPlanHistoryOpen(false) : void loadPlanHistory()}>{planHistoryLoading ? "Завантажуємо…" : planHistoryOpen ? "Сховати історію змін" : "Історія змін тарифу"}</button>
-            {planHistoryOpen && <div className="tariffHistoryList">
-              {planHistory.length === 0 && <small>Змін цього тарифу ще не було.</small>}
-              {planHistory.map((event) => <div key={event.id}><span>{new Date(event.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}</span><b>{event.event_type === "subscription_plan.created" ? "Створено" : "Змінено"}</b><small>{tariffHistoryDetail(event)}</small></div>)}
-            </div>}
-          </div>}
-        </div>
-      </div>}
-
-            {showPaymentForm && <div className="modalBackdrop">
-        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setShowPaymentForm(false)}>×</button>
-          <p className="eyebrow">Нарахування</p><h2>Створити оплату</h2>
-          <label>Учень<select value={paymentStudentId} onChange={(e) => setPaymentStudentId(e.target.value)}>{activeStudents.map((student) => <option value={student.id} key={student.id}>{student.child} · відповідальний: {student.parent}</option>)}</select></label>
-          <label>Абонемент<select value={paymentPlanId} onChange={(e) => setPaymentPlanId(e.target.value)}>{plans.filter((plan) => plan.isActive && plan.price > 0).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {money(plan.price)}</option>)}</select></label>
-          <label>Оплатити до<input type="date" value={paymentDueDate} min={localDateInput(new Date())} onChange={(e) => setPaymentDueDate(e.target.value)} /></label>
-          <label className="toggleRow"><input type="checkbox" checked={paymentAutoRenew} onChange={(e) => setPaymentAutoRenew(e.target.checked)} /><span><b>Автопродовження</b><small>Наступне нарахування створиться автоматично перед завершенням цього періоду.</small></span></label>
-          {activeStudents.length === 0 && <div className="formNotice">Спочатку зарахуйте хоча б одного учня.</div>}
-          {!plans.some((plan) => plan.isActive && plan.price > 0) && <div className="formNotice">Створіть або активуйте тариф із ціною, щоб зробити нарахування.</div>}
-          <button className="primary full" disabled={paymentSaving || !paymentStudentId || !paymentPlanId || !plans.some((plan) => plan.id === paymentPlanId && plan.isActive && plan.price > 0)} onClick={createPayment}>{paymentSaving ? "Створюємо…" : "Створити нарахування"}</button>
-        </div>
-      </div>}
-
-      {paymentActionId && paymentActionType && <div className="modalBackdrop">
-        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => { setPaymentActionId(null); setPaymentActionType(null); }}>×</button>
-          <p className="eyebrow">Фінансова операція</p>
-          <h2>{paymentActionType === "partial" ? "Часткова оплата" : paymentActionType === "refund" ? "Повернення коштів" : "Коригування нарахування"}</h2>
-          <label>Сума<input type="text" inputMode="decimal" value={paymentActionAmount} onChange={(e) => setPaymentActionAmount(e.target.value.replace(/[^0-9.,]/g, "").replace(",", "."))} placeholder="0" /></label>
-          {paymentActionType === "partial" && <label>Спосіб<select value={paymentActionMethod} onChange={(e) => setPaymentActionMethod(e.target.value as typeof paymentActionMethod)}><option value="card">Картка</option><option value="cash">Готівка</option><option value="bank">Переказ</option></select></label>}
-          {paymentActionType === "adjustment" && <label>Тип коригування<select value={paymentAdjustmentDirection} onChange={(e) => setPaymentAdjustmentDirection(e.target.value as typeof paymentAdjustmentDirection)}><option value="decrease">Зменшити нарахування</option><option value="increase">Збільшити нарахування</option></select></label>}
-          <label>{paymentActionType === "refund" ? "Причина повернення" : paymentActionType === "adjustment" ? "Причина коригування" : "Коментар"}<textarea value={paymentActionReason} onChange={(e) => setPaymentActionReason(e.target.value)} placeholder={paymentActionType === "refund" ? "Наприклад: перерахунок за невикористані заняття" : "Необов’язково"} /></label>
-          {paymentActionType === "refund" && <div className="formNotice">Повернення одночасно зменшує суму нарахування на цю ж величину, тому після коректного повернення новий борг автоматично не виникає.</div>}
-          <button className="primary full" disabled={paymentActionSaving || !paymentActionAmount} onClick={submitPaymentAction}>{paymentActionSaving ? "Зберігаємо…" : "Підтвердити"}</button>
-        </div>
-      </div>}
-
-      {planChangeSubscriptionId && <div className="modalBackdrop">
-        <div className="groupModal tariffChangeModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => { setPlanChangeSubscriptionId(null); setPlanChangeResult(""); }}>×</button>
-          <p className="eyebrow">Абонемент</p><h2>Змінити тариф зараз</h2>
-          {!planChangeResult ? <>
-            <div className="formNotice">Вже використані заняття залишаться за старою ціною. Лише невикористані заняття поточного періоду перерахуються за новою ціною. Різниця стане кредитом або боргом.</div>
-            <label>Новий тариф<select value={planChangePlanId} onChange={(e) => setPlanChangePlanId(e.target.value)}>{plans.filter((plan) => plan.isActive && plan.id !== subscriptions.find((item) => item.id === planChangeSubscriptionId)?.plan_id).map((plan) => <option value={plan.id} key={plan.id}>{plan.name} · {money(plan.price)} · {[plan.days ? plan.days + " днів" : "", plan.lessons ? plan.lessons + " відв." : ""].filter(Boolean).join(" / ")}</option>)}</select></label>
-            <label>Причина зміни<textarea value={planChangeReason} onChange={(e) => setPlanChangeReason(e.target.value)} maxLength={300} placeholder="Коротко: чому тариф змінюється з поточного періоду" /></label>
-            <button className="primary full" disabled={planChangeSaving || !planChangePlanId || !planChangeReason.trim()} onClick={submitPlanChange}>{planChangeSaving ? "Перераховуємо…" : "Змінити і перерахувати"}</button>
-          </> : <div className="tariffChangeSuccess"><b>✓ Перераховано</b><p>{planChangeResult}</p><button className="primary full" onClick={() => { setPlanChangeSubscriptionId(null); setPlanChangeResult(""); }}>Закрити</button></div>}
-        </div>
-      </div>}
-
-      {pauseSubscriptionId && <div className="modalBackdrop">
-        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setPauseSubscriptionId(null)}>×</button>
-          <p className="eyebrow">Абонемент</p><h2>Поставити на паузу</h2>
-          <label>Пауза з<input type="date" value={pauseStart} onChange={(e) => setPauseStart(e.target.value)} /></label>
-          <label>Відновити з<input type="date" value={pauseResumeOn} min={pauseStart} onChange={(e) => setPauseResumeOn(e.target.value)} /><small className="fieldHint">Можна залишити порожнім і відновити вручну пізніше.</small></label>
-          <label>Причина<textarea value={pauseNote} onChange={(e) => setPauseNote(e.target.value)} placeholder="Канікули, хвороба, поїздка…" /></label>
-          <div className="formNotice">Після відновлення кінець абонемента автоматично посунеться на фактичну кількість днів паузи.</div>
-          <button className="primary full" onClick={submitPauseSubscription}>Поставити на паузу</button>
-        </div>
-      </div>}
+      <BillingDialogs
+        plans={plans}
+        subscriptions={subscriptions}
+        activeStudents={activeStudents}
+        money={money}
+        paymentMinDate={localDateInput(new Date())}
+        showPlanForm={showPlanForm}
+        planEditId={planEditId}
+        planName={planName}
+        planPrice={planPrice}
+        planDays={planDays}
+        planLessons={planLessons}
+        planActive={planActive}
+        planSaving={planSaving}
+        planHistory={planHistory}
+        planHistoryLoading={planHistoryLoading}
+        planHistoryOpen={planHistoryOpen}
+        tariffHistoryDetail={tariffHistoryDetail}
+        onClosePlanForm={() => { setShowPlanForm(false); setPlanEditId(null); }}
+        onPlanNameChange={setPlanName}
+        onPlanPriceChange={setPlanPrice}
+        onPlanDaysChange={setPlanDays}
+        onPlanLessonsChange={setPlanLessons}
+        onPlanActiveChange={setPlanActive}
+        onSavePlan={savePlan}
+        onTogglePlanHistory={() => planHistoryOpen ? setPlanHistoryOpen(false) : void loadPlanHistory()}
+        showPaymentForm={showPaymentForm}
+        paymentStudentId={paymentStudentId}
+        paymentPlanId={paymentPlanId}
+        paymentDueDate={paymentDueDate}
+        paymentAutoRenew={paymentAutoRenew}
+        paymentSaving={paymentSaving}
+        onClosePaymentForm={() => setShowPaymentForm(false)}
+        onPaymentStudentChange={setPaymentStudentId}
+        onPaymentPlanChange={setPaymentPlanId}
+        onPaymentDueDateChange={setPaymentDueDate}
+        onPaymentAutoRenewChange={setPaymentAutoRenew}
+        onCreatePayment={createPayment}
+        paymentActionId={paymentActionId}
+        paymentActionType={paymentActionType}
+        paymentActionAmount={paymentActionAmount}
+        paymentActionReason={paymentActionReason}
+        paymentActionMethod={paymentActionMethod}
+        paymentAdjustmentDirection={paymentAdjustmentDirection}
+        paymentActionSaving={paymentActionSaving}
+        onClosePaymentAction={() => { setPaymentActionId(null); setPaymentActionType(null); }}
+        onPaymentActionAmountChange={setPaymentActionAmount}
+        onPaymentActionReasonChange={setPaymentActionReason}
+        onPaymentActionMethodChange={setPaymentActionMethod}
+        onPaymentAdjustmentDirectionChange={setPaymentAdjustmentDirection}
+        onSubmitPaymentAction={submitPaymentAction}
+        planChangeSubscriptionId={planChangeSubscriptionId}
+        planChangePlanId={planChangePlanId}
+        planChangeReason={planChangeReason}
+        planChangeSaving={planChangeSaving}
+        planChangeResult={planChangeResult}
+        onClosePlanChange={() => { setPlanChangeSubscriptionId(null); setPlanChangeResult(""); }}
+        onPlanChangePlanIdChange={setPlanChangePlanId}
+        onPlanChangeReasonChange={setPlanChangeReason}
+        onSubmitPlanChange={submitPlanChange}
+        pauseSubscriptionId={pauseSubscriptionId}
+        pauseStart={pauseStart}
+        pauseResumeOn={pauseResumeOn}
+        pauseNote={pauseNote}
+        onClosePause={() => setPauseSubscriptionId(null)}
+        onPauseStartChange={setPauseStart}
+        onPauseResumeOnChange={setPauseResumeOn}
+        onPauseNoteChange={setPauseNote}
+        onSubmitPause={submitPauseSubscription}
+      />
 
       <StudentDrawer
         student={selectedStudent}
