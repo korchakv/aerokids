@@ -1,3 +1,4 @@
+// Stage 2 modular groups workspace; state and business actions remain in App.
 import { availabilityLabel } from "../leads/availability";
 import type { EntityId, Lead } from "../leads/model";
 import { candidateCompatibility, MatchBadge, MatchExplanation } from "./matching";
