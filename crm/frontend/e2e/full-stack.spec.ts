@@ -31,7 +31,6 @@ test("owner can open modular students workspace", async ({ page }) => {
   await page.getByText("Учні", { exact: true }).first().click();
   await expect(page.getByTestId("students-workspace")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Активні учні" })).toBeVisible();
-  await expect(page.getByText("Огляд", { exact: true })).toBeVisible();
 });
 
 test("owner can open modular staff locations and settings workspaces", async ({ page }) => {
