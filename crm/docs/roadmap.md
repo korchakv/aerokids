@@ -44,7 +44,7 @@ Completed:
 
 ## IN PROGRESS — Stage 2 maintainability/UI architecture
 
-Merged through PR #73:
+Merged through PR #74:
 - frontend API contracts/client/auth foundation;
 - shared utilities and editor primitives;
 - Login, AuditHistory, Leads board/table;
@@ -62,8 +62,12 @@ Completed slices:
 - AttendanceView extraction — PR #72;
 - PaymentsView extraction — PR #73.
 
+Completed since the previous roadmap update:
+- StaffDrawer extraction — PR #74.
+
 Current active slice:
-- extract StaffDrawer from App into the staff feature module;
+- extract billing dialogs from App into the billing feature module;
+- preserve financial behavior;
 - browser smoke coverage;
 - refresh persistent handoff/roadmap.
 

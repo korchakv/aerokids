@@ -58,6 +58,16 @@ test("owner can open modular payments workspace", async ({ page }) => {
   await page.getByText("Оплати", { exact: true }).first().click();
   await expect(page.getByTestId("payments-workspace")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Оплати учнів" })).toBeVisible();
+
+  await page.getByRole("button", { name: "+ Тариф" }).click();
+  await expect(page.getByTestId("plan-dialog")).toBeVisible();
+  await page.getByTestId("plan-dialog").getByRole("button", { name: "×" }).click();
+  await expect(page.getByTestId("plan-dialog")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "+ Нарахування" }).click();
+  await expect(page.getByTestId("payment-create-dialog")).toBeVisible();
+  await page.getByTestId("payment-create-dialog").getByRole("button", { name: "×" }).click();
+  await expect(page.getByTestId("payment-create-dialog")).toHaveCount(0);
 });
 
 test("owner can open modular staff locations and settings workspaces", async ({ page }) => {
