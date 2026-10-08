@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.core import (
@@ -175,7 +175,7 @@ def list_group_overview(db: Session, org_id: UUID, user_id: UUID | None = None, 
 
 
 def assigned_group_ids_for_user(db: Session, org_id: UUID, user_id: UUID | None, role: StaffRole) -> set[UUID] | None:
-    if role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER}:
+    if role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER}:
         return None
     if role != StaffRole.TEACHER or user_id is None:
         return set()
@@ -191,6 +191,272 @@ def assigned_group_ids_for_user(db: Session, org_id: UUID, user_id: UUID | None,
         GroupStaff.organization_id == org_id,
         GroupStaff.staff_id == staff.id,
     )))
+
+
+def paginate_student_overview(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID | None = None,
+    role: StaffRole = StaffRole.OWNER,
+    *,
+    q: str | None = None,
+    status: StudentStatus | None = None,
+    sort: str = "name",
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Database-backed page for the student registry.
+
+    Unlike the legacy overview helper, filtering, counting and pagination happen
+    before rows are materialized. The returned item shape intentionally matches
+    the existing workspace student contract.
+    """
+    contact_name = (
+        select(Contact.full_name)
+        .join(StudentContact, StudentContact.contact_id == Contact.id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == Student.id,
+            Contact.organization_id == org_id,
+        )
+        .order_by(StudentContact.is_primary.desc(), Contact.created_at)
+        .limit(1)
+        .correlate(Student)
+        .scalar_subquery()
+    )
+    contact_phone = (
+        select(Contact.phone)
+        .join(StudentContact, StudentContact.contact_id == Contact.id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == Student.id,
+            Contact.organization_id == org_id,
+        )
+        .order_by(StudentContact.is_primary.desc(), Contact.created_at)
+        .limit(1)
+        .correlate(Student)
+        .scalar_subquery()
+    )
+    current_group_id = (
+        select(Group.id)
+        .join(Enrollment, Enrollment.group_id == Group.id)
+        .where(
+            Enrollment.organization_id == org_id,
+            Enrollment.student_id == Student.id,
+            Enrollment.status == EnrollmentStatus.ACTIVE,
+            Group.organization_id == org_id,
+            Group.is_active.is_(True),
+        )
+        .order_by(Enrollment.started_at.desc(), Enrollment.id.desc())
+        .limit(1)
+        .correlate(Student)
+        .scalar_subquery()
+    )
+    current_group_name = (
+        select(Group.name)
+        .join(Enrollment, Enrollment.group_id == Group.id)
+        .where(
+            Enrollment.organization_id == org_id,
+            Enrollment.student_id == Student.id,
+            Enrollment.status == EnrollmentStatus.ACTIVE,
+            Group.organization_id == org_id,
+            Group.is_active.is_(True),
+        )
+        .order_by(Enrollment.started_at.desc(), Enrollment.id.desc())
+        .limit(1)
+        .correlate(Student)
+        .scalar_subquery()
+    )
+
+    filters = [
+        Student.organization_id == org_id,
+        Student.student_status != StudentStatus.PROSPECT,
+    ]
+    if status is not None:
+        filters.append(Student.student_status == status)
+
+    allowed_groups = assigned_group_ids_for_user(db, org_id, user_id, role)
+    if allowed_groups is not None:
+        if not allowed_groups:
+            return {"items": [], "total": 0, "limit": limit, "offset": offset}
+        filters.append(exists(
+            select(Enrollment.id).where(
+                Enrollment.organization_id == org_id,
+                Enrollment.student_id == Student.id,
+                Enrollment.status == EnrollmentStatus.ACTIVE,
+                Enrollment.group_id.in_(allowed_groups),
+            )
+        ))
+
+    needle = (q or "").strip()
+    if needle:
+        pattern = f"%{needle}%"
+        contact_match = exists(
+            select(StudentContact.id)
+            .join(Contact, Contact.id == StudentContact.contact_id)
+            .where(
+                StudentContact.organization_id == org_id,
+                StudentContact.student_id == Student.id,
+                Contact.organization_id == org_id,
+                or_(Contact.full_name.ilike(pattern), Contact.phone.ilike(pattern)),
+            )
+        )
+        filters.append(or_(
+            Student.first_name.ilike(pattern),
+            Student.last_name.ilike(pattern),
+            Student.phone.ilike(pattern),
+            contact_match,
+        ))
+
+    total = int(db.scalar(select(func.count(Student.id)).where(*filters)) or 0)
+    statement = select(
+        Student,
+        contact_name.label("contact_name"),
+        contact_phone.label("contact_phone"),
+        current_group_id.label("group_id"),
+        current_group_name.label("group_name"),
+    ).where(*filters)
+
+    if sort == "newest":
+        statement = statement.order_by(Student.created_at.desc(), Student.id)
+    elif sort == "oldest":
+        statement = statement.order_by(Student.created_at, Student.id)
+    else:
+        statement = statement.order_by(Student.first_name, Student.last_name, Student.id)
+
+    rows = db.execute(statement.offset(offset).limit(limit)).all()
+    items = [{
+        "student_id": student.id,
+        "first_name": student.first_name,
+        "last_name": student.last_name,
+        "student_phone": student.phone,
+        "age": student.age_at_inquiry,
+        "source": student.source,
+        "student_status": student.student_status,
+        "contact_name": row.contact_name,
+        "contact_phone": row.contact_phone,
+        "group_id": row.group_id,
+        "group_name": row.group_name,
+    } for row in rows for student in [row[0]]]
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+def paginate_group_overview(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID | None = None,
+    role: StaffRole = StaffRole.OWNER,
+    *,
+    q: str | None = None,
+    sort: str = "name",
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Database-backed active-group page with aggregate projections."""
+    location_name = (
+        select(Location.name)
+        .where(Location.organization_id == org_id, Location.id == Group.location_id)
+        .limit(1)
+        .correlate(Group)
+        .scalar_subquery()
+    )
+    enrolled_count = (
+        select(func.count(Enrollment.id))
+        .where(
+            Enrollment.organization_id == org_id,
+            Enrollment.group_id == Group.id,
+            Enrollment.status == EnrollmentStatus.ACTIVE,
+        )
+        .correlate(Group)
+        .scalar_subquery()
+    )
+    primary_teacher_id = (
+        select(Staff.id)
+        .join(GroupStaff, GroupStaff.staff_id == Staff.id)
+        .where(
+            GroupStaff.organization_id == org_id,
+            GroupStaff.group_id == Group.id,
+            Staff.organization_id == org_id,
+            Staff.is_active.is_(True),
+        )
+        .order_by(GroupStaff.is_primary.desc(), Staff.full_name, Staff.id)
+        .limit(1)
+        .correlate(Group)
+        .scalar_subquery()
+    )
+    primary_teacher_name = (
+        select(Staff.full_name)
+        .join(GroupStaff, GroupStaff.staff_id == Staff.id)
+        .where(
+            GroupStaff.organization_id == org_id,
+            GroupStaff.group_id == Group.id,
+            Staff.organization_id == org_id,
+            Staff.is_active.is_(True),
+        )
+        .order_by(GroupStaff.is_primary.desc(), Staff.full_name, Staff.id)
+        .limit(1)
+        .correlate(Group)
+        .scalar_subquery()
+    )
+
+    filters = [Group.organization_id == org_id, Group.is_active.is_(True)]
+    allowed_groups = assigned_group_ids_for_user(db, org_id, user_id, role)
+    if allowed_groups is not None:
+        if not allowed_groups:
+            return {"items": [], "total": 0, "limit": limit, "offset": offset}
+        filters.append(Group.id.in_(allowed_groups))
+
+    needle = (q or "").strip()
+    if needle:
+        pattern = f"%{needle}%"
+        location_match = exists(select(Location.id).where(
+            Location.organization_id == org_id,
+            Location.id == Group.location_id,
+            Location.name.ilike(pattern),
+        ))
+        teacher_match = exists(
+            select(GroupStaff.id)
+            .join(Staff, Staff.id == GroupStaff.staff_id)
+            .where(
+                GroupStaff.organization_id == org_id,
+                GroupStaff.group_id == Group.id,
+                Staff.organization_id == org_id,
+                Staff.is_active.is_(True),
+                Staff.full_name.ilike(pattern),
+            )
+        )
+        filters.append(or_(Group.name.ilike(pattern), location_match, teacher_match))
+
+    total = int(db.scalar(select(func.count(Group.id)).where(*filters)) or 0)
+    statement = select(
+        Group,
+        location_name.label("location_name"),
+        enrolled_count.label("enrolled_count"),
+        primary_teacher_id.label("primary_teacher_id"),
+        primary_teacher_name.label("primary_teacher_name"),
+    ).where(*filters)
+    if sort == "size_desc":
+        statement = statement.order_by(enrolled_count.desc(), Group.name, Group.id)
+    elif sort == "size_asc":
+        statement = statement.order_by(enrolled_count, Group.name, Group.id)
+    else:
+        statement = statement.order_by(Group.name, Group.id)
+
+    rows = db.execute(statement.offset(offset).limit(limit)).all()
+    items = [{
+        "group_id": group.id,
+        "name": group.name,
+        "location_id": group.location_id,
+        "location_name": row.location_name,
+        "capacity": group.capacity,
+        "enrolled_count": int(row.enrolled_count or 0),
+        "min_age": group.min_age,
+        "max_age": group.max_age,
+        "primary_teacher_id": row.primary_teacher_id,
+        "primary_teacher_name": row.primary_teacher_name,
+    } for row in rows for group in [row[0]]]
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
 
 
 def ensure_group_access(db: Session, org_id: UUID, user_id: UUID | None, role: StaffRole, group_id: UUID) -> Group:
