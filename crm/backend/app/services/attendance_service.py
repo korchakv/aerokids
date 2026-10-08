@@ -58,6 +58,7 @@ _subscription_end_date = crm._subscription_end_date
 _lesson_unit_price = crm._lesson_unit_price
 record_audit = crm.record_audit
 ensure_group_access = crm.ensure_group_access
+assigned_group_ids_for_user = crm.assigned_group_ids_for_user
 
 def _eligible_subscription_for_session(db: Session, org_id: UUID, student_id: UUID, session: LessonSession) -> tuple[StudentSubscription, SubscriptionPlan] | None:
     organization = require_organization(db, org_id)
