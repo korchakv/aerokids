@@ -25,6 +25,8 @@ services:
       JWT_SECRET: local-dev-secret-change-before-public-deploy
       BOOTSTRAP_SECRET: local-bootstrap-secret-change-before-public-deploy
       CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+      AUTH_LOGIN_IP_LIMIT: "100"
+      AUTH_LOGIN_EMAIL_LIMIT: "100"
     depends_on:
       db:
         condition: service_healthy
