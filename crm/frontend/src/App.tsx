@@ -5,12 +5,14 @@ import { LoginView } from "./features/auth/LoginView";
 import { allNav, roleLabel, visibleNavigation } from "./features/shell/navigation";
 import { LeadKanban, LeadTable } from "./features/leads/LeadBoard";
 import { LeadDrawer } from "./features/leads/LeadDrawer";
+import { LeadCreateDialog } from "./features/leads/LeadCreateDialog";
 import { initialLeads, statuses } from "./features/leads/demo";
 import { availabilityLabel, flattenAvailabilityWindows, groupAvailabilitySlots } from "./features/leads/availability";
 import { canonicalLeadSource, leadActionMeta, leadActionPriority, leadDisplayStatus, leadIsDeferred, leadKanbanColumn, leadMissingDetails, leadPrimaryActionLabel, leadSourceLabel, type EntityId, type Lead, type LeadKanbanColumnId, type LeadStatus } from "./features/leads/model";
 import type { GroupItem } from "./features/groups/types";
 import { GroupsView } from "./features/groups/GroupsView";
 import { GroupDetailDrawer } from "./features/groups/GroupDetailDrawer";
+import { GroupCreateDialog } from "./features/groups/GroupCreateDialog";
 import { candidateCompatibility, MatchBadge, MatchExplanation } from "./features/groups/matching";
 import { ageRange, hasDuplicateSlots, scheduleDraftLabel, scheduleSlots } from "./features/groups/helpers";
 import { applyTeaching, SCHEDULE_DAY_NAMES, type LessonItem } from "./features/teaching/model";
@@ -22,14 +24,16 @@ import { BillingDialogs } from "./features/billing/BillingDialogs";
 import { PaymentsView } from "./features/billing/PaymentsView";
 import type { LocationDemo } from "./features/locations/types";
 import { LocationsView } from "./features/locations/LocationsView";
+import { LocationDialog } from "./features/locations/LocationDialog";
 import { staffRoleValue, type StaffDemo, type StaffRoleDemo } from "./features/staff/model";
 import { StaffDrawer, StaffView } from "./features/staff/StaffView";
+import { StaffDialogs } from "./features/staff/StaffDialogs";
 import { SettingsView } from "./features/settings/SettingsView";
 import { ReportsView } from "./features/reports/ReportsView";
 import { StudentDrawer, StudentsView, type StudentFilter, type StudentLifecycleLabel } from "./features/students/StudentsView";
 import { applyOperations } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
-import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
+import { cleanSpaces, emailError, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
 import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
@@ -88,14 +92,6 @@ function tariffHistoryDetail(event: ApiAuditEvent) {
     return parts.join(" · ") || "Тариф створено";
   }
   return changed.map((field) => `${labels[field] ?? field}: ${formatValue(field, before[field])} → ${formatValue(field, after[field])}`).join(" · ") || "Змінено";
-}
-
-
-function emailError(value: string, required = false): string {
-  const email = value.trim().toLowerCase();
-  if (!email) return required ? "Email обов’язковий" : "";
-  if (email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return "Некоректна email-адреса";
-  return "";
 }
 
 
@@ -3191,80 +3187,74 @@ function App() {
         </section>}
       </main>
 
-      {showLeadForm && <div className="modalBackdrop">
-        <div className="groupModal leadCreateModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => { setShowLeadForm(false); setLeadDuplicateMatches([]); }}>×</button>
-          <p className="eyebrow">Нова заявка</p><h2>Додати дитину</h2>
-          <div className="formTwo leadCreatePair">
-            <label>Ім’я дитини *<input className={leadChildName && personNameError(leadChildName, "Ім’я дитини") ? "inputInvalid" : ""} value={leadChildName} maxLength={120} onChange={(e) => setLeadChildName(e.target.value)} placeholder="Максим" />{leadChildName && personNameError(leadChildName, "Ім’я дитини") && <small className="fieldError">{personNameError(leadChildName, "Ім’я дитини")}</small>}</label>
-            <label>Прізвище дитини<input className={leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") ? "inputInvalid" : ""} value={leadChildLastName} maxLength={120} onChange={(e) => setLeadChildLastName(e.target.value)} placeholder="Коваль" /><small className="leadFormHint">Необов’язково · можна дописати пізніше</small>{leadChildLastName && personNameError(leadChildLastName, "Прізвище дитини") && <small className="fieldError">{personNameError(leadChildLastName, "Прізвище дитини")}</small>}</label>
-          </div>
-          <div className="formTwo leadCreatePair">
-            <label>Вік<input type="number" min={3} max={25} value={leadAge} onChange={(e) => setLeadAge(Number(e.target.value))} /></label>
-            <label>Телефон дитини<input type="tel" inputMode="tel" maxLength={19} className={leadChildPhone && uaPhoneError(leadChildPhone, false) ? "inputInvalid" : ""} value={leadChildPhone} onChange={(e) => setLeadChildPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadChildPhone)) setLeadChildPhone(formatUaPhone(leadChildPhone)); void checkManualLeadDuplicates(); }} placeholder="+380 67 123 45 67" /><small className="leadFormHint">Необов’язково</small>{leadChildPhone && uaPhoneError(leadChildPhone, false) && <small className="fieldError">{uaPhoneError(leadChildPhone, false)}</small>}</label>
-          </div>
-          <label>Ім’я відповідальної особи *<input className={leadContactName && personNameError(leadContactName, "Відповідальна особа") ? "inputInvalid" : ""} value={leadContactName} maxLength={160} autoComplete="name" onChange={(e) => setLeadContactName(e.target.value)} placeholder="Оксана або Оксана Петренко" /><small className="leadFormHint">Прізвище можна дописати пізніше</small>{leadContactName && personNameError(leadContactName, "Відповідальна особа") && <small className="fieldError">{personNameError(leadContactName, "Відповідальна особа")}</small>}</label>
-          <label>Телефон відповідального *<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={leadPhone && uaPhoneError(leadPhone) ? "inputInvalid" : ""} value={leadPhone} onChange={(e) => setLeadPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(leadPhone)) setLeadPhone(formatUaPhone(leadPhone)); void checkManualLeadDuplicates(); }} placeholder="+380 67 123 45 67" />{leadPhone && uaPhoneError(leadPhone) && <small className="fieldError">{uaPhoneError(leadPhone)}</small>}</label>
-          {leadDuplicateChecking && <div className="duplicateCheck pending"><span className="syncPulse" />Перевіряємо номер у CRM…</div>}
-          {!leadDuplicateChecking && leadDuplicateMatches.length > 0 && <div className={"duplicateCheck " + (leadDuplicateMatches.some((item) => item.likely_same_student) ? "blocked" : "warning")}>
-            <b>{leadDuplicateMatches.some((item) => item.likely_same_student) ? "Такий номер уже зареєстровано" : "Цей номер уже є в CRM"}</b>
-            <small>{leadDuplicateMatches.some((item) => item.likely_same_student) ? "Схоже, це вже існуюча дитина. Перевірте картку, щоб не створювати дубль." : "Можливо, це інша дитина з тієї самої сім’ї. Створення дозволено, але перевірте збіг."}</small>
-            <div className="duplicateMatches">{leadDuplicateMatches.slice(0,4).map((match) => <button type="button" className="duplicateMatch" key={match.student_id} onClick={() => openDuplicateStudent(match)}>
-              <span><b>{match.first_name} {match.last_name ?? ""}</b><small>{match.age ?? "—"} років · {crmStatusLabel(match.crm_status)}</small><small>{match.contact_name ?? "Контакт не вказано"}{match.contact_phone ? " · " + formatUaPhone(match.contact_phone) : ""}</small></span>
-              <strong>Перейти та перевірити →</strong>
-            </button>)}</div>
-          </div>}
-          <label>Джерело<select value={leadSource} onChange={(e) => setLeadSource(e.target.value)}>
-            <option value="phone">Телефон</option>
-            <option value="website">Сайт</option>
-            <option value="instagram">Instagram</option>
-            <option value="recommendation">Рекомендація</option>
-            <option value="walk-in">Зайшли особисто</option>
-          </select></label>
-          <label>Коментар<textarea value={leadComment} onChange={(e) => setLeadComment(e.target.value)} placeholder="Що цікавить, бажаний час, примітки…" /></label>
-          <button className="primary full" disabled={leadDuplicateChecking || leadDuplicateMatches.some((item) => item.likely_same_student) || Boolean(personNameError(leadChildName, "Ім’я дитини") || (leadChildLastName.trim() ? personNameError(leadChildLastName, "Прізвище дитини") : "") || uaPhoneError(leadChildPhone, false) || personNameError(leadContactName, "Відповідальна особа") || uaPhoneError(leadPhone))} onClick={createManualLead}>{leadDuplicateChecking ? "Перевіряємо номер…" : leadDuplicateMatches.some((item) => item.likely_same_student) ? "Перевірте існуючу картку" : "Створити заявку"}</button>
-        </div>
-      </div>}
+      <LeadCreateDialog
+        open={showLeadForm}
+        leadChildName={leadChildName}
+        leadChildLastName={leadChildLastName}
+        leadChildPhone={leadChildPhone}
+        leadAge={leadAge}
+        leadContactName={leadContactName}
+        leadPhone={leadPhone}
+        leadSource={leadSource}
+        leadComment={leadComment}
+        duplicateChecking={leadDuplicateChecking}
+        duplicateMatches={leadDuplicateMatches}
+        setLeadChildName={setLeadChildName}
+        setLeadChildLastName={setLeadChildLastName}
+        setLeadChildPhone={setLeadChildPhone}
+        setLeadAge={setLeadAge}
+        setLeadContactName={setLeadContactName}
+        setLeadPhone={setLeadPhone}
+        setLeadSource={setLeadSource}
+        setLeadComment={setLeadComment}
+        onClose={() => { setShowLeadForm(false); setLeadDuplicateMatches([]); }}
+        onCheckDuplicates={checkManualLeadDuplicates}
+        onOpenDuplicate={openDuplicateStudent}
+        onCreate={createManualLead}
+      />
 
-      {showInviteForm && <div className="modalBackdrop">
-        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setShowInviteForm(false)}>×</button>
-          <p className="eyebrow">Доступ до CRM</p><h2>Запросити працівника</h2>
-          {!inviteLink ? <>
-            <label>Email *<input type="email" autoComplete="email" maxLength={255} className={inviteEmail && emailError(inviteEmail, true) ? "inputInvalid" : ""} value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="teacher@example.com" />{inviteEmail && emailError(inviteEmail, true) && <small className="fieldError">{emailError(inviteEmail, true)}</small>}</label>
-            <label>Роль<select value={inviteRole} onChange={(e) => { const role = e.target.value as StaffRoleDemo; setInviteRole(role); if (role === "Викладач") setInviteCanTeach(true); }}>{["Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
-            <label className="toggleRow responsibilityToggle"><input type="checkbox" checked={inviteCanTeach || inviteRole === "Викладач"} disabled={inviteRole === "Викладач"} onChange={(e) => setInviteCanTeach(e.target.checked)} /><span><b>Може викладати</b><small>Дозволяє призначати цього працівника викладачем груп незалежно від його ролі в CRM.</small></span></label>
-            <button className="primary full" disabled={Boolean(emailError(inviteEmail, true))} onClick={createInvitation}>Створити запрошення</button>
-          </> : <>
-            <div className="inviteSuccess"><b>Запрошення готове</b><p>Надішліть це посилання працівнику. Воно одноразове та діє 7 днів.</p><code>{inviteLink}</code></div>
-            <button className="primary full" onClick={() => navigator.clipboard?.writeText(inviteLink)}>Копіювати посилання</button>
-          </>}
-        </div>
-      </div>}
+      <StaffDialogs
+        showInviteForm={showInviteForm}
+        inviteEmail={inviteEmail}
+        inviteRole={inviteRole}
+        inviteCanTeach={inviteCanTeach}
+        inviteLink={inviteLink}
+        setShowInviteForm={setShowInviteForm}
+        setInviteEmail={setInviteEmail}
+        setInviteRole={setInviteRole}
+        setInviteCanTeach={setInviteCanTeach}
+        onCreateInvitation={createInvitation}
+        showStaffForm={showStaffForm}
+        staffName={staffName}
+        staffRole={staffRole}
+        staffCanTeach={staffCanTeach}
+        staffEmail={staffEmail}
+        staffPhone={staffPhone}
+        setShowStaffForm={setShowStaffForm}
+        setStaffName={setStaffName}
+        setStaffRole={setStaffRole}
+        setStaffCanTeach={setStaffCanTeach}
+        setStaffEmail={setStaffEmail}
+        setStaffPhone={setStaffPhone}
+        onCreateStaff={createStaffMember}
+      />
 
-            {showStaffForm && <div className="modalBackdrop">
-        <div className="groupModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setShowStaffForm(false)}>×</button>
-          <p className="eyebrow">Команда</p><h2>Новий працівник</h2>
-          <label>Ім’я та прізвище *<input autoComplete="name" maxLength={160} className={staffName && personNameError(staffName, "Ім’я та прізвище") ? "inputInvalid" : ""} value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="Іван Петренко" />{staffName && personNameError(staffName, "Ім’я та прізвище") && <small className="fieldError">{personNameError(staffName, "Ім’я та прізвище")}</small>}</label>
-          <label>Роль<select value={staffRole} onChange={(e) => { const role = e.target.value as StaffRoleDemo; setStaffRole(role); if (role === "Викладач") setStaffCanTeach(true); }}>{["Власник","Адміністратор","Менеджер","Викладач","Бухгалтер"].map((role) => <option key={role}>{role}</option>)}</select></label>
-          <label className="toggleRow responsibilityToggle"><input type="checkbox" checked={staffCanTeach || staffRole === "Викладач"} disabled={staffRole === "Викладач"} onChange={(e) => setStaffCanTeach(e.target.checked)} /><span><b>Може викладати</b><small>Працівника можна буде призначати викладачем груп.</small></span></label>
-          <div className="formTwo"><label>Email<input type="email" autoComplete="email" maxLength={255} className={staffEmail && emailError(staffEmail) ? "inputInvalid" : ""} value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} />{staffEmail && emailError(staffEmail) && <small className="fieldError">{emailError(staffEmail)}</small>}</label><label>Телефон<input type="tel" inputMode="tel" autoComplete="tel" maxLength={19} className={staffPhone && uaPhoneError(staffPhone, false) ? "inputInvalid" : ""} value={staffPhone} onChange={(e) => setStaffPhone(e.target.value)} onBlur={() => { if (normalizeUaPhone(staffPhone)) setStaffPhone(formatUaPhone(staffPhone)); }} placeholder="+380 67 123 45 67" />{staffPhone && uaPhoneError(staffPhone, false) && <small className="fieldError">{uaPhoneError(staffPhone, false)}</small>}</label></div><div className="formNotice">Для працівника потрібно вказати хоча б email або телефон.</div>
-          <button className="primary full" disabled={Boolean(personNameError(staffName, "Ім’я та прізвище") || emailError(staffEmail) || uaPhoneError(staffPhone, false) || (!staffEmail.trim() && !staffPhone.trim()))} onClick={createStaffMember}>Додати працівника</button>
-        </div>
-      </div>}
+      
 
-      {showLocationForm && <div className="modalBackdrop">
-        <div className="groupModal locationEditModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={closeLocationForm}>×</button>
-          <p className="eyebrow">Мережа</p><h2>{locationEditId ? "Редагувати локацію" : "Нова локація"}</h2>
-          {locationReturnToGroup && <p className="modalIntro">Після збереження повернемо вас до створення групи й виберемо нову локацію автоматично.</p>}
-          <label>Назва<input autoFocus value={locationName} onChange={(e) => setLocationName(e.target.value)} placeholder="AeroKids Центр" /></label>
-          <label>Адреса<input value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)} placeholder="Івано-Франківськ" /></label>
-          <button className="primary full" disabled={!locationName.trim() || locationSaving || locationDeleteSaving} onClick={saveLocationDemo}>{locationSaving ? "Зберігаємо…" : locationEditId ? "Зберегти зміни" : "Створити локацію"}</button>
-          {locationEditId && <div className="subtleDeleteRow"><button className="subtleDangerAction" type="button" disabled={locationSaving || locationDeleteSaving} onClick={deleteLocationDemo}>{locationDeleteSaving ? "Видаляємо…" : "Видалити локацію"}</button></div>}
-        </div>
-      </div>}
+      <LocationDialog
+        open={showLocationForm}
+        locationEditId={locationEditId}
+        locationName={locationName}
+        locationAddress={locationAddress}
+        locationSaving={locationSaving}
+        locationDeleteSaving={locationDeleteSaving}
+        locationReturnToGroup={locationReturnToGroup}
+        onClose={closeLocationForm}
+        onNameChange={setLocationName}
+        onAddressChange={setLocationAddress}
+        onSave={saveLocationDemo}
+        onDelete={deleteLocationDemo}
+      />
 
       <GroupDetailDrawer
         groupId={selectedGroupId}
@@ -3454,51 +3444,29 @@ function App() {
         auditEventDetail={auditEventDetail}
       />
 
-      {showGroupForm && <div className="modalBackdrop">
-        <div className="groupModal groupCreateModal" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" onClick={() => setShowGroupForm(false)}>×</button>
-          <p className="eyebrow">Нова група</p>
-          <h2>Створити групу</h2>
-          <p className="modalIntro">{selectedCandidates.length
-            ? `Буде зараховано ${selectedCandidates.length} ${selectedCandidates.length === 1 ? "учня" : "учнів"}. Їх можна змінити пізніше.`
-            : "Групу можна створити наперед без учнів. Розклад, викладача й учасників можна змінювати пізніше."}</p>
-          <label>Назва групи<input autoFocus value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Наприклад: FPV Start 8–10" /></label>
-          <div className="formTwo">
-            <label>Місткість<input type="number" min={1} max={100} value={groupCapacity} onChange={(e) => setGroupCapacity(Number(e.target.value))} /></label>
-            {activeLocations.length === 0
-              ? <div className="groupLocationOptional">
-                  <b>Локація <small>(необов’язково)</small></b>
-                  <small>Групу можна створити без локації та вказати її пізніше.</small>
-                  <button className="search" type="button" onClick={createLocationFromGroup}>+ Створити локацію</button>
-                </div>
-              : activeLocations.length === 1
-                ? <label>Локація <small>(необов’язково)</small><select value={groupLocationId} onChange={(e) => setGroupLocationId(e.target.value)}>
-                    <option value="">Без локації</option>
-                    <option value={activeLocations[0].id}>{activeLocations[0].name}</option>
-                  </select></label>
-                : <label>Локація <small>(необов’язково)</small><select value={groupLocationId} onChange={(e) => { setGroupLocationId(e.target.value); setGroupCreateError(""); }}>
-                    <option value="">Без локації</option>
-                    {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
-                  </select></label>}
-          </div>
-          {canManageStaff && <label>Викладач <small>(необов’язково)</small><select value={newGroupTeacherId} onChange={(e) => setNewGroupTeacherId(e.target.value)}>
-            <option value="">Призначити пізніше</option>
-            {activeTeachers.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.fullName}</option>)}
-          </select></label>}
-          <div className="groupCreateScheduleHead"><div><b>Регулярний розклад</b><small>Це шаблон: конкретні заняття з’являтимуться в календарі автоматично.</small></div></div>
-          <ScheduleSlotEditor value={groupSchedule} onChange={setGroupSchedule} />
-          {selectedCandidates.length > 0 && <div className="selectedNames">{leads.filter((x) => selectedCandidates.includes(x.id)).map((x) => {
-            const compatibility = candidateCompatibility(x, groupSchedule, groupLocationId || null);
-            return <span className={"candidateCompatibility " + compatibility.state} key={x.id}>
-              <b>{x.child} · {x.age}</b><small>{compatibility.icon} {compatibility.label}</small><small>{compatibility.detail}</small>
-            </span>;
-          })}</div>}
-          {groupCreateError && <div className="groupCreateError">{groupCreateError}</div>}
-          <button className="primary full" disabled={!groupName.trim() || selectedCandidates.length > groupCapacity || hasDuplicateSlots(groupSchedule)} onClick={createGroupFromCandidates}>
-            {!groupName.trim() ? "Вкажіть назву групи" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
-          </button>
-        </div>
-      </div>}
+      <GroupCreateDialog
+        open={showGroupForm}
+        groupName={groupName}
+        groupCapacity={groupCapacity}
+        groupLocationId={groupLocationId}
+        newGroupTeacherId={newGroupTeacherId}
+        groupSchedule={groupSchedule}
+        groupCreateError={groupCreateError}
+        selectedCandidates={selectedCandidates}
+        leads={leads}
+        activeLocations={activeLocations}
+        activeTeachers={activeTeachers}
+        canManageStaff={canManageStaff}
+        setOpen={setShowGroupForm}
+        setGroupName={setGroupName}
+        setGroupCapacity={setGroupCapacity}
+        setGroupLocationId={setGroupLocationId}
+        setNewGroupTeacherId={setNewGroupTeacherId}
+        setGroupSchedule={setGroupSchedule}
+        setGroupCreateError={setGroupCreateError}
+        onCreateLocation={createLocationFromGroup}
+        onCreateGroup={createGroupFromCandidates}
+      />
 
       {selected && <LeadDrawer {...{
         selected,
