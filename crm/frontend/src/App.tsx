@@ -3,6 +3,8 @@ import { UiIcon, navigationIcon } from "./components/UiIcon";
 import { AuditHistory } from "./components/AuditHistory";
 import { LoginView } from "./features/auth/LoginView";
 import { allNav, roleLabel, visibleNavigation } from "./features/shell/navigation";
+import { DashboardView } from "./features/shell/DashboardView";
+import { GlobalSearch } from "./features/shell/GlobalSearch";
 import { LeadKanban, LeadTable } from "./features/leads/LeadBoard";
 import { LeadDrawer } from "./features/leads/LeadDrawer";
 import { LeadCreateDialog } from "./features/leads/LeadCreateDialog";
@@ -2787,36 +2789,25 @@ function App() {
               </select>
               <span>{roleLabel(currentMembership?.role)}</span>
             </div>}
-            <div
-              className={"globalSearchShell " + (showSearch ? "open" : "")}
-              onBlur={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                  setShowSearch(false);
-                }
-              }}
-            >
-              {showSearch ? <>
-                <div className="globalSearchBar">
-                  <span aria-hidden="true"><UiIcon name="search" size={16} /></span>
-                  <input
-                    autoFocus
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Пошук у CRM…"
-                    aria-label="Глобальний пошук"
-                  />
-                  <button type="button" aria-label="Закрити пошук" title="Закрити пошук" onClick={() => { setShowSearch(false); setSearchQuery(""); }}><UiIcon name="x" size={16} /></button>
-                </div>
-                <div className="globalSearchDropdown">
-                  {!searchTerm && <div className="searchHint compact">Ім’я, прізвище, телефон, відповідальний, група…</div>}
-                  {searchTerm && searchLeads.length + searchGroups.length + searchStaff.length + searchPayments.length === 0 && <div className="searchHint compact">Нічого не знайдено.</div>}
-                  {searchLeads.length > 0 && <div className="searchResults compactResults"><h3>Діти та заявки</h3>{searchLeads.map((item) => <button key={item.id} onClick={() => { if (item.status === "Зарахований") { setActive("Учні"); setSelectedStudentId(item.id); } else { setActive("Заявки"); setSelectedId(item.id); } setShowSearch(false); setSearchQuery(""); }}><span><b>{item.child}</b><small>{item.age} років · {item.parent}{item.phone ? " · " + formatUaPhone(item.phone) : ""}{item.childPhone ? " · дитина " + formatUaPhone(item.childPhone) : ""}</small></span><i>{item.status}</i></button>)}</div>}
-                  {searchGroups.length > 0 && <div className="searchResults compactResults"><h3>Групи</h3>{searchGroups.map((item) => <button key={item.id} onClick={() => { setActive("Групи"); setShowSearch(false); setSearchQuery(""); void openGroup(item.id); }}><span><b>{item.name}</b><small>{item.ages} · {item.location}{item.teacherName ? " · " + item.teacherName : ""}</small></span><i>{item.members.length}/{item.capacity}</i></button>)}</div>}
-                  {searchPayments.length > 0 && <div className="searchResults compactResults"><h3>Оплати</h3>{searchPayments.map((payment) => { const student = leads.find((lead) => lead.id === payment.studentId); const plan = plans.find((item) => item.id === payment.planId); return <button key={payment.id} onClick={() => { setShowSearch(false); setSearchQuery(""); goToPayment(payment.id); }}><span><b>{student?.child ?? "Учень"} · {plan?.name ?? "Оплата"}</b><small>{student?.parent ?? "Відповідальний не вказаний"}{student?.phone ? " · " + formatUaPhone(student.phone) : ""}</small></span><i>{payment.balanceAmount > 0 ? "Залишок " + money(payment.balanceAmount) : "Сплачено"}</i></button>; })}</div>}
-                  {searchStaff.length > 0 && <div className="searchResults compactResults"><h3>Працівники</h3>{searchStaff.map((item) => <button key={item.id} onClick={() => { setActive("Працівники"); setSelectedStaffId(item.id); setShowSearch(false); setSearchQuery(""); }}><span><b>{item.fullName}</b><small>{item.role} · {item.email || item.phone}</small></span><i>{item.isActive ? "Активний" : "Неактивний"}</i></button>)}</div>}
-                </div>
-              </> : <button className="search globalSearchTrigger" aria-label="Пошук" title="Пошук" onClick={() => { setSearchQuery(""); setShowSearch(true); }}><UiIcon name="search" size={17} /><span>Пошук</span></button>}
-            </div>
+            <GlobalSearch
+              open={showSearch}
+              query={searchQuery}
+              searchTerm={searchTerm}
+              searchLeads={searchLeads}
+              searchGroups={searchGroups}
+              searchStaff={searchStaff}
+              searchPayments={searchPayments}
+              leads={leads}
+              plans={plans}
+              money={money}
+              onOpenChange={setShowSearch}
+              onQueryChange={setSearchQuery}
+              onOpenLead={(id) => { setActive("Заявки"); setSelectedId(id); }}
+              onOpenStudent={(id) => { setActive("Учні"); setSelectedStudentId(id); }}
+              onOpenGroup={(id) => { setActive("Групи"); void openGroup(id); }}
+              onOpenPayment={goToPayment}
+              onOpenStaff={(id) => { setActive("Працівники"); setSelectedStaffId(id); }}
+            />
             {canManageLeads && <button className="primary headerPrimaryAction" onClick={() => setShowLeadForm(true)}><UiIcon name="plus" size={17} /><span>Нова заявка</span></button>}
             
             {session && <button className="search iconButton logoutButton" aria-label="Вийти" title="Вийти" onClick={() => { clearSession(); setSession(null); }}><UiIcon name="logout" size={18} /></button>}
@@ -2832,89 +2823,26 @@ function App() {
         {apiEnabled && workspaceLoaded && !workspaceLoading && !workspaceError && workspaceRefreshing && <div className="syncStatus refreshing"><span className="syncPulse" />Оновлення даних…</div>}
         {saveToastTick > 0 && <div className="saveToast" role="status" aria-live="polite"><span>✓</span><b>Збережено</b></div>}
 
-        {active === "Дашборд" && <section className="todayDashboard">
-          <div className="todayIntro">
-            <div>
-              <p className="eyebrow">Сьогодні · {new Date().toLocaleDateString("uk-UA", { weekday: "long", day: "numeric", month: "long" })}</p>
-              <h2>{dashboardTaskCount > 0 ? "Що потребує уваги" : "Усе важливе на сьогодні під контролем"}</h2>
-            </div>
-            {dashboardTaskCount > 0 && <span className="todayTaskCount">{dashboardTaskCount} {dashboardTaskCount === 1 ? "дія" : dashboardTaskCount < 5 ? "дії" : "дій"}</span>}
-          </div>
-
-          {canSeeSchedule && <article className="panel todayLessonsPanel">
-            <div className="todaySectionHead">
-              <div><p className="eyebrow">Розклад</p><h2>Заняття сьогодні</h2></div>
-              <button className="link" onClick={() => setActive("Розклад")}>Розклад →</button>
-            </div>
-            <div className="todayLessonList">
-              {todayLessons.map((lesson) => {
-                const group = groups.find((item) => item.id === lesson.groupId);
-                return <div className="todayLessonRow" key={lesson.id}>
-                  <button className="todayLessonMain" onClick={() => goToLesson(lesson.id)}>
-                    <time>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
-                    <span><b>{group?.name ?? "Заняття"}</b><small>{lesson.topic || "Тема не вказана"} · {lesson.duration} хв{group?.location ? " · " + group.location : ""}</small></span>
-                    <em>Журнал →</em>
-                  </button>
-                  {group && <button className="todayGroupLink" onClick={() => goToGroup(group.id)}>Група</button>}
-                </div>;
-              })}
-              {todayTrials.map((lead) => <button className="todayLessonRow todayTrialRow" key={"trial-" + lead.id} onClick={() => openLead(lead.id)}>
-                <span className="todayLessonMain">
-                  <time>{new Date(lead.trialAt!).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
-                  <span><b>{lead.child} · пробне</b><small>{lead.parent}{lead.trialLocation ? " · " + lead.trialLocation : ""}</small></span>
-                  <em>Заявка →</em>
-                </span>
-              </button>)}
-              {todayLessons.length === 0 && todayTrials.length === 0 && <div className="todayEmpty">На сьогодні занять не заплановано.</div>}
-            </div>
-          </article>}
-
-          <article className="panel todayActionsPanel">
-            <div className="todaySectionHead">
-              <div><p className="eyebrow">Дії</p><h2>Потрібно зробити сьогодні</h2></div>
-            </div>
-            <div className="todayActionList">
-              {dashboardLeadTasks.map((lead) => {
-                const kind = lead.status === "Нова"
-                  ? "Нова заявка"
-                  : lead.status === "Після пробного"
-                    ? "Після пробного"
-                    : lead.trialResult === "no_show"
-                      ? "Не прийшов на пробне"
-                      : lead.trialResult === "cancelled"
-                        ? "Пробне скасовано"
-                        : "Зв’язатися";
-                const detail = lead.nextContactAt && localDateInput(new Date(lead.nextContactAt)) <= todayKey
-                  ? "Контакт запланований " + new Date(lead.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
-                  : lead.parent + " · " + formatUaPhone(lead.phone);
-                return <button className="todayActionRow" key={"lead-" + lead.id} onClick={() => openLead(lead.id)}>
-                  <span className={"todayActionType lead action-" + leadActionMeta(lead).type}>{leadActionMeta(lead).icon} {leadActionMeta(lead).label}</span>
-                  <span className="todayActionText"><b>{lead.child}, {lead.age} років</b><small>{kind} · {detail}</small></span>
-                  <span className="todayActionArrow">→</span>
-                </button>;
-              })}
-              {renewalSubscriptionTasks.map((subscription) => {
-                const student = leads.find((lead) => lead.id === subscription.student_id);
-                const plan = plans.find((item) => item.id === subscription.plan_id);
-                return <button className="todayActionRow" key={"renewal-" + subscription.id} onClick={() => { setSelectedStudentId(subscription.student_id); setActive("Учні"); }}>
-                  <span className="todayActionType payment">Абонемент</span>
-                  <span className="todayActionText"><b>{student?.child ?? "Учень"} · залишилось 1 заняття</b><small>{plan?.name ?? "Абонемент"} · скоро продовження</small></span>
-                  <span className="todayActionArrow">→</span>
-                </button>;
-              })}
-              {dashboardPaymentTasks.map((payment) => {
-                const student = leads.find((lead) => lead.id === payment.studentId);
-                const isOverdue = payment.dueDate < todayKey || payment.status === "overdue";
-                return <button className="todayActionRow" key={"payment-" + payment.id} onClick={() => goToPayment(payment.id)}>
-                  <span className={"todayActionType payment " + (isOverdue ? "urgent" : "")}>{isOverdue ? "Борг" : "Оплата"}</span>
-                  <span className="todayActionText"><b>{student?.child ?? "Учень"} · {money(payment.balanceAmount)}</b><small>{isOverdue ? "Прострочено" : "Оплатити сьогодні"} · термін {new Date(payment.dueDate + "T00:00:00").toLocaleDateString("uk-UA")}</small></span>
-                  <span className="todayActionArrow">→</span>
-                </button>;
-              })}
-              {dashboardTaskCount === 0 && <div className="todayEmpty done">На сьогодні немає невиконаних важливих дій.</div>}
-            </div>
-          </article>
-        </section>}
+        {active === "Дашборд" && <DashboardView
+          groups={groups}
+          leads={leads}
+          plans={plans}
+          todayLessons={todayLessons}
+          todayTrials={todayTrials}
+          dashboardLeadTasks={dashboardLeadTasks}
+          renewalSubscriptionTasks={renewalSubscriptionTasks}
+          dashboardPaymentTasks={dashboardPaymentTasks}
+          dashboardTaskCount={dashboardTaskCount}
+          todayKey={todayKey}
+          canSeeSchedule={canSeeSchedule}
+          money={money}
+          onOpenSchedule={() => setActive("Розклад")}
+          onOpenLesson={goToLesson}
+          onOpenGroup={goToGroup}
+          onOpenLead={openLead}
+          onOpenStudent={(studentId) => { setSelectedStudentId(studentId); setActive("Учні"); }}
+          onOpenPayment={goToPayment}
+        />}
 
         {active === "Заявки" && <section className="panel leadsPage">
           <div className="panelHead leadsHead">
