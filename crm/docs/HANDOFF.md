@@ -2,9 +2,9 @@
 
 Updated: 2026-10-08
 Canonical product branch: `crm-v1`
-Current canonical head before this continuation slice: `749bb89e6b9be99695a8a5b59ce5220178e3a7d0`
-Current production live commit observed before this slice: `c771cb43a25b0c38da8270667d0b7c191173b4c5`
-Continuation branch: `crm-stage2-schedule-view-and-handoff`
+Current canonical head before this continuation slice: `e4820454353f43c2c1f50b904d29f2f72cf62354`
+Current production live commit observed before this slice: `c92b43d98d25b45417037886d6cba5adc24cd994`
+Continuation branch: `crm-stage2-staff-drawer`
 
 This is the persistent continuation point for future ChatGPT/project sessions. Read this file together with `roadmap.md`, `architecture.md`, `core-hardening.md`, `operations.md`, `status.md` and `backup-restore.md`. Do not restart the CRM analysis from zero.
 
@@ -57,7 +57,7 @@ Important scheduler rule: GitHub cron reads workflows from the default branch, s
 
 ## IN PROGRESS — Stage 2 maintainability
 
-Merged Stage 2 work through PR #69 includes:
+Merged Stage 2 work through PR #73 includes:
 - API contracts/client/auth split with compatibility barrel;
 - shared date/contact utilities;
 - LoginView and AuditHistory extraction;
@@ -73,21 +73,27 @@ Merged Stage 2 work through PR #69 includes:
 - legacy compatibility wrappers retained in `services/crm.py` to avoid breaking APIs.
 
 Current baseline sizes before this slice:
-- `frontend/src/App.tsx`: ~4200 lines;
-- `backend/app/services/crm.py`: ~3180 lines.
+- `frontend/src/App.tsx`: ~3970 lines;
+- `backend/app/services/crm.py`: ~3179 lines.
+
+Completed since the previous handoff:
+- ScheduleView extraction merged in PR #71;
+- AttendanceView extraction merged in PR #72;
+- PaymentsView extraction merged in PR #73;
+- API/frontend production currently observed live on `c92b43d98d25b45417037886d6cba5adc24cd994`.
 
 Current continuation slice:
-- extract the complete Schedule workspace from `App.tsx` into `features/teaching/ScheduleView.tsx`;
+- extract the staff details drawer from `App.tsx` into the staff feature module;
 - preserve existing state/API callbacks in App;
-- add desktop/mobile browser regression coverage;
+- add browser regression coverage;
 - merge only with full CI green.
 
-After ScheduleView, continue with:
-1. Attendance workspace extraction.
-2. Payments/Billing workspace extraction.
-3. Remaining staff/student/group drawers/modals still owned by App.
-4. Backend scheduling domain extraction from legacy `crm.py`.
-5. Backend billing compatibility extraction where legacy functions still dominate.
+After the staff drawer slice, continue with:
+1. Remaining lead/group/location/billing drawers and modals still owned by App.
+2. Re-measure App.tsx and extract the largest behavior-preserving UI block next.
+3. Backend scheduling domain extraction from legacy `crm.py`.
+4. Backend billing compatibility extraction where legacy functions still dominate.
+5. Close Stage 2 only after App and crm.py are readable orchestration layers rather than domain containers.
 
 Every extraction must be behavior-preserving. Do not combine architectural refactors with business-rule changes in the same PR unless a regression requires it.
 
