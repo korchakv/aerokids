@@ -2,7 +2,7 @@
 
 Updated: 2026-10-08
 Canonical product branch: `crm-v1`
-Current canonical head before this continuation slice: `81e7e04a08de8c72bd8e44e9cd6273d445672a11`
+Current canonical head before this continuation slice: `6bf9b65aee8c3d3328d9b08207587d95d7af527b`
 Current production live commit observed before this slice: `c92b43d98d25b45417037886d6cba5adc24cd994`
 Continuation branch: `crm-stage3-pagination-v1`
 
@@ -80,7 +80,8 @@ Active branch/PR:
 - `crm-stage3-pagination-v1` / PR #94;
 - stable page contract: `{items,total,limit,offset}`;
 - database-side pagination/search/sorting for student and group workspace lists;
-- regression coverage for assigned-group teacher scope.
+- regression coverage for assigned-group teacher scope;
+- preserved accountant student visibility for finance workflows.
 
 After PR #94:
 1. wire paginated registry UX without breaking on-demand drawers and global operational flows;
@@ -95,15 +96,6 @@ Production note:
 - current `crm-v1` is ahead of production after Stage 2 merges, so exact-commit Render rollout and `/ready`/invariant verification are required before Stage 3 production acceptance.
 
 
-
-- real server-side pagination for student/group/lead/payment/audit lists;
-- server-side filtering and sorting;
-- stable pagination contract;
-- query/index review against actual paths;
-- remove N+1 group/student detail queries;
-- query-count/performance tests;
-- bounded reporting;
-- paginated loading/empty/error UI.
 
 ## NEXT — Stage 4 organization permissions UX
 
