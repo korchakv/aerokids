@@ -53,6 +53,13 @@ test("owner can open modular attendance workspace", async ({ page }) => {
   await expect(page.getByTestId("attendance-workspace")).toBeVisible();
 });
 
+test("owner can open modular payments workspace", async ({ page }) => {
+  await login(page);
+  await page.getByText("Оплати", { exact: true }).first().click();
+  await expect(page.getByTestId("payments-workspace")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Оплати учнів" })).toBeVisible();
+});
+
 test("owner can open modular staff locations and settings workspaces", async ({ page }) => {
   await login(page);
 
