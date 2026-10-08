@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-08
 Target branch: `crm-v1`
-Current canonical head before active slice: `e4820454353f43c2c1f50b904d29f2f72cf62354`
+Current canonical head before active slice: `6bf9b65aee8c3d3328d9b08207587d95d7af527b`
 Current observed production live commit before active slice: `c92b43d98d25b45417037886d6cba5adc24cd994`
 
 This file is the canonical staged plan. Read together with `HANDOFF.md`. Do not restart the analysis from zero after a chat reset.
@@ -42,56 +42,56 @@ Completed:
 - incident-response docs;
 - production DB integrity audit.
 
-## IN PROGRESS — Stage 2 maintainability/UI architecture
+## DONE — Stage 2 maintainability/UI architecture
 
-Merged through PR #75:
-- frontend API contracts/client/auth foundation;
+Completed through PR #92.
+
+Frontend:
+- API contracts/client/auth foundation and compatibility barrel;
 - shared utilities and editor primitives;
-- Login, AuditHistory, Leads board/table;
-- role-aware shell helpers;
-- group candidate matching and schedule presentation helpers;
-- feature projection/adapters;
-- Staff, Locations, Settings, Reports views;
-- GroupsView;
-- StudentsView + StudentDrawer;
-- backend services extracted for audit, contacts, groups, locations, organizations, reporting, staff, students and trials;
-- compatibility wrappers preserved in `services/crm.py`.
+- modular views for all primary workspaces;
+- modular detail drawers and create/edit dialogs;
+- dashboard and global search extracted into shell features;
+- App retained as state/API orchestration rather than a large view container.
 
-Completed slices:
-- ScheduleView extraction — PR #71;
-- AttendanceView extraction — PR #72;
-- PaymentsView extraction — PR #73.
+Backend:
+- domain services for audit, contacts, groups, locations, organizations, reporting, staff, students, trials, scheduling, billing, attendance, lead/intake, enrollment and workspace projections;
+- compatibility wrappers retained in `services/crm.py`.
 
-Completed since the previous roadmap update:
-- StaffDrawer extraction — PR #74;
-- BillingDialogs extraction — PR #75.
+Completion measurements:
+- `App.tsx`: ~3596 lines;
+- `services/crm.py`: ~544 lines.
 
-Current active slices:
-- PR #80: create/edit dialogs extraction from App;
-- PR #79: scheduling domain service extraction from legacy backend facade.
+Stage 2 is closed. Further extraction requires a concrete maintenance/performance reason rather than a line-count target.
+
+## IN PROGRESS — Stage 3 data scale/performance
+
+Active slice: PR #94 / `crm-stage3-pagination-v1`.
+
+Current work:
+- stable page envelope `{items,total,limit,offset}`;
+- database-side student/group pagination;
+- database-side search, status filters and sorting;
+- teacher assigned-group regression coverage;
+- preserved accountant student visibility for finance workflows.
 
 Next slices, in order:
-1. LeadDrawer extraction.
-2. Remaining group-create/location/staff/invite/lead-create dialogs.
-3. Re-measure App.tsx and extract any remaining oversized UI block.
-3. Scheduling service extraction from legacy `crm.py`.
-4. Billing legacy-service extraction.
-5. Re-measure `App.tsx` and `crm.py`; Stage 2 ends only when remaining orchestration is readable and domain logic is not concentrated in either file.
+1. registry frontend page-state and loading/empty/error UX;
+2. leads pagination/filter/sort and N+1 removal;
+3. payments pagination/filter/sort;
+4. audit pagination/filter/sort;
+5. query-count/performance tests and index review;
+6. N+1 removal from student/group detail;
+7. bounded reporting.
 
 Rules:
-- one behavior-preserving slice per PR;
-- full CI/E2E before merge;
-- no UI/business-rule redesign hidden inside modularization PRs.
+- page/filter/sort happens in SQL, not after loading the entire tenant dataset;
+- stable response contracts must be typed in frontend;
+- retain on-demand detail endpoints for drawers;
+- keep teacher/tenant scoping in every list query;
+- each slice must pass SQLite, PostgreSQL, browser and security CI.
 
-## NEXT — Stage 3 data scale/performance
 
-- server-side pagination/filtering/sorting for students/groups/leads/payments/audit;
-- stable list contracts;
-- N+1 removal in student/group detail;
-- query-count/performance tests;
-- index review;
-- bounded reports;
-- paginated UX states.
 
 ## NEXT — Stage 4 permissions UX
 

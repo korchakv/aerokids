@@ -63,7 +63,7 @@ from app.schemas import (
     SubscriptionChargeResult,
     TrialLessonRead,
 )
-from app.services import crm, hardening
+from app.services import crm, hardening, workspace_service
 
 
 router = APIRouter()
@@ -864,6 +864,50 @@ def workspace_leads_hardened(
     db: Session = Depends(get_db),
 ):
     return crm.list_lead_overview(db, access.organization_id)
+
+
+@router.get("/workspace/students/page")
+def workspace_students_page(
+    q: str | None = None,
+    status: StudentStatus | None = None,
+    sort: str = Query(default="name", pattern="^(name|newest|oldest)$"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    access: OrgAccess = Depends(get_org_access),
+    db: Session = Depends(get_db),
+):
+    return workspace_service.paginate_student_overview(
+        db,
+        access.organization_id,
+        access.user_id,
+        access.role,
+        q=q,
+        status=status,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/workspace/groups/page")
+def workspace_groups_page(
+    q: str | None = None,
+    sort: str = Query(default="name", pattern="^(name|size_desc|size_asc)$"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    access: OrgAccess = Depends(get_org_access),
+    db: Session = Depends(get_db),
+):
+    return workspace_service.paginate_group_overview(
+        db,
+        access.organization_id,
+        access.user_id,
+        access.role,
+        q=q,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/workspace/students")

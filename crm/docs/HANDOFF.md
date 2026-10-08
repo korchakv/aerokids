@@ -2,9 +2,9 @@
 
 Updated: 2026-10-08
 Canonical product branch: `crm-v1`
-Current canonical head before this continuation slice: `e4820454353f43c2c1f50b904d29f2f72cf62354`
+Current canonical head before this continuation slice: `6bf9b65aee8c3d3328d9b08207587d95d7af527b`
 Current production live commit observed before this slice: `c92b43d98d25b45417037886d6cba5adc24cd994`
-Continuation branch: `crm-stage2-create-dialogs-v2`
+Continuation branch: `crm-stage3-pagination-v1`
 
 This is the persistent continuation point for future ChatGPT/project sessions. Read this file together with `roadmap.md`, `architecture.md`, `core-hardening.md`, `operations.md`, `status.md` and `backup-restore.md`. Do not restart the CRM analysis from zero.
 
@@ -55,64 +55,47 @@ Completed after Core Hardening:
 
 Important scheduler rule: GitHub cron reads workflows from the default branch, so the maintenance workflow must remain available on `main` even while CRM application code is maintained on `crm-v1`.
 
-## IN PROGRESS — Stage 2 maintainability
+## DONE — Stage 2 maintainability
 
-Merged Stage 2 work through PR #77 includes:
-- API contracts/client/auth split with compatibility barrel;
-- shared date/contact utilities;
-- LoginView and AuditHistory extraction;
-- lead Kanban/table and lead availability helpers;
-- schedule editor primitives;
-- role-aware navigation helpers;
-- group matching/candidate helpers;
-- UI projection/adapters for group, teaching, billing, staff, locations and workspace data;
-- StaffView, LocationsView, SettingsView, ReportsView;
-- GroupsView;
-- StudentsView and StudentDrawer;
-- backend domain services already extracted for audit, contacts, groups, locations, organizations, reporting, staff, students and trials;
-- legacy compatibility wrappers retained in `services/crm.py` to avoid breaking APIs.
+Completed through PR #92:
+- frontend API contracts/client/auth split with compatibility barrel;
+- shared date/contact/editor utilities;
+- role-aware shell/navigation helpers;
+- feature views for leads, groups, students, staff, locations, settings, reports, schedule, attendance and payments;
+- detail drawers and create/edit dialogs extracted into feature modules;
+- DashboardView and GlobalSearch extracted from App;
+- frontend projections/adapters separated by domain;
+- backend domain services extracted for audit, contacts, groups, locations, organizations, reporting, staff, students, trials, scheduling, billing, attendance, lead/intake, enrollment and workspace/detail projections;
+- legacy compatibility facade retained in `services/crm.py` so API behavior remains stable.
 
-Current baseline sizes during this continuation:
-- `frontend/src/App.tsx`: ~3873 lines after billing dialogs extraction and current group drawer work;
-- `backend/app/services/crm.py`: ~3179 lines.
+Stage 2 completion measurements after PR #92:
+- `frontend/src/App.tsx`: ~3596 lines, now state/API orchestration rather than a container of large view components;
+- `backend/app/services/crm.py`: ~544 lines, now primarily compatibility/orchestration.
 
-Completed since the previous handoff:
-- ScheduleView extraction merged in PR #71;
-- AttendanceView extraction merged in PR #72;
-- PaymentsView extraction merged in PR #73;
-- API/frontend production currently observed live on `c92b43d98d25b45417037886d6cba5adc24cd994`.
+Stage 2 is closed. Do not continue extracting code only to reduce line counts unless a concrete maintainability or testability problem justifies it.
 
-Completed since the previous handoff:
-- StaffDrawer extraction merged in PR #74;
-- billing dialogs extraction merged in PR #75;
-- GroupDetailDrawer extraction merged in PR #76;
-- LeadDrawer extraction merged in PR #77.
+## IN PROGRESS — Stage 3 data scale and performance
 
-Current continuation slice:
-- PR #80 extracts lead-create, staff/invite, location create/edit and group-create dialogs into their feature modules;
-- App keeps state and API commands; dialog components are typed/presentational;
-- full-stack browser smoke covers each extracted dialog;
-- PR #79 extracts scheduling into a dedicated backend service in parallel.
+Active branch/PR:
+- `crm-stage3-pagination-v1` / PR #94;
+- stable page contract: `{items,total,limit,offset}`;
+- database-side pagination/search/sorting for student and group workspace lists;
+- regression coverage for assigned-group teacher scope;
+- preserved accountant student visibility for finance workflows.
 
-After the create-dialog slice, continue with:
-1. Merge/validate PR #79 scheduling service.
-2. Re-measure App.tsx and crm.py.
-3. Extract legacy billing domain from crm.py. from legacy `crm.py`.
-4. Backend billing compatibility extraction where legacy functions still dominate.
-5. Close Stage 2 only after App and crm.py are readable orchestration layers rather than domain containers.
+After PR #94:
+1. wire paginated registry UX without breaking on-demand drawers and global operational flows;
+2. add lead pagination/filter/sort using a DB projection instead of N+1 overview loading;
+3. add payment and audit pagination;
+4. remove remaining N+1 detail/list queries;
+5. add query-count/performance tests and index review;
+6. bound reports and add paginated loading/empty/error states.
 
-Every extraction must be behavior-preserving. Do not combine architectural refactors with business-rule changes in the same PR unless a regression requires it.
+Production note:
+- latest observed Render live API/frontend commit before this slice: `c92b43d98d25b45417037886d6cba5adc24cd994`;
+- current `crm-v1` is ahead of production after Stage 2 merges, so exact-commit Render rollout and `/ready`/invariant verification are required before Stage 3 production acceptance.
 
-## NEXT — Stage 3 data scale and performance
 
-- real server-side pagination for student/group/lead/payment/audit lists;
-- server-side filtering and sorting;
-- stable pagination contract;
-- query/index review against actual paths;
-- remove N+1 group/student detail queries;
-- query-count/performance tests;
-- bounded reporting;
-- paginated loading/empty/error UI.
 
 ## NEXT — Stage 4 organization permissions UX
 
