@@ -204,58 +204,14 @@ def update_student_crm_status(*args, **kwargs):
     return _lead_service_call("update_student_crm_status", *args, **kwargs)
 
 
-def student_detail(db: Session, org_id: UUID, student_id: UUID) -> tuple[Student, list[Contact], list[TrialLesson]]:
-    student = scoped_get(db, Student, org_id, student_id)
-    contacts = list(db.scalars(
-        select(Contact)
-        .join(StudentContact, StudentContact.contact_id == Contact.id)
-        .where(
-            StudentContact.organization_id == org_id,
-            StudentContact.student_id == student_id,
-            Contact.organization_id == org_id,
-        )
-        .order_by(StudentContact.is_primary.desc(), Contact.full_name)
-    ))
-    trials = list(db.scalars(
-        select(TrialLesson)
-        .where(TrialLesson.organization_id == org_id, TrialLesson.student_id == student_id)
-        .order_by(TrialLesson.starts_at.desc())
-    ))
-    return student, contacts, trials
+def student_detail(*args, **kwargs):
+    from app.services import student_service
+    return student_service.student_detail(*args, **kwargs)
 
 
-def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommended_level: str | None, teacher_notes: str | None, actor_user_id: UUID | None = None) -> TrialLesson:
-    trial = scoped_get(db, TrialLesson, org_id, trial_id)
-    trial.status = status
-    trial.recommended_level = recommended_level
-    trial.teacher_notes = teacher_notes
-    student = scoped_get(db, Student, org_id, trial.student_id)
-    student.lead_close_reason = None
-    student.lead_close_note = None
-    if status.value == "completed":
-        # A completed trial still needs an explicit business decision:
-        # ready for a group, thinking/follow-up, or declined.
-        student.crm_status = CrmStatus.TRIAL_COMPLETED
-        student.next_contact_at = None
-    elif status.value == "no_show":
-        # No-show remains an active lead that needs contact/rescheduling.
-        student.crm_status = CrmStatus.CONTACTED
-        student.next_contact_at = None
-    elif status.value == "cancelled":
-        student.crm_status = CrmStatus.CONTACTED
-        student.next_contact_at = None
-    record_audit(
-        db,
-        org_id,
-        "student",
-        student.id,
-        f"trial.{status.value}",
-        {"trial_id": str(trial.id), "recommended_level": recommended_level, "teacher_notes": teacher_notes},
-        actor_user_id=actor_user_id,
-    )
-    db.commit()
-    db.refresh(trial)
-    return trial
+def complete_trial(*args, **kwargs):
+    from app.services import trial_service
+    return trial_service.complete_trial(*args, **kwargs)
 
 
 def defer_lead(*args, **kwargs):
@@ -298,157 +254,14 @@ def list_group_schedules(db: Session, org_id: UUID, group_id: UUID | None = None
     from app.services import scheduling_service
     return scheduling_service.list_group_schedules(db, org_id, group_id, user_id, role)
 
-def group_roster(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[dict]:
-    ensure_group_access(db, org_id, user_id, role, group_id)
-    rows = db.execute(
-        select(Student)
-        .join(Enrollment, Enrollment.student_id == Student.id)
-        .where(
-            Enrollment.organization_id == org_id,
-            Enrollment.group_id == group_id,
-            Enrollment.status == EnrollmentStatus.ACTIVE,
-            Student.organization_id == org_id,
-            Student.student_status == StudentStatus.ACTIVE,
-        )
-        .order_by(Student.first_name, Student.last_name)
-    ).scalars().all()
-    return [{
-        "student_id": student.id,
-        "first_name": student.first_name,
-        "last_name": student.last_name,
-        "age": student.age_at_inquiry,
-    } for student in rows]
+def group_roster(*args, **kwargs):
+    from app.services import group_service
+    return group_service.group_roster(*args, **kwargs)
 
 
-def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> dict:
-    if role == StaffRole.ACCOUNTANT:
-        group = scoped_get(db, Group, org_id, group_id)
-    else:
-        group = ensure_group_access(db, org_id, user_id, role, group_id)
-
-    schedules = list(db.scalars(
-        select(GroupSchedule)
-        .where(
-            GroupSchedule.organization_id == org_id,
-            GroupSchedule.group_id == group.id,
-            GroupSchedule.is_active.is_(True),
-        )
-        .order_by(GroupSchedule.weekday, GroupSchedule.start_time)
-    ))
-    enrollments = list(db.scalars(
-        select(Enrollment)
-        .where(
-            Enrollment.organization_id == org_id,
-            Enrollment.group_id == group.id,
-            Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
-        )
-        .order_by(Enrollment.started_at, Enrollment.id)
-    ))
-    finance_visible = role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER, StaffRole.ACCOUNTANT}
-    members = []
-    today = date.today()
-
-    for enrollment in enrollments:
-        student = scoped_get(db, Student, org_id, enrollment.student_id)
-        contact = _primary_contact_for_student(db, org_id, student.id)
-
-        attendance_rows = list(db.scalars(
-            select(Attendance)
-            .join(LessonSession, LessonSession.id == Attendance.session_id)
-            .where(
-                Attendance.organization_id == org_id,
-                Attendance.student_id == student.id,
-                LessonSession.organization_id == org_id,
-                LessonSession.group_id == group.id,
-            )
-        ))
-        attendance_counts = {
-            "present": sum(row.status == AttendanceStatus.PRESENT for row in attendance_rows),
-            "absent": sum(row.status == AttendanceStatus.ABSENT for row in attendance_rows),
-            "late": sum(row.status == AttendanceStatus.LATE for row in attendance_rows),
-            "excused": sum(row.status == AttendanceStatus.EXCUSED for row in attendance_rows),
-        }
-        attendance_total = len(attendance_rows)
-        attended = attendance_counts["present"] + attendance_counts["late"]
-        attendance_summary = {
-            **attendance_counts,
-            "total": attendance_total,
-            "attendance_rate": round(attended / attendance_total * 100, 1) if attendance_total else 0.0,
-        }
-
-        billing = None
-        payment_rows: list[Payment] = []
-        if finance_visible:
-            payment_rows = list(db.scalars(
-                select(Payment)
-                .where(Payment.organization_id == org_id, Payment.student_id == student.id)
-                .order_by(Payment.created_at.desc())
-            ))
-            subscriptions = list(db.scalars(
-                select(StudentSubscription)
-                .where(StudentSubscription.organization_id == org_id, StudentSubscription.student_id == student.id)
-                .order_by(StudentSubscription.starts_on.desc())
-            ))
-            subscription_by_id = {item.id: item for item in subscriptions}
-            for payment in payment_rows:
-                linked = subscription_by_id.get(payment.subscription_id) if payment.subscription_id else None
-                payment.plan_id = linked.plan_id if linked else None
-                _attach_payment_financials(db, org_id, payment)
-
-            latest_subscription = subscriptions[0] if subscriptions else None
-            plan = scoped_get(db, SubscriptionPlan, org_id, latest_subscription.plan_id) if latest_subscription else None
-            lessons_used = None
-            lessons_remaining = None
-            if latest_subscription and plan:
-                usage_summary = subscription_usage_summary(db, org_id, latest_subscription)
-                lessons_used = usage_summary["used_lessons"]
-                lessons_remaining = usage_summary["remaining_lessons"]
-            pending = [item for item in payment_rows if item.status != PaymentStatus.CANCELLED and item.balance_minor > 0]
-            dated_pending = [item for item in pending if item.due_date is not None]
-            overdue = [item for item in dated_pending if item.due_date < today]
-            due_today = [item for item in dated_pending if item.due_date == today]
-            next_due_date = min((item.due_date for item in dated_pending), default=None)
-            last_paid = next((item for item in payment_rows if item.paid_minor - item.refunded_minor > 0), None)
-            if overdue:
-                billing_status = "overdue"
-            elif due_today:
-                billing_status = "due"
-            elif pending:
-                billing_status = "upcoming"
-            elif latest_subscription and latest_subscription.status == SubscriptionStatus.ACTIVE and (latest_subscription.ends_on is None or latest_subscription.ends_on >= today):
-                billing_status = "current"
-            else:
-                billing_status = "no_plan"
-
-            billing = {
-                "status": billing_status,
-                "plan_name": plan.name if plan else None,
-                "lessons_used": lessons_used,
-                "lessons_included": latest_subscription.lessons_included if latest_subscription else (plan.lessons_included if plan else None),
-                "lessons_remaining": lessons_remaining,
-                "amount_due_minor": sum(item.balance_minor for item in pending),
-                "next_due_date": next_due_date,
-                "last_paid_at": last_paid.paid_at if last_paid else None,
-                "last_paid_minor": (last_paid.paid_minor - last_paid.refunded_minor) if last_paid else None,
-                "subscription_ends_on": latest_subscription.ends_on if latest_subscription else None,
-            }
-
-        members.append({
-            "student_id": student.id,
-            "first_name": student.first_name,
-            "last_name": student.last_name,
-            "student_phone": student.phone,
-            "age": student.age_at_inquiry,
-            "contact_name": contact.full_name if contact else None,
-            "contact_phone": contact.phone if contact else None,
-            "enrollment_started_at": enrollment.started_at,
-            "enrollment_status": enrollment.status,
-            "attendance": attendance_summary,
-            "billing": billing,
-            "payments": payment_rows,
-        })
-
-    return {"group": group, "schedules": schedules, "members": members}
+def group_detail(*args, **kwargs):
+    from app.services import group_service
+    return group_service.group_detail(*args, **kwargs)
 
 
 def _comparable_dt(value: datetime, timezone_name: str) -> datetime:
