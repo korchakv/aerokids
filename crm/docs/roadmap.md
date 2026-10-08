@@ -1,261 +1,176 @@
 # CRM canonical continuation roadmap
 
-Last updated: 2026-10-07
+Last updated: 2026-10-08
 Target branch: `crm-v1`
-Current production baseline commit: `172124a210b395f1e8fed6b510590a98ca33b83f`
+Current canonical head before active slice: `749bb89e6b9be99695a8a5b59ce5220178e3a7d0`
+Current observed production live commit before active slice: `c771cb43a25b0c38da8270667d0b7c191173b4c5`
 
-This file is the canonical handoff for continuing CRM work after chat/context resets. Do not restart analysis from zero. Read this file together with `docs/core-hardening.md`, `docs/operations.md`, `docs/backup-restore.md`, and `docs/status.md`.
+This file is the canonical staged plan. Read together with `HANDOFF.md`. Do not restart the analysis from zero after a chat reset.
 
 ## Product contract
 
-The CRM is a generic SaaS-ready product for schools, clubs and studios. AeroKids is the first tenant, not a fork.
+Generic SaaS-ready CRM for schools/clubs/studios. AeroKids is the first tenant, not a fork.
 
-Core entities:
-- Organization
-- User / OrganizationMembership / Staff
-- Location / Room
-- Contact / Student / StudentContact
-- Group / Enrollment / EnrollmentHistory
-- GroupSchedule / LessonSession / individual lessons
-- Attendance / make-up state
-- SubscriptionPlan / StudentSubscription
-- Payment / immutable PaymentTransaction
-- AuditEvent
-
-Core rules:
-- tenant isolation is mandatory on every owned relation;
-- OrganizationMembership is the access source of truth;
-- Staff is the worker profile, not the authorization record;
-- teachers are assigned-group scoped by default;
-- GET endpoints must not mutate business data;
-- attendance and billing side effects happen through controlled finalization/reconciliation;
-- historical rosters and financial history must remain reproducible;
+Non-negotiable invariants:
+- tenant isolation on every owned relation;
+- OrganizationMembership is authorization source of truth;
+- Staff is worker profile;
+- teachers assigned-group scoped by default;
+- GET endpoints do not mutate business data;
+- finalized attendance is the billing boundary;
+- historical rosters and financial history remain reproducible;
 - organization-local time governs business dates;
-- production must never fall back to demo data.
+- production fails closed instead of showing demo data.
 
-## DONE — Core Hardening
+## DONE — Stage 1 Core Hardening
 
-Completed and merged:
-- strict production RBAC;
-- Staff/User/Membership synchronization;
-- access revocation after staff deactivation;
-- credential-bound JWT invalidation after password change;
-- cross-tenant subscription/group/resource validation;
-- rooms and resource conflict engine;
-- recurring schedule reconciliation and schedule history;
-- historical enrollment episodes and lesson-date roster;
-- paused-seat capacity rules and concurrency-safe enrollment;
-- individual lessons without fake one-person groups;
-- trial lesson resource conflicts;
-- group archive lifecycle;
-- actual lesson staff/room resource assignments;
-- attendance finalization/reopen;
-- make-up reconciliation;
-- billing rollback protection after real money movement;
-- idempotent subscription renewal;
-- per-subscription tariff-rule snapshots;
-- organization-local renewal/reminder/pause dates;
-- privacy export / retention candidates / anonymization;
-- read-only invariant auditor;
-- backup and isolated restore-drill scripts;
-- production API fail-closed without VITE_API_URL;
-- desktop + mobile Playwright smoke;
-- SQLite + PostgreSQL full test suites;
-- Docker builds, dependency audit and secret scan.
+Reference: PR #45.
 
-Reference merge: PR #45.
+Completed: RBAC/access synchronization, credential-bound JWT invalidation, tenant FK guards, rooms/resources, recurring schedule reconciliation/history, historical enrollment roster, individual lessons, trial conflicts, archive/pause/resume lifecycle, finalization/reopen + billing reconciliation, idempotent renewals, tariff snapshots, privacy tooling, invariant audit, backup/restore scripts, browser/PostgreSQL/security CI.
 
-## DONE — Production operations
+## DONE — Production operations baseline
 
-Completed and live:
-- Render API + frontend production deploy;
-- structured JSON application logs;
-- request IDs;
-- /health and /ready operational checks;
-- daily idempotent maintenance endpoint;
-- GitHub Actions scheduled maintenance;
-- GitHub OIDC authentication for maintenance, no shared production secret required;
-- invariant audit after maintenance;
-- scheduled maintenance fails on critical integrity findings;
-- incident-response documentation.
+References: PR #46 and #47.
 
-Reference merges: PR #46 and PR #47.
-Production baseline at the time of this roadmap: `172124a...`.
+Completed:
+- Render production deploy;
+- structured logs/request IDs;
+- `/health` + `/ready`;
+- daily maintenance endpoint;
+- GitHub Actions scheduler with OIDC;
+- invariant checks after maintenance;
+- incident-response docs;
+- production DB integrity audit.
 
-## IN PROGRESS — Stage 2: maintainability and UI architecture
+## IN PROGRESS — Stage 2 maintainability/UI architecture
 
-Goal: reduce regression risk before adding more commercial SaaS features.
+Merged through PR #69:
+- frontend API contracts/client/auth foundation;
+- shared utilities and editor primitives;
+- Login, AuditHistory, Leads board/table;
+- role-aware shell helpers;
+- group candidate matching and schedule presentation helpers;
+- feature projection/adapters;
+- Staff, Locations, Settings, Reports views;
+- GroupsView;
+- StudentsView + StudentDrawer;
+- backend services extracted for audit, contacts, groups, locations, organizations, reporting, staff, students and trials;
+- compatibility wrappers preserved in `services/crm.py`.
 
-Progress:
-- PR #48 merged: API contracts/client/auth split, shared UI/date/contact utilities extracted, LoginView, AuditHistory, schedule editors and lead Kanban/table moved out of App.tsx; App.tsx reduced substantially with full CI/E2E green.
-- PR #49 merged: group, teaching, billing, staff and location UI projection models plus workspace/operations adapters extracted from App.tsx.
-- Current Stage 2 slice: role-aware navigation, lead availability transforms, group schedule helpers and candidate matching UI/logic are being extracted.
+Current active slice:
+- extract ScheduleView from App;
+- browser smoke coverage;
+- update persistent handoff.
 
-Required:
-1. Continue splitting `frontend/src/App.tsx` into feature modules without changing behavior. **In progress.**
-2. Split frontend API/types by domain while keeping a compatibility barrel. **Foundation complete; domain-specific API façades remain.**
-3. Continue decomposing legacy `backend/app/services/crm.py`; hardened services are already split, but legacy flows remain too large. **Started: staff/membership domain implementation extracted to `services/staff_service.py` with compatibility wrappers retained in `crm.py`.**
-4. Keep every extraction behavior-preserving and protected by CI/E2E. **Active release rule.**
-5. Add targeted browser tests when moving a feature out of App.tsx. **Existing full desktop/mobile smoke retained; feature-specific coverage to expand.**
+Next slices, in order:
+1. AttendanceView extraction.
+2. Payments/BillingView extraction.
+3. Remaining large drawers/modals from App.
+4. Scheduling service extraction from legacy `crm.py`.
+5. Billing legacy-service extraction.
+6. Re-measure `App.tsx` and `crm.py`; Stage 2 ends only when remaining orchestration is readable and domain logic is not concentrated in either file.
 
-Recommended frontend domains:
-- app shell / navigation
-- auth/bootstrap
-- leads
-- students
-- groups
-- schedule
-- attendance
-- billing
-- staff
-- settings
-- shared modals/forms/components
+Rules:
+- one behavior-preserving slice per PR;
+- full CI/E2E before merge;
+- no UI/business-rule redesign hidden inside modularization PRs.
 
-Recommended backend domains:
-- organizations
-- contacts/students
-- leads/trials
-- groups/enrollment
-- scheduling
-- billing
-- staff
-- audit/reporting
+## NEXT — Stage 3 data scale/performance
 
-## NEXT — Stage 3: data scale and performance
+- server-side pagination/filtering/sorting for students/groups/leads/payments/audit;
+- stable list contracts;
+- N+1 removal in student/group detail;
+- query-count/performance tests;
+- index review;
+- bounded reports;
+- paginated UX states.
 
-Foundation exists but is not complete.
+## NEXT — Stage 4 permissions UX
 
-Required:
-- real server-side pagination for large student/group/lead/payment/audit lists;
-- server-side filtering and sorting;
-- stable pagination contract (limit/offset initially; cursor only where needed);
-- indexes reviewed against real query patterns;
-- remove N+1 paths in group/student detail;
-- query-count/performance regression tests;
-- bounded report queries;
-- UI loading/empty/error states for paginated screens.
-
-Do not load all students into the browser once organizations become large.
-
-## NEXT — Stage 4: organization permissions UX
-
-Backend capability overrides exist; product UX is incomplete.
-
-Required:
-- permission preset editor;
-- presets: Owner, Admin, Manager, Teacher, Accountant;
+- role preset editor;
+- effective capability display;
 - optional per-user overrides;
-- assigned-groups-only toggle/scope where applicable;
-- visible explanation of effective permissions;
-- audit every access change;
-- prevent the last owner from losing ownership/access;
-- staff deactivation must clearly show that login access is removed.
+- assigned-group scope UX;
+- audited changes;
+- deactivation clearly removes login access;
+- last-owner protection stays mandatory.
 
-## NEXT — Stage 5: organization onboarding
+## NEXT — Stage 5 tenant onboarding
 
-Required before commercial multi-tenant rollout:
-- guided organization creation;
-- organization basics: name, timezone, currency, locale;
-- locations optional;
-- invite first staff;
-- create first tariff;
-- create first group or individual-learning setup;
-- checklist showing incomplete setup;
-- no AeroKids-specific defaults in generic tenant flows.
+- generic organization wizard;
+- timezone/currency/locale;
+- optional locations/rooms;
+- staff invite;
+- tariff;
+- first group or individual setup;
+- completion checklist;
+- no AeroKids-specific defaults.
 
-## NEXT — Stage 6: production communication
+## NEXT — Stage 6 communication
 
-Application outbox exists, but provider-side delivery is deployment configuration.
-
-Required:
-- choose transactional email provider / SMTP;
+- choose transactional email/SMTP provider;
 - configure sender/domain;
-- enable `TRANSACTIONAL_EMAIL_ENABLED`;
-- test invite and password-reset deliverability;
-- retry/dead-letter visibility for failed outbox messages;
-- admin-friendly delivery status;
-- never persist raw one-time tokens after successful send.
+- enable transport;
+- test invite/reset;
+- retry/dead-letter/admin delivery visibility.
 
-Later channels:
-- Telegram/SMS/Viber/WhatsApp only through provider-neutral notification jobs.
+## NEXT — Stage 7 monitoring/backups/DR
 
-## NEXT — Stage 7: monitoring, backups and disaster recovery
+- managed DB backup policy;
+- private backup destination and cadence;
+- automated periodic restore drill;
+- downtime/deploy/DB/invariant alerts;
+- latency/5xx/resource dashboard;
+- rollback rules.
 
-Application mechanisms exist. External operations must be completed:
-- managed database backup policy confirmed;
-- private backup destination;
-- scheduled backup cadence;
-- periodic automated restore drill;
-- alert ownership for API downtime, deploy failure, DB availability and critical invariant audit failures;
-- basic latency / 5xx / saturation dashboard;
-- documented rollback decision rules.
+## NEXT — Stage 8 AeroKids public intake migration
 
-## NEXT — Stage 8: public website intake migration
+After private production acceptance:
+- switch aerokids.space registration to CRM intake;
+- preserve anti-spam/rate-limit/duplicate/sibling behavior;
+- measure failures;
+- keep rollback path.
 
-Do only after private production acceptance:
-- point `aerokids.space` registration form to CRM public intake;
-- preserve honeypot and rate limiting;
-- ensure repeat/sibling submissions behave correctly;
-- measure intake failures;
-- keep rollback path to previous form transport during initial rollout.
+## LATER — Payments and SaaS commercialization
 
-## LATER — Stage 9: payment provider integration
+Payment provider:
+- ProviderPaymentAttempt / ProviderTransaction / WebhookEvent;
+- unique provider IDs;
+- webhook idempotency/signature verification;
+- browser redirect never proves payment.
 
-Do not weaken the current immutable ledger.
-
-Provider model must include:
-- ProviderPaymentAttempt;
-- ProviderTransaction;
-- WebhookEvent;
-- unique provider event/transaction IDs;
-- webhook idempotency;
-- provider signature verification;
-- browser redirect is never proof of payment;
-- manual and provider payments reconcile into the same PaymentTransaction ledger.
-
-## LATER — Stage 10: commercial SaaS controls
-
-After operational stability:
-- plan/feature limits per organization;
+Commercial SaaS:
+- plans/feature limits;
 - usage metering;
-- organization billing;
-- trial period;
-- suspend/reactivate tenant;
-- export before account closure;
-- support/admin tooling with audited impersonation only if truly necessary;
-- legal/privacy docs and retention commitments.
+- tenant billing/trial/suspension;
+- export before closure;
+- support tooling only with audit.
 
-## Deferred, not forgotten
-
-- MFA / passkeys;
-- richer reporting;
+Deferred until foundations are stable:
+- MFA/passkeys;
 - teacher payroll;
-- homework/content tracking;
-- equipment/resource inventory;
-- advanced recurrence engine;
 - parent portal;
-- mobile app.
+- homework/content;
+- equipment inventory;
+- advanced recurrence;
+- native mobile app.
 
-These should not be started before Stage 2–7 foundations are stable unless a real customer requirement changes priority.
+## Release acceptance
 
-## Release acceptance rule
+A slice is DONE only after:
+1. merged to `crm-v1`;
+2. merged-commit CI green;
+3. affected Render service live on exact commit;
+4. `/ready` healthy;
+5. schema head/invariants verified when relevant;
+6. browser/API smoke passes.
 
-A stage is not DONE until:
-1. code is merged to `crm-v1`;
-2. CI is green on the merged commit;
-3. Render API and frontend are live on that exact commit when affected;
-4. /ready is healthy;
-5. Alembic is at repository head when schema changed;
-6. production invariant audit has no critical findings;
-7. affected browser/API flows are smoke-tested.
+## Resume protocol
 
-## Continuation protocol
-
-When resuming work:
-1. read this file;
-2. check current `crm-v1` head;
-3. check recent merged PRs after the commit above;
-4. check Render live commits;
-5. mark already-completed roadmap items DONE instead of rebuilding them;
-6. continue with the first unfinished item;
-7. update this file whenever a stage materially changes.
+1. Read `HANDOFF.md` and this roadmap.
+2. Check current `crm-v1` head.
+3. Check recent merged PRs.
+4. Check Render live commits.
+5. Skip anything already completed.
+6. Continue first unfinished item.
+7. Update both files when state materially changes.

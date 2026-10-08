@@ -40,6 +40,13 @@ test("owner can open modular groups workspace", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Активні групи" })).toBeVisible();
 });
 
+test("owner can open modular schedule workspace", async ({ page }) => {
+  await login(page);
+  await page.getByText("Розклад", { exact: true }).first().click();
+  await expect(page.getByTestId("schedule-workspace")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Додати заняття" })).toBeVisible();
+});
+
 test("owner can open modular staff locations and settings workspaces", async ({ page }) => {
   await login(page);
 
