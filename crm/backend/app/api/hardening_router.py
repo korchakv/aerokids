@@ -51,6 +51,8 @@ from app.schemas import (
     GroupRosterStudent,
     GroupScheduleCreate,
     GroupScheduleRead,
+    LeadColumnCounts,
+    LeadPage,
     LessonSessionRead,
     StaffGroupAssignment,
     StaffRead,
@@ -864,6 +866,37 @@ def workspace_leads_hardened(
     db: Session = Depends(get_db),
 ):
     return crm.list_lead_overview(db, access.organization_id)
+
+
+@router.get("/workspace/leads/page", response_model=LeadPage)
+def workspace_leads_page(
+    q: str | None = None,
+    column: str | None = Query(default=None, pattern="^(new|contacted|trial|no_show|after_trial|waiting|deferred|closed)$"),
+    source: str | None = None,
+    sort: str = Query(default="priority", pattern="^(priority|next_action|newest)$"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    access: OrgAccess = Depends(_require_capability("leads.manage")),
+    db: Session = Depends(get_db),
+):
+    return workspace_service.paginate_lead_overview(
+        db,
+        access.organization_id,
+        q=q,
+        column=column,
+        source=source,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/workspace/leads/counts", response_model=LeadColumnCounts)
+def workspace_lead_counts(
+    access: OrgAccess = Depends(_require_capability("leads.manage")),
+    db: Session = Depends(get_db),
+):
+    return workspace_service.lead_column_counts(db, access.organization_id)
 
 
 @router.get("/workspace/students/page")
