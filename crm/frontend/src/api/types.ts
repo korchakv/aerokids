@@ -103,6 +103,14 @@ export type WorkspaceGroup = {
   primary_teacher_name: string | null;
 };
 
+export type PageResult<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
 export type WorkspaceBundle = {
   leads: WorkspaceLead[];
   students: WorkspaceStudent[];
