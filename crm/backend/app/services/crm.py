@@ -191,54 +191,18 @@ def attach_contact(db: Session, org_id: UUID, student_id: UUID, contact_id: UUID
     return student_service.attach_contact(db, org_id, student_id, contact_id, relation, is_primary)
 
 def create_trial(db: Session, org_id: UUID, data: TrialLessonCreate, actor_user_id: UUID | None = None) -> TrialLesson:
-    student = scoped_get(db, Student, org_id, data.student_id)
-    if data.location_id:
-        scoped_get(db, Location, org_id, data.location_id)
-    item = TrialLesson(organization_id=org_id, **data.model_dump())
-    db.add(item)
-    db.flush()
-    student.crm_status = CrmStatus.TRIAL_SCHEDULED
-    student.next_contact_at = None
-    student.deferred_until = None
-    student.deferred_reason = None
-    student.deferred_note = None
-    student.lead_close_reason = None
-    student.lead_close_note = None
-    record_audit(db, org_id, "student", student.id, "trial.scheduled", {"trial_id": str(item.id), "starts_at": item.starts_at.isoformat()}, actor_user_id=actor_user_id)
-    db.commit()
-    db.refresh(item)
-    return item
+    from app.services import trial_service
+    return trial_service.create_trial(db, org_id, data, actor_user_id)
 
 
 def update_trial(db: Session, org_id: UUID, trial_id: UUID, starts_at: datetime | None, location_id: UUID | None, actor_user_id: UUID | None = None) -> TrialLesson:
-    trial = scoped_get(db, TrialLesson, org_id, trial_id)
-    if location_id is not None:
-        scoped_get(db, Location, org_id, location_id)
-        trial.location_id = location_id
-    if starts_at is not None:
-        trial.starts_at = starts_at
-    trial.status = TrialStatus.SCHEDULED
-    student = scoped_get(db, Student, org_id, trial.student_id)
-    student.crm_status = CrmStatus.TRIAL_SCHEDULED
-    student.next_contact_at = None
-    student.deferred_until = None
-    student.deferred_reason = None
-    student.deferred_note = None
-    student.lead_close_reason = None
-    student.lead_close_note = None
-    record_audit(db, org_id, "student", student.id, "trial.rescheduled", {
-        "trial_id": str(trial.id),
-        "starts_at": trial.starts_at.isoformat(),
-        "location_id": str(trial.location_id) if trial.location_id else None,
-    }, actor_user_id=actor_user_id)
-    db.commit()
-    db.refresh(trial)
-    return trial
+    from app.services import trial_service
+    return trial_service.update_trial(db, org_id, trial_id, starts_at, location_id, actor_user_id)
 
 
 def list_trials(db: Session, org_id: UUID) -> list[TrialLesson]:
-    return list(db.scalars(select(TrialLesson).where(TrialLesson.organization_id == org_id).order_by(TrialLesson.starts_at)))
-
+    from app.services import trial_service
+    return trial_service.list_trials(db, org_id)
 
 def create_group(db: Session, org_id: UUID, data: GroupCreate) -> Group:
     require_organization(db, org_id)
