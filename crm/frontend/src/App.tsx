@@ -12,6 +12,7 @@ import { GroupsView } from "./features/groups/GroupsView";
 import { candidateCompatibility, MatchBadge, MatchExplanation } from "./features/groups/matching";
 import { ageRange, hasDuplicateSlots, scheduleDraftLabel, scheduleSlots } from "./features/groups/helpers";
 import { applyTeaching, SCHEDULE_DAY_NAMES, type LessonItem } from "./features/teaching/model";
+import { ScheduleView } from "./features/teaching/ScheduleView";
 import { type PaymentDemo, type PlanDemo } from "./features/billing/model";
 import type { LocationDemo } from "./features/locations/types";
 import { LocationsView } from "./features/locations/LocationsView";
@@ -2978,132 +2979,46 @@ function App() {
           }}
         />}
 
-        {active === "Розклад" && <section className="scheduleWorkspace">
-          <article className="panel schedulePanel scheduleCalendar">
-            <div className="scheduleToolbar scheduleToolbarClear">
-              <div>
-                <p className="eyebrow">Календар</p>
-                <h2>{scheduleWeekStart.toLocaleDateString("uk-UA", { day: "numeric", month: "long" })} — {scheduleWeekEnd.toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" })}</h2>
-                <div className="scheduleWeekSummary">
-                  <span><b>{lessonsThisWeek.length}</b> занять</span>
-                  <span className="done"><b>{completedThisWeek}</b> проведено</span>
-                  {unfinishedPastThisWeek > 0 && <span className="attention"><b>{unfinishedPastThisWeek}</b> не завершено</span>}
-                  {trialsThisWeek.length > 0 && <span className="trial"><b>{trialsThisWeek.length}</b> пробних</span>}
-                </div>
-              </div>
-              <div className="scheduleToolbarActions">
-                <label className="scheduleGroupFilter">Показати<select value={scheduleFilterGroupId} onChange={(e) => setScheduleFilterGroupId(e.target.value)}>
-                  <option value="all">Усі групи + пробні</option>
-                  {groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
-                </select></label>
-                <div className="scheduleNav">
-                  <button className="search" aria-label="Попередній тиждень" onClick={() => setScheduleWeekOffset((value) => value - 1)}>←</button>
-                  <button className="search" onClick={() => setScheduleWeekOffset(0)} disabled={scheduleWeekOffset === 0}>Цей тиждень</button>
-                  <button className="search" aria-label="Наступний тиждень" onClick={() => setScheduleWeekOffset((value) => value + 1)}>→</button>
-                </div>
-              </div>
-            </div>
-            <div className="scheduleLegend">
-              <span className="planned"><i></i>Заплановано</span>
-              <span className="completed"><i></i>Проведено</span>
-              <span className="missed"><i></i>Не проведено</span>
-              {scheduleFilterGroupId === "all" && <span className="trial"><i></i>Пробне</span>}
-            </div>
-            <div className="mobileScheduleAgenda">
-              {scheduleWeekDays.map((date) => {
-                const dayKey = localDateInput(date);
-                const dayLessons = lessonsThisWeek.filter((lesson) => localDateInput(new Date(lesson.startsAt)) === dayKey);
-                const dayTrials = trialsThisWeek.filter((lead) => lead.trialAt && localDateInput(new Date(lead.trialAt)) === dayKey);
-                const items = [...dayLessons.map((lesson) => ({ kind: "lesson" as const, at: lesson.startsAt, lesson })), ...dayTrials.map((lead) => ({ kind: "trial" as const, at: lead.trialAt!, lead }))].sort((a,b)=>dateValue(a.at)-dateValue(b.at));
-                if (items.length === 0) return null;
-                const isToday = dayKey === todayKey;
-                return <section className={"mobileScheduleDay " + (isToday ? "today" : "")} key={"mobile-"+dayKey}>
-                  <div className="mobileScheduleDayHead"><b>{date.toLocaleDateString("uk-UA",{weekday:"short",day:"2-digit",month:"2-digit"})}</b>{isToday && <span>Сьогодні</span>}</div>
-                  <div className="mobileScheduleRows">
-                    {items.map((item) => {
-                      if(item.kind === "trial"){
-                        return <button className="mobileScheduleRow trial" key={"mtrial-"+item.lead.id} onClick={() => openLead(item.lead.id)}>
-                          <time>{new Date(item.at).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"})}</time>
-                          <span><b>{item.lead.child}</b><small>Пробне</small></span>
-                          <i>›</i>
-                        </button>;
-                      }
-                      const group = groups.find((g)=>g.id===item.lesson.groupId);
-                      const isPast = dateValue(item.lesson.startsAt) < Date.now();
-                      const state = item.lesson.status === "completed" ? "completed" : isPast ? "missed" : "planned";
-                      const label = state === "completed" ? "Проведено" : state === "missed" ? "Не проведено" : "Заплановано";
-                      return <button className={"mobileScheduleRow "+state} key={"mlesson-"+item.lesson.id} onClick={()=>goToLesson(item.lesson.id)}>
-                        <time>{new Date(item.at).toLocaleTimeString("uk-UA",{hour:"2-digit",minute:"2-digit"})}</time>
-                        <span><b>{group?.name ?? "Група"}</b><small>{label}</small></span>
-                        <i>›</i>
-                      </button>;
-                    })}
-                  </div>
-                </section>;
-              })}
-              {lessonsThisWeek.length === 0 && trialsThisWeek.length === 0 && <div className="mobileScheduleEmpty">На цей тиждень подій немає.</div>}
-            </div>
-            <div className="weekGrid weekGridConcrete scheduleWeekClear">
-              {scheduleWeekDays.map((date) => {
-                const dayKey = localDateInput(date);
-                const dayLessons = lessonsThisWeek.filter((lesson) => localDateInput(new Date(lesson.startsAt)) === dayKey);
-                const dayTrials = trialsThisWeek.filter((lead) => lead.trialAt && localDateInput(new Date(lead.trialAt)) === dayKey);
-                const isToday = dayKey === todayKey;
-                return <div className={"dayColumn scheduleDay " + (isToday ? "today" : "")} key={dayKey}>
-                  <div className="scheduleDayHead">
-                    <div><b>{date.toLocaleDateString("uk-UA", { weekday: "long" })}</b>{isToday && <em>Сьогодні</em>}</div>
-                    <span>{date.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })}</span>
-                  </div>
-                  <div className="scheduleDayLessons">
-                    {[...dayLessons].sort((a,b)=>dateValue(a.startsAt)-dateValue(b.startsAt)).map((lesson) => {
-                      const group = groups.find((item) => item.id === lesson.groupId);
-                      const teacher = group ? (group.teacherName ?? groupTeacher(group.id)?.fullName) : undefined;
-                      const marked = lesson.attendanceTotal ?? Object.keys(attendance[lesson.id] ?? {}).length;
-                      const total = group?.members.length ?? 0;
-                      const isPast = dateValue(lesson.startsAt) < Date.now();
-                      const state = lesson.status === "completed" ? "completed" : isPast ? "missed" : "planned";
-                      const statusText = state === "completed" ? "Проведено" : state === "missed" ? "Не проведено" : "Заплановано";
-                      return <button className={"scheduleCard concreteLessonCard " + state} key={lesson.id} onClick={() => goToLesson(lesson.id)}>
-                        <div className="scheduleCardTop"><time>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time><span className={"scheduleStatus " + state}>{statusText}</span></div>
-                        <strong>{group?.name ?? "Група"}</strong>
-                        <small>{lesson.topic || "Тема ще не вказана"}</small>
-                        <div className="scheduleCardMeta">{teacher && <span>{teacher}</span>}{total > 0 && <span>{marked}/{total} відмічено</span>}</div>
-                      </button>;
-                    })}
-                    {dayTrials.map((lead) => <button className="scheduleCard trialCalendarCard" key={"trial-"+lead.id} onClick={() => openLead(lead.id)}>
-                      <div className="scheduleCardTop"><time>{new Date(lead.trialAt!).toLocaleTimeString("uk-UA", { hour:"2-digit", minute:"2-digit" })}</time><span className="scheduleStatus trial">Пробне</span></div>
-                      <strong>{lead.child}</strong>
-                      <small>{lead.age} років{lead.trialLocation ? " · " + lead.trialLocation : ""}</small>
-                      <div className="scheduleCardMeta"><span>Відкрити заявку →</span></div>
-                    </button>)}
-                    {dayLessons.length === 0 && dayTrials.length === 0 && <div className="scheduleDayEmpty">Вільний день</div>}
-                  </div>
-                </div>;
-              })}
-            </div>
-          </article>
-
-          <section className="scheduleTools">
-            <article className="panel lessonCreate">
-              <div className="scheduleToolHead"><div><p className="eyebrow">Разове</p><h2>Додати заняття</h2></div><span>Для переносу, додаткового або індивідуального заняття</span></div>
-              <label>Група<select value={newLessonGroupId} onChange={(e) => setNewLessonGroupId(e.target.value)}><option value="">Оберіть групу</option>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
-              <DateTimeEditor label="Дата і час" value={newLessonAt} onChange={setNewLessonAt} />
-              <DurationSelect value={newLessonDuration} onChange={setNewLessonDuration} />
-              <label>Тема<input value={newLessonTopic} onChange={(e) => setNewLessonTopic(e.target.value)} placeholder="Можна заповнити пізніше в журналі" /></label>
-              <button className="primary full" disabled={!newLessonGroupId} onClick={createLesson}>Створити заняття</button>
-            </article>
-            {canManageRecurringSchedule && <article className="panel lessonCreate recurringSettings">
-              <div className="scheduleToolHead"><div><p className="eyebrow">Регулярний</p><h2>Додати час групи</h2></div><span>Постійний день і час для автоматичного календаря</span></div>
-              <label>Група<select value={scheduleGroupId} onChange={(e) => setScheduleGroupId(e.target.value)}><option value="">Оберіть групу</option>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
-              <div className="formTwo">
-                <label>День<select value={scheduleWeekday} onChange={(e) => setScheduleWeekday(Number(e.target.value))}>{["Понеділок","Вівторок","Середа","Четвер","П’ятниця","Субота","Неділя"].map((day,index) => <option value={index} key={day}>{day}</option>)}</select></label>
-                <TimeSelect label="Час" value={scheduleTime} onChange={setScheduleTime} />
-              </div>
-              <DurationSelect value={scheduleDuration} onChange={setScheduleDuration} />
-              <button className="search full" disabled={!scheduleGroupId} onClick={createGroupSchedule}>Додати регулярний час</button>
-            </article>}
-          </section>
-        </section>}
+        {active === "Розклад" && <ScheduleView
+          groups={groups}
+          lessonsThisWeek={lessonsThisWeek}
+          trialsThisWeek={trialsThisWeek}
+          scheduleWeekStart={scheduleWeekStart}
+          scheduleWeekEnd={scheduleWeekEnd}
+          scheduleWeekDays={scheduleWeekDays}
+          completedThisWeek={completedThisWeek}
+          unfinishedPastThisWeek={unfinishedPastThisWeek}
+          scheduleFilterGroupId={scheduleFilterGroupId}
+          scheduleWeekOffset={scheduleWeekOffset}
+          todayKey={todayKey}
+          attendance={attendance}
+          groupTeacherName={(groupId) => groupTeacher(groupId)?.fullName}
+          onScheduleFilterChange={setScheduleFilterGroupId}
+          onPreviousWeek={() => setScheduleWeekOffset((value) => value - 1)}
+          onCurrentWeek={() => setScheduleWeekOffset(0)}
+          onNextWeek={() => setScheduleWeekOffset((value) => value + 1)}
+          onOpenLead={openLead}
+          onOpenLesson={goToLesson}
+          newLessonGroupId={newLessonGroupId}
+          newLessonAt={newLessonAt}
+          newLessonDuration={newLessonDuration}
+          newLessonTopic={newLessonTopic}
+          onNewLessonGroupChange={setNewLessonGroupId}
+          onNewLessonAtChange={setNewLessonAt}
+          onNewLessonDurationChange={setNewLessonDuration}
+          onNewLessonTopicChange={setNewLessonTopic}
+          onCreateLesson={createLesson}
+          canManageRecurringSchedule={canManageRecurringSchedule}
+          scheduleGroupId={scheduleGroupId}
+          scheduleWeekday={scheduleWeekday}
+          scheduleTime={scheduleTime}
+          scheduleDuration={scheduleDuration}
+          onScheduleGroupChange={setScheduleGroupId}
+          onScheduleWeekdayChange={setScheduleWeekday}
+          onScheduleTimeChange={setScheduleTime}
+          onScheduleDurationChange={setScheduleDuration}
+          onCreateGroupSchedule={createGroupSchedule}
+        />}
 
         {active === "Відвідування" && <section className="attendanceLayout">
           <article className="panel lessonListPanel">
