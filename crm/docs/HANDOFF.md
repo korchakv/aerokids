@@ -4,7 +4,7 @@ Updated: 2026-10-08
 Canonical product branch: `crm-v1`
 Current canonical head before this continuation slice: `e4820454353f43c2c1f50b904d29f2f72cf62354`
 Current production live commit observed before this slice: `c92b43d98d25b45417037886d6cba5adc24cd994`
-Continuation branch: `crm-stage2-staff-drawer`
+Continuation branch: `crm-stage2-billing-dialogs`
 
 This is the persistent continuation point for future ChatGPT/project sessions. Read this file together with `roadmap.md`, `architecture.md`, `core-hardening.md`, `operations.md`, `status.md` and `backup-restore.md`. Do not restart the CRM analysis from zero.
 
@@ -57,7 +57,7 @@ Important scheduler rule: GitHub cron reads workflows from the default branch, s
 
 ## IN PROGRESS — Stage 2 maintainability
 
-Merged Stage 2 work through PR #73 includes:
+Merged Stage 2 work through PR #74 includes:
 - API contracts/client/auth split with compatibility barrel;
 - shared date/contact utilities;
 - LoginView and AuditHistory extraction;
@@ -82,14 +82,17 @@ Completed since the previous handoff:
 - PaymentsView extraction merged in PR #73;
 - API/frontend production currently observed live on `c92b43d98d25b45417037886d6cba5adc24cd994`.
 
+Completed since the previous handoff:
+- StaffDrawer extraction merged in PR #74.
+
 Current continuation slice:
-- extract the staff details drawer from `App.tsx` into the staff feature module;
-- preserve existing state/API callbacks in App;
+- extract billing dialogs (tariff, charge, payment adjustment/refund, mid-period plan change, subscription pause) from `App.tsx` into the billing feature module;
+- preserve all financial state/API ownership in App;
 - add browser regression coverage;
 - merge only with full CI green.
 
-After the staff drawer slice, continue with:
-1. Remaining lead/group/location/billing drawers and modals still owned by App.
+After the billing dialogs slice, continue with:
+1. Remaining lead/group/location drawers and modals still owned by App.
 2. Re-measure App.tsx and extract the largest behavior-preserving UI block next.
 3. Backend scheduling domain extraction from legacy `crm.py`.
 4. Backend billing compatibility extraction where legacy functions still dominate.
