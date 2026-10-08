@@ -11,7 +11,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, contact_service, crm, location_service, organization_service, reporting_service, staff_service, student_service, trial_service
+from app.services import audit_service, contact_service, crm, group_service, location_service, organization_service, reporting_service, staff_service, student_service, trial_service
 
 router = APIRouter()
 
@@ -239,12 +239,12 @@ def update_trial(
 
 @router.post("/groups", response_model=GroupRead, status_code=201)
 def create_group(data: GroupCreate, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.create_group(db, org_id, data)
+    return group_service.create_group(db, org_id, data)
 
 
 @router.get("/groups", response_model=list[GroupRead])
 def groups(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.list_groups(db, org_id)
+    return group_service.list_groups(db, org_id)
 
 
 @router.put("/groups/{group_id}", response_model=GroupRead)
@@ -254,7 +254,7 @@ def update_group(
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    return crm.update_group(db, access.organization_id, group_id, data, access.user_id)
+    return group_service.update_group(db, access.organization_id, group_id, data, access.user_id)
 
 
 @router.delete("/groups/{group_id}", status_code=204)
@@ -263,7 +263,7 @@ def delete_group(
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    crm.delete_group(db, access.organization_id, group_id, access.user_id)
+    group_service.delete_group(db, access.organization_id, group_id, access.user_id)
 
 
 @router.post("/enrollments", response_model=EnrollmentRead, status_code=201)

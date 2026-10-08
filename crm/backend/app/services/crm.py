@@ -205,16 +205,8 @@ def list_trials(db: Session, org_id: UUID) -> list[TrialLesson]:
     return trial_service.list_trials(db, org_id)
 
 def create_group(db: Session, org_id: UUID, data: GroupCreate) -> Group:
-    require_organization(db, org_id)
-    if data.location_id:
-        scoped_get(db, Location, org_id, data.location_id)
-    if data.min_age and data.max_age and data.min_age > data.max_age:
-        raise HTTPException(status_code=422, detail="min_age cannot be greater than max_age")
-    item = Group(organization_id=org_id, **data.model_dump())
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-    return item
+    from app.services import group_service
+    return group_service.create_group(db, org_id, data)
 
 
 def update_group(
@@ -224,80 +216,8 @@ def update_group(
     data: GroupUpdate,
     actor_user_id: UUID | None = None,
 ) -> Group:
-    group = scoped_get(db, Group, org_id, group_id)
-    if data.location_id is not None:
-        scoped_get(db, Location, org_id, data.location_id)
-
-    enrolled_count = len(list(db.scalars(select(Enrollment.id).where(
-        Enrollment.organization_id == org_id,
-        Enrollment.group_id == group.id,
-        Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
-    ))))
-    if data.capacity < enrolled_count:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Місткість групи не може бути меншою за кількість учасників ({enrolled_count}).",
-        )
-
-    group.name = data.name
-    group.location_id = data.location_id
-    group.capacity = data.capacity
-    group.min_age = data.min_age
-    group.max_age = data.max_age
-
-    existing_schedules = list(db.scalars(select(GroupSchedule).where(
-        GroupSchedule.organization_id == org_id,
-        GroupSchedule.group_id == group.id,
-    )))
-    schedules_by_key = {(item.weekday, item.start_time): item for item in existing_schedules}
-    desired_keys: set[tuple[int, time]] = set()
-
-    for slot in data.schedule_slots:
-        slot_time = time.fromisoformat(slot.start_time)
-        key = (slot.weekday, slot_time)
-        desired_keys.add(key)
-        existing = schedules_by_key.get(key)
-        if existing is None:
-            db.add(GroupSchedule(
-                organization_id=org_id,
-                group_id=group.id,
-                weekday=slot.weekday,
-                start_time=slot_time,
-                duration_minutes=slot.duration_minutes,
-                is_active=True,
-            ))
-        else:
-            existing.duration_minutes = slot.duration_minutes
-            existing.is_active = True
-
-    for existing in existing_schedules:
-        if (existing.weekday, existing.start_time) not in desired_keys:
-            existing.is_active = False
-
-    record_audit(
-        db,
-        org_id,
-        "group",
-        group.id,
-        "group.updated",
-        {
-            "name": group.name,
-            "location_id": str(group.location_id) if group.location_id else None,
-            "capacity": group.capacity,
-            "schedule_slots": [
-                {
-                    "weekday": slot.weekday,
-                    "start_time": slot.start_time,
-                    "duration_minutes": slot.duration_minutes,
-                }
-                for slot in data.schedule_slots
-            ],
-        },
-        actor_user_id=actor_user_id,
-    )
-    db.commit()
-    db.refresh(group)
-    return group
+    from app.services import group_service
+    return group_service.update_group(db, org_id, group_id, data, actor_user_id)
 
 
 def delete_group(
@@ -306,107 +226,13 @@ def delete_group(
     group_id: UUID,
     actor_user_id: UUID | None = None,
 ) -> None:
-    group = scoped_get(db, Group, org_id, group_id)
+    from app.services import group_service
+    return group_service.delete_group(db, org_id, group_id, actor_user_id)
 
-    enrollment = db.scalar(select(Enrollment.id).where(
-        Enrollment.organization_id == org_id,
-        Enrollment.group_id == group.id,
-    ).limit(1))
-    if enrollment is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="У цій групі є або були учні. Щоб не втратити історію навчання, таку групу видалити не можна.",
-        )
-
-    subscription = db.scalar(select(StudentSubscription.id).where(
-        StudentSubscription.organization_id == org_id,
-        StudentSubscription.group_id == group.id,
-    ).limit(1))
-    if subscription is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="Ця група вже використовується в абонементах. Щоб не втратити фінансову історію, її видалити не можна.",
-        )
-
-    lessons = list(db.scalars(select(LessonSession).where(
-        LessonSession.organization_id == org_id,
-        LessonSession.group_id == group.id,
-    )))
-    completed_lesson = next((lesson for lesson in lessons if lesson.status == LessonStatus.COMPLETED), None)
-    if completed_lesson is not None:
-        raise HTTPException(
-            status_code=409,
-            detail="У цієї групи вже є проведене заняття. Щоб не втратити історію, таку групу видалити не можна.",
-        )
-
-    lesson_ids = [lesson.id for lesson in lessons]
-    if lesson_ids:
-        attendance = db.scalar(select(Attendance.id).where(
-            Attendance.organization_id == org_id,
-            Attendance.session_id.in_(lesson_ids),
-        ).limit(1))
-        if attendance is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="У заняттях цієї групи вже є відмітки відвідування. Щоб не втратити історію, групу видалити не можна.",
-            )
-
-        usage = db.scalar(select(SubscriptionUsage.id).where(
-            SubscriptionUsage.organization_id == org_id,
-            SubscriptionUsage.session_id.in_(lesson_ids),
-        ).limit(1))
-        if usage is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="Заняття цієї групи вже враховані в абонементах. Щоб не втратити історію, групу видалити не можна.",
-            )
-
-        makeup = db.scalar(select(MakeupCredit.id).where(
-            MakeupCredit.organization_id == org_id,
-            (MakeupCredit.original_session_id.in_(lesson_ids) | MakeupCredit.target_session_id.in_(lesson_ids)),
-        ).limit(1))
-        if makeup is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="Із заняттями цієї групи пов’язане відпрацювання. Спочатку завершіть або приберіть його.",
-            )
-
-    # A mistakenly created empty group may still have generated lesson placeholders.
-    # If they contain no real history, remove those drafts together with the group.
-    if lesson_ids:
-        db.execute(delete(LessonSession).where(
-            LessonSession.organization_id == org_id,
-            LessonSession.group_id == group.id,
-        ))
-
-    db.execute(delete(GroupSchedule).where(
-        GroupSchedule.organization_id == org_id,
-        GroupSchedule.group_id == group.id,
-    ))
-    db.execute(delete(GroupStaff).where(
-        GroupStaff.organization_id == org_id,
-        GroupStaff.group_id == group.id,
-    ))
-    db.flush()
-
-    record_audit(
-        db,
-        org_id,
-        "group",
-        group.id,
-        "group.deleted",
-        {
-            "name": group.name,
-            "removed_empty_lesson_placeholders": len(lesson_ids),
-        },
-        actor_user_id=actor_user_id,
-    )
-    db.delete(group)
-    db.commit()
 
 def list_groups(db: Session, org_id: UUID) -> list[Group]:
-    return list(db.scalars(select(Group).where(Group.organization_id == org_id, Group.is_active.is_(True)).order_by(Group.name)))
-
+    from app.services import group_service
+    return group_service.list_groups(db, org_id)
 
 def create_enrollment(
     db: Session,
