@@ -76,7 +76,7 @@ export function StaffDrawer({
   onCreatePasswordReset,
 }: StaffDrawerProps) {
   const canTeach = staff.canTeach || staff.role === "Викладач";
-  return <div className="drawerBackdrop" onClick={onClose}>
+  return <div className="drawerBackdrop" data-testid="staff-drawer" onClick={onClose}>
     <aside className="drawer studentDrawer" onClick={(event) => event.stopPropagation()}>
       <button className="drawerClose" onClick={onClose}>×</button>
       <p className="eyebrow">Працівник</p>
