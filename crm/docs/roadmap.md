@@ -2,8 +2,8 @@
 
 Last updated: 2026-10-08
 Target branch: `crm-v1`
-Current canonical head before active slice: `749bb89e6b9be99695a8a5b59ce5220178e3a7d0`
-Current observed production live commit before active slice: `c771cb43a25b0c38da8270667d0b7c191173b4c5`
+Current canonical head before active slice: `e4820454353f43c2c1f50b904d29f2f72cf62354`
+Current observed production live commit before active slice: `c92b43d98d25b45417037886d6cba5adc24cd994`
 
 This file is the canonical staged plan. Read together with `HANDOFF.md`. Do not restart the analysis from zero after a chat reset.
 
@@ -44,7 +44,7 @@ Completed:
 
 ## IN PROGRESS — Stage 2 maintainability/UI architecture
 
-Merged through PR #69:
+Merged through PR #73:
 - frontend API contracts/client/auth foundation;
 - shared utilities and editor primitives;
 - Login, AuditHistory, Leads board/table;
@@ -57,18 +57,22 @@ Merged through PR #69:
 - backend services extracted for audit, contacts, groups, locations, organizations, reporting, staff, students and trials;
 - compatibility wrappers preserved in `services/crm.py`.
 
+Completed slices:
+- ScheduleView extraction — PR #71;
+- AttendanceView extraction — PR #72;
+- PaymentsView extraction — PR #73.
+
 Current active slice:
-- extract ScheduleView from App;
+- extract StaffDrawer from App into the staff feature module;
 - browser smoke coverage;
-- update persistent handoff.
+- refresh persistent handoff/roadmap.
 
 Next slices, in order:
-1. AttendanceView extraction.
-2. Payments/BillingView extraction.
-3. Remaining large drawers/modals from App.
-4. Scheduling service extraction from legacy `crm.py`.
-5. Billing legacy-service extraction.
-6. Re-measure `App.tsx` and `crm.py`; Stage 2 ends only when remaining orchestration is readable and domain logic is not concentrated in either file.
+1. Remaining large lead/group/location/billing drawers and modals from App.
+2. Re-measure App.tsx and extract the largest remaining behavior-preserving UI block.
+3. Scheduling service extraction from legacy `crm.py`.
+4. Billing legacy-service extraction.
+5. Re-measure `App.tsx` and `crm.py`; Stage 2 ends only when remaining orchestration is readable and domain logic is not concentrated in either file.
 
 Rules:
 - one behavior-preserving slice per PR;
