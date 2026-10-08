@@ -188,3 +188,25 @@ def attach_contact(
     db.commit()
     db.refresh(link)
     return link
+
+
+def student_detail(db: Session, org_id: UUID, student_id: UUID) -> tuple[Student, list[Contact], list[TrialLesson]]:
+    student = _scoped_get(db, Student, org_id, student_id)
+    contacts = list(db.scalars(
+        select(Contact)
+        .join(StudentContact, StudentContact.contact_id == Contact.id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == student_id,
+            Contact.organization_id == org_id,
+        )
+        .order_by(StudentContact.is_primary.desc(), Contact.full_name)
+    ))
+    trials = list(db.scalars(
+        select(TrialLesson)
+        .where(TrialLesson.organization_id == org_id, TrialLesson.student_id == student_id)
+        .order_by(TrialLesson.starts_at.desc())
+    ))
+    return student, contacts, trials
+
+

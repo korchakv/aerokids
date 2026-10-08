@@ -105,3 +105,39 @@ def list_trials(db: Session, org_id: UUID) -> list[TrialLesson]:
             .order_by(TrialLesson.starts_at)
         )
     )
+
+
+def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommended_level: str | None, teacher_notes: str | None, actor_user_id: UUID | None = None) -> TrialLesson:
+    trial = _scoped_get(db, TrialLesson, org_id, trial_id)
+    trial.status = status
+    trial.recommended_level = recommended_level
+    trial.teacher_notes = teacher_notes
+    student = _scoped_get(db, Student, org_id, trial.student_id)
+    student.lead_close_reason = None
+    student.lead_close_note = None
+    if status.value == "completed":
+        # A completed trial still needs an explicit business decision:
+        # ready for a group, thinking/follow-up, or declined.
+        student.crm_status = CrmStatus.TRIAL_COMPLETED
+        student.next_contact_at = None
+    elif status.value == "no_show":
+        # No-show remains an active lead that needs contact/rescheduling.
+        student.crm_status = CrmStatus.CONTACTED
+        student.next_contact_at = None
+    elif status.value == "cancelled":
+        student.crm_status = CrmStatus.CONTACTED
+        student.next_contact_at = None
+    audit_service.record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        f"trial.{status.value}",
+        {"trial_id": str(trial.id), "recommended_level": recommended_level, "teacher_notes": teacher_notes},
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(trial)
+    return trial
+
+
