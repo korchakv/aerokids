@@ -175,7 +175,7 @@ def list_group_overview(db: Session, org_id: UUID, user_id: UUID | None = None, 
 
 
 def assigned_group_ids_for_user(db: Session, org_id: UUID, user_id: UUID | None, role: StaffRole) -> set[UUID] | None:
-    if role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER}:
+    if role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER}:
         return None
     if role != StaffRole.TEACHER or user_id is None:
         return set()
