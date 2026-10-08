@@ -31,6 +31,35 @@ test("mobile shell does not overflow horizontally", async ({ page }) => {
   expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport + 2);
 });
 
+
+test("owner can open extracted CRM creation dialogs", async ({ page }) => {
+  await login(page);
+
+  await page.getByRole("button", { name: "Нова заявка" }).click();
+  await expect(page.getByTestId("lead-create-dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Закрити нову заявку" }).click();
+  await expect(page.getByTestId("lead-create-dialog")).toHaveCount(0);
+
+  await page.getByText("Працівники", { exact: true }).first().click();
+  await page.getByRole("button", { name: "+ Працівник" }).click();
+  await expect(page.getByTestId("staff-create-dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Закрити нового працівника" }).click();
+
+  await page.getByRole("button", { name: "Запросити в CRM" }).click();
+  await expect(page.getByTestId("invite-dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Закрити запрошення" }).click();
+
+  await page.getByText("Локації", { exact: true }).first().click();
+  await page.getByRole("button", { name: "+ Додати локацію" }).click();
+  await expect(page.getByTestId("location-dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Закрити локацію" }).click();
+
+  await page.getByText("Групи", { exact: true }).first().click();
+  await page.getByRole("button", { name: "+ Створити групу" }).click();
+  await expect(page.getByTestId("group-create-dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Закрити створення групи" }).click();
+});
+
 test("owner can open modular students workspace", async ({ page }) => {
   await login(page);
   await page.getByText("Учні", { exact: true }).first().click();
