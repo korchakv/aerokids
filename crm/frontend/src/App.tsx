@@ -29,7 +29,7 @@ import { ReportsView } from "./features/reports/ReportsView";
 import { StudentDrawer, StudentsView, type StudentFilter, type StudentLifecycleLabel } from "./features/students/StudentsView";
 import { applyOperations } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
-import { cleanSpaces, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
+import { cleanSpaces, emailError, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
 import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
@@ -88,14 +88,6 @@ function tariffHistoryDetail(event: ApiAuditEvent) {
     return parts.join(" · ") || "Тариф створено";
   }
   return changed.map((field) => `${labels[field] ?? field}: ${formatValue(field, before[field])} → ${formatValue(field, after[field])}`).join(" · ") || "Змінено";
-}
-
-
-function emailError(value: string, required = false): string {
-  const email = value.trim().toLowerCase();
-  if (!email) return required ? "Email обов’язковий" : "";
-  if (email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return "Некоректна email-адреса";
-  return "";
 }
 
 
