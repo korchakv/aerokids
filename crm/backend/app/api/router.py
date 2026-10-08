@@ -11,7 +11,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, contact_service, crm, location_service, organization_service, reporting_service, staff_service, student_service
+from app.services import audit_service, contact_service, crm, location_service, organization_service, reporting_service, staff_service, student_service, trial_service
 
 router = APIRouter()
 
@@ -219,12 +219,12 @@ def add_student_contact(student_id: UUID, data: StudentContactCreate, org_id: UU
 
 @router.post("/trial-lessons", response_model=TrialLessonRead, status_code=201)
 def create_trial(data: TrialLessonCreate, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.create_trial(db, access.organization_id, data, access.user_id)
+    return trial_service.create_trial(db, access.organization_id, data, access.user_id)
 
 
 @router.get("/trial-lessons", response_model=list[TrialLessonRead])
 def trials(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.list_trials(db, org_id)
+    return trial_service.list_trials(db, org_id)
 
 
 @router.patch("/trial-lessons/{trial_id}", response_model=TrialLessonRead)
@@ -234,7 +234,7 @@ def update_trial(
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    return crm.update_trial(db, access.organization_id, trial_id, data.starts_at, data.location_id, access.user_id)
+    return trial_service.update_trial(db, access.organization_id, trial_id, data.starts_at, data.location_id, access.user_id)
 
 
 @router.post("/groups", response_model=GroupRead, status_code=201)

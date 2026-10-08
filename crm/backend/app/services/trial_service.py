@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+from datetime import datetime
+from uuid import UUID
+
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.core import CrmStatus, Location, Student, TrialLesson, TrialStatus
+from app.services import audit_service
+
+
+def _scoped_get(db: Session, model, org_id: UUID, item_id: UUID):
+    item = db.scalar(select(model).where(model.id == item_id, model.organization_id == org_id))
+    if item is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return item
+
+
+def create_trial(
+    db: Session,
+    org_id: UUID,
+    data,
+    actor_user_id: UUID | None = None,
+) -> TrialLesson:
+    student = _scoped_get(db, Student, org_id, data.student_id)
+    if data.location_id:
+        _scoped_get(db, Location, org_id, data.location_id)
+
+    item = TrialLesson(organization_id=org_id, **data.model_dump())
+    db.add(item)
+    db.flush()
+
+    student.crm_status = CrmStatus.TRIAL_SCHEDULED
+    student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
+    student.lead_close_reason = None
+    student.lead_close_note = None
+
+    audit_service.record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        "trial.scheduled",
+        {"trial_id": str(item.id), "starts_at": item.starts_at.isoformat()},
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def update_trial(
+    db: Session,
+    org_id: UUID,
+    trial_id: UUID,
+    starts_at: datetime | None,
+    location_id: UUID | None,
+    actor_user_id: UUID | None = None,
+) -> TrialLesson:
+    trial = _scoped_get(db, TrialLesson, org_id, trial_id)
+    if location_id is not None:
+        _scoped_get(db, Location, org_id, location_id)
+        trial.location_id = location_id
+    if starts_at is not None:
+        trial.starts_at = starts_at
+
+    trial.status = TrialStatus.SCHEDULED
+    student = _scoped_get(db, Student, org_id, trial.student_id)
+    student.crm_status = CrmStatus.TRIAL_SCHEDULED
+    student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
+    student.lead_close_reason = None
+    student.lead_close_note = None
+
+    audit_service.record_audit(
+        db,
+        org_id,
+        "student",
+        student.id,
+        "trial.rescheduled",
+        {
+            "trial_id": str(trial.id),
+            "starts_at": trial.starts_at.isoformat(),
+            "location_id": str(trial.location_id) if trial.location_id else None,
+        },
+        actor_user_id=actor_user_id,
+    )
+    db.commit()
+    db.refresh(trial)
+    return trial
+
+
+def list_trials(db: Session, org_id: UUID) -> list[TrialLesson]:
+    return list(
+        db.scalars(
+            select(TrialLesson)
+            .where(TrialLesson.organization_id == org_id)
+            .order_by(TrialLesson.starts_at)
+        )
+    )
