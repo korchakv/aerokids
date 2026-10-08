@@ -48,6 +48,7 @@ from app.schemas import (
     GroupFormationResult,
     GroupFormationScheduleSlot,
     GroupRead,
+    GroupOverviewPage,
     GroupRosterStudent,
     GroupScheduleCreate,
     GroupScheduleRead,
@@ -56,14 +57,16 @@ from app.schemas import (
     StaffRead,
     StaffUpdate,
     StudentLifecycleUpdate,
+    StudentOverviewPage,
     StudentSubscriptionCreate,
     StudentSubscriptionRead,
     StudentTransfer,
     SubscriptionChargeCreate,
     SubscriptionChargeResult,
     TrialLessonRead,
+    LeadPage,
 )
-from app.services import crm, hardening
+from app.services import crm, hardening, workspace_service
 
 
 router = APIRouter()
@@ -856,6 +859,51 @@ def assign_staff_group_hardened(
     }, access.user_id)
     db.commit()
     return {"id": assignment.id, "group_id": assignment.group_id, "staff_id": assignment.staff_id, "is_primary": assignment.is_primary}
+
+
+@router.get("/workspace/leads-page", response_model=LeadPage)
+def workspace_leads_page(
+    q: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    sort: Literal["created_at", "name"] = "created_at",
+    order: Literal["asc", "desc"] = "desc",
+    access: OrgAccess = Depends(_require_capability("leads.manage")),
+    db: Session = Depends(get_db),
+):
+    return workspace_service.paginate_lead_overview(
+        db, access.organization_id, q, limit, offset, sort, order,
+    )
+
+
+@router.get("/workspace/students-page", response_model=StudentOverviewPage)
+def workspace_students_page(
+    q: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    sort: Literal["name", "status"] = "name",
+    order: Literal["asc", "desc"] = "asc",
+    access: OrgAccess = Depends(get_org_access),
+    db: Session = Depends(get_db),
+):
+    return workspace_service.paginate_student_overview(
+        db, access.organization_id, access.user_id, access.role, q, limit, offset, sort, order,
+    )
+
+
+@router.get("/workspace/groups-page", response_model=GroupOverviewPage)
+def workspace_groups_page(
+    q: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    sort: Literal["name", "capacity"] = "name",
+    order: Literal["asc", "desc"] = "asc",
+    access: OrgAccess = Depends(get_org_access),
+    db: Session = Depends(get_db),
+):
+    return workspace_service.paginate_group_overview(
+        db, access.organization_id, access.user_id, access.role, q, limit, offset, sort, order,
+    )
 
 
 @router.get("/workspace/leads")
