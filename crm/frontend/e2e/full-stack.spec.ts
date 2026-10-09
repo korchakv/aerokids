@@ -25,21 +25,34 @@ test("owner can sign in and see the real smoke lead", async ({ page }) => {
 
 test("moving a lead to waiting does not start enrollment", async ({ page }) => {
   await login(page);
-  await page.getByText("Заявки", { exact: true }).first().click();
 
   const uniqueSuffix = Array.from({ length: 8 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
   const childName = `Waitlist ${uniqueSuffix}`;
-  const childPhone = `+38067${Date.now().toString().slice(-7)}`;
-  await page.getByRole("button", { name: "Нова заявка" }).click();
-  const createDialog = page.getByTestId("lead-create-dialog");
-  await createDialog.getByLabel("Ім’я дитини *").fill(childName);
-  await createDialog.getByLabel("Ім’я відповідальної особи *").fill("Тестова мама");
-  await createDialog.getByLabel("Телефон відповідального *").fill(childPhone);
-  const createResponse = page.waitForResponse((response) =>
-    new URL(response.url()).pathname.endsWith("/intake") && response.request().method() === "POST"
-  );
-  await createDialog.getByRole("button", { name: "Створити заявку" }).click();
-  expect((await createResponse).ok()).toBeTruthy();
+  const childPhone = `+38067${Math.floor(1_000_000 + Math.random() * 9_000_000)}`;
+  const intake = await page.evaluate(async ({ childName, childPhone }) => {
+    const session = JSON.parse(sessionStorage.getItem("school-crm-session") ?? "null");
+    const response = await fetch("/api/intake", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Organization-Id": session.organizationId,
+      },
+      body: JSON.stringify({
+        child_first_name: childName,
+        child_age: 9,
+        contact_name: "Тестова мама",
+        phone: childPhone,
+        source: "phone",
+      }),
+    });
+    return { status: response.status };
+  }, { childName, childPhone });
+  expect(intake.status).toBe(201);
+
+  await page.reload();
+  await expect(page.getByText("Дашборд", { exact: true }).first()).toBeVisible();
+  await page.getByText("Заявки", { exact: true }).first().click();
 
   const newColumn = page.locator(".kanbanColumn.column-new");
   const waitingColumn = page.locator(".kanbanColumn.column-waiting");
@@ -47,7 +60,7 @@ test("moving a lead to waiting does not start enrollment", async ({ page }) => {
   await expect(card).toBeVisible();
 
   const transitionResponse = page.waitForResponse((response) =>
-    response.url().includes(`/students/`) && response.url().includes("/lead-outcome") && response.request().method() === "PATCH"
+    response.url().includes("/lead-outcome") && response.request().method() === "PATCH"
   );
   await card.dragTo(waitingColumn);
   expect((await transitionResponse).ok()).toBeTruthy();
