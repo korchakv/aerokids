@@ -51,6 +51,24 @@ def test_group_detail_query_count_does_not_scale_with_member_payments(client):
         )
         assert status.status_code == 200, status.text
 
+    first_contact = client.post(
+        "/contacts",
+        headers=headers,
+        json={"full_name": "Перший контакт", "phone": "0671112233"},
+    ).json()
+    second_contact = client.post(
+        "/contacts",
+        headers=headers,
+        json={"full_name": "Другий контакт", "phone": "0671112244"},
+    ).json()
+    for contact in (first_contact, second_contact):
+        linked = client.post(
+            f"/students/{student_ids[0]}/contacts",
+            headers=headers,
+            json={"contact_id": contact["id"], "relation": "parent", "is_primary": True},
+        )
+        assert linked.status_code == 201, linked.text
+
     formed = client.post(
         "/groups/form",
         headers=headers,
@@ -85,6 +103,8 @@ def test_group_detail_query_count_does_not_scale_with_member_payments(client):
 
     assert detail.status_code == 200, detail.text
     assert len(detail.json()["members"]) == 12
+    first_member = next(member for member in detail.json()["members"] if member["student_id"] == student_ids[0])
+    assert first_member["contact_name"] == "Перший контакт"
     assert all(member["billing"]["plan_name"] == "Batch Plan" for member in detail.json()["members"])
     # The previous per-member/per-payment implementation grew linearly well
     # beyond this threshold. The batched projection stays bounded.
