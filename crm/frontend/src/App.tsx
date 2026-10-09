@@ -914,11 +914,8 @@ function App() {
 
   const moveLeadToWaiting = async (id: EntityId) => {
     if (apiEnabled && session) {
-      await apiPatch(`/students/${id}/lead-outcome`, {
+      await apiPatch(`/students/${id}/crm-status`, {
         crm_status: "waiting_for_group",
-        next_contact_at: null,
-        close_reason: null,
-        close_note: null,
       }, session);
       await syncWorkspace(session);
       return;
@@ -926,10 +923,6 @@ function App() {
     setLeads((items) => items.map((item) => item.id !== id ? item : {
       ...item,
       status: "Очікує групу",
-      nextContactAt: undefined,
-      deferredUntil: undefined,
-      deferredReason: undefined,
-      deferredNote: undefined,
     }));
   };
 
