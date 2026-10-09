@@ -33,17 +33,20 @@ import { StaffDialogs } from "./features/staff/StaffDialogs";
 import { SettingsView } from "./features/settings/SettingsView";
 import { ReportsView } from "./features/reports/ReportsView";
 import { StudentDrawer, StudentsView, type StudentFilter, type StudentLifecycleLabel } from "./features/students/StudentsView";
-import { applyOperations } from "./features/operations/adapters";
+import { applyOperations, paymentPageItemToDemo } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue, workspaceGroupToGroupItem, workspaceStudentLifecycle, workspaceStudentToLead } from "./features/workspace/adapters";
 import { cleanSpaces, emailError, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
-import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
+import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
 
 
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
 const UI_SCALE_LEVELS: UiScale[] = [1, 1.1, 1.25, 1.4];
 const REGISTRY_PAGE_SIZE = 25;
+const PAYMENT_PAGE_SIZE = 50;
+type PaymentStatusFilter = "all" | "pending" | "paid" | "refunded" | "cancelled";
+type PaymentOverdueFilter = "all" | "yes" | "no";
 
 
 
@@ -213,6 +216,16 @@ function App() {
     { id: "1", studentId: "8", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 0, refundedAmount: 0, balanceAmount: 1800, creditAmount: 0, dueDate: "2026-10-05", status: "pending" },
     { id: "2", studentId: "9", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 1800, refundedAmount: 0, balanceAmount: 0, creditAmount: 0, dueDate: "2026-09-28", status: "paid", method: "Картка" },
   ]);
+  const [paymentRegistryRows, setPaymentRegistryRows] = useState<PaymentDemo[]>([]);
+  const [paymentRegistryTotal, setPaymentRegistryTotal] = useState(0);
+  const [paymentRegistryOffset, setPaymentRegistryOffset] = useState(0);
+  const [paymentRegistryQuery, setPaymentRegistryQuery] = useState("");
+  const [paymentRegistryStatus, setPaymentRegistryStatus] = useState<PaymentStatusFilter>("all");
+  const [paymentRegistryOverdue, setPaymentRegistryOverdue] = useState<PaymentOverdueFilter>("all");
+  const [paymentRegistrySort, setPaymentRegistrySort] = useState<"newest" | "due" | "student">("newest");
+  const [paymentRegistryLoading, setPaymentRegistryLoading] = useState(false);
+  const [paymentRegistryError, setPaymentRegistryError] = useState("");
+  const [paymentRegistryRefreshTick, setPaymentRegistryRefreshTick] = useState(0);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentStudentId, setPaymentStudentId] = useState<EntityId>("8");
   const [paymentPlanId, setPaymentPlanId] = useState<EntityId>("1");
@@ -433,6 +446,7 @@ function App() {
       });
       setWorkspaceLoaded(true);
       setRegistryRefreshTick((value) => value + 1);
+      setPaymentRegistryRefreshTick((value) => value + 1);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити дані CRM");
       throw error;
@@ -558,6 +572,43 @@ function App() {
       window.clearTimeout(timer);
     };
   }, [active, session?.accessToken, session?.organizationId, groupRegistryQuery, groupRegistrySort, groupRegistryOffset, registryRefreshTick]);
+
+  useEffect(() => {
+    setPaymentRegistryOffset(0);
+  }, [paymentRegistryQuery, paymentRegistryStatus, paymentRegistryOverdue, paymentRegistrySort]);
+
+  useEffect(() => {
+    if (!apiEnabled || !session || active !== "Оплати") return;
+    let cancelled = false;
+    setPaymentRegistryLoading(true);
+    setPaymentRegistryError("");
+    const timer = window.setTimeout(() => {
+      loadPaymentPage(session, {
+        q: paymentRegistryQuery,
+        status: paymentRegistryStatus === "all" ? undefined : paymentRegistryStatus,
+        overdue: paymentRegistryOverdue === "all" ? undefined : paymentRegistryOverdue === "yes",
+        sort: paymentRegistrySort,
+        limit: PAYMENT_PAGE_SIZE,
+        offset: paymentRegistryOffset,
+      }).then((page) => {
+        if (cancelled) return;
+        if (paymentRegistryOffset > 0 && paymentRegistryOffset >= page.total) {
+          setPaymentRegistryOffset(page.total === 0 ? 0 : Math.floor((page.total - 1) / PAYMENT_PAGE_SIZE) * PAYMENT_PAGE_SIZE);
+          return;
+        }
+        setPaymentRegistryRows(page.items.map(paymentPageItemToDemo));
+        setPaymentRegistryTotal(page.total);
+      }).catch((error) => {
+        if (!cancelled) setPaymentRegistryError(error instanceof Error ? error.message : "Не вдалося завантажити сторінку оплат");
+      }).finally(() => {
+        if (!cancelled) setPaymentRegistryLoading(false);
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [active, session?.accessToken, session?.organizationId, paymentRegistryQuery, paymentRegistryStatus, paymentRegistryOverdue, paymentRegistrySort, paymentRegistryOffset, paymentRegistryRefreshTick]);
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedMissingDetails = selected ? leadMissingDetails(selected) : [];
@@ -2489,10 +2540,48 @@ function App() {
     }
   };
 
-  const paymentTotals = {
-    paid: payments.reduce((sum, x) => sum + Math.max(0, x.paidAmount - x.refundedAmount), 0),
-    pending: payments.filter((x) => x.status === "pending" || x.status === "overdue").reduce((sum, x) => sum + x.balanceAmount, 0),
-    overdue: payments.filter((x) => x.status === "overdue").reduce((sum, x) => sum + x.balanceAmount, 0),
+  const demoPaymentFilteredRows = useMemo(() => {
+    const query = normalizedSearch(paymentRegistryQuery);
+    let rows = payments.filter((payment) => {
+      if (paymentRegistryStatus !== "all" && payment.status !== paymentRegistryStatus) return false;
+      if (paymentRegistryOverdue === "yes" && payment.status !== "overdue") return false;
+      if (paymentRegistryOverdue === "no" && payment.status === "overdue") return false;
+      if (!query) return true;
+      const student = leads.find((lead) => lead.id === payment.studentId);
+      const plan = plans.find((item) => item.id === payment.planId);
+      return [payment.studentName, payment.contactName, payment.studentPhone, payment.contactPhone,
+        student?.child, student?.parent, student?.phone, student?.childPhone, plan?.name, payment.dueDate]
+        .some((value) => searchMatches(query, value));
+    });
+    rows = [...rows];
+    if (paymentRegistrySort === "due") rows.sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+    if (paymentRegistrySort === "student") rows.sort((a, b) =>
+      (a.studentName ?? leads.find((lead) => lead.id === a.studentId)?.child ?? "")
+        .localeCompare(b.studentName ?? leads.find((lead) => lead.id === b.studentId)?.child ?? "", "uk-UA")
+    );
+    return rows;
+  }, [payments, leads, plans, paymentRegistryQuery, paymentRegistryStatus, paymentRegistryOverdue, paymentRegistrySort]);
+  const visiblePaymentRows = apiEnabled
+    ? paymentRegistryRows
+    : demoPaymentFilteredRows.slice(paymentRegistryOffset, paymentRegistryOffset + PAYMENT_PAGE_SIZE);
+  const visiblePaymentTotal = apiEnabled ? paymentRegistryTotal : demoPaymentFilteredRows.length;
+  const paymentCounts = overviewReport ? {
+    paid: overviewReport.payments.paid_count,
+    pending: overviewReport.payments.pending_count + overviewReport.payments.overdue_count,
+    overdue: overviewReport.payments.overdue_count,
+  } : {
+    paid: payments.filter((payment) => payment.status === "paid").length,
+    pending: payments.filter((payment) => payment.balanceAmount > 0 && payment.status !== "cancelled").length,
+    overdue: payments.filter((payment) => payment.status === "overdue").length,
+  };
+  const paymentTotals = overviewReport ? {
+    paid: overviewReport.payments.paid_minor / 100,
+    pending: (overviewReport.payments.pending_minor + overviewReport.payments.overdue_minor) / 100,
+    overdue: overviewReport.payments.overdue_minor / 100,
+  } : {
+    paid: payments.reduce((sum, payment) => sum + Math.max(0, payment.paidAmount - payment.refundedAmount), 0),
+    pending: payments.filter((payment) => payment.status === "pending" || payment.status === "overdue").reduce((sum, payment) => sum + payment.balanceAmount, 0),
+    overdue: payments.filter((payment) => payment.status === "overdue").reduce((sum, payment) => sum + payment.balanceAmount, 0),
   };
 
   const attendanceValues = Object.values(attendance).flatMap((lesson) => Object.values(lesson));
@@ -3141,11 +3230,27 @@ function App() {
         />}
 
         {active === "Оплати" && <PaymentsView
-          payments={payments}
+          payments={visiblePaymentRows}
           plans={plans}
           subscriptions={subscriptions}
           leads={leads}
           paymentTotals={paymentTotals}
+          paymentCounts={paymentCounts}
+          query={paymentRegistryQuery}
+          statusFilter={paymentRegistryStatus}
+          overdueFilter={paymentRegistryOverdue}
+          sort={paymentRegistrySort}
+          pageTotal={visiblePaymentTotal}
+          pageLimit={PAYMENT_PAGE_SIZE}
+          pageOffset={paymentRegistryOffset}
+          loading={apiEnabled && paymentRegistryLoading}
+          error={paymentRegistryError}
+          onQueryChange={setPaymentRegistryQuery}
+          onStatusFilterChange={setPaymentRegistryStatus}
+          onOverdueFilterChange={setPaymentRegistryOverdue}
+          onSortChange={setPaymentRegistrySort}
+          onPreviousPage={() => setPaymentRegistryOffset((value) => Math.max(0, value - PAYMENT_PAGE_SIZE))}
+          onNextPage={() => setPaymentRegistryOffset((value) => value + PAYMENT_PAGE_SIZE)}
           paymentReminders={paymentReminders}
           reminderSavingId={reminderSavingId}
           focusedPaymentId={focusedPaymentId}

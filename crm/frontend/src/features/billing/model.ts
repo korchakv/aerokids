@@ -27,6 +27,11 @@ export type PaymentDemo = {
   dueDate: string;
   status: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
   method?: "Картка" | "Готівка" | "Переказ";
+  studentName?: string;
+  studentPhone?: string;
+  contactName?: string;
+  contactPhone?: string;
+  planName?: string;
 };
 
 export function paymentMethodLabel(method: string | null | undefined): PaymentDemo["method"] {

@@ -1,17 +1,17 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, get_org_id, require_org_access_roles, require_org_roles
 from app.models.core import Organization, PaymentStatus, StaffRole, User
-from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupUpdate, GroupScheduleRead, IntakeCreate, IntakeDuplicateCheck, IntakeDuplicateResult, IntakeResult, LeadDeferUpdate, LeadDetailsUpdate, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LessonSessionUpdate, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, BillingRenewalResult, BillingRenewalRun, PaymentAdjustmentCreate, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentRead, PaymentReceiptCreate, PaymentRefundCreate, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, PaymentTransactionRead, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentAttendanceHistoryItem, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionAutoRenewUpdate, SubscriptionPauseCreate, SubscriptionPauseRead, SubscriptionResumeCreate, StudentOverviewItem, SubscriptionPlanChangeCreate, SubscriptionPlanChangeResult, SubscriptionPlanCreate, SubscriptionPlanRead, SubscriptionPlanUpdate, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
+from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupUpdate, GroupScheduleRead, IntakeCreate, IntakeDuplicateCheck, IntakeDuplicateResult, IntakeResult, LeadDeferUpdate, LeadDetailsUpdate, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LessonSessionUpdate, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, BillingRenewalResult, BillingRenewalRun, PaymentAdjustmentCreate, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentPage, PaymentRead, PaymentReceiptCreate, PaymentRefundCreate, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, PaymentTransactionRead, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentAttendanceHistoryItem, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionAutoRenewUpdate, SubscriptionPauseCreate, SubscriptionPauseRead, SubscriptionResumeCreate, StudentOverviewItem, SubscriptionPlanChangeCreate, SubscriptionPlanChangeResult, SubscriptionPlanCreate, SubscriptionPlanRead, SubscriptionPlanUpdate, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
 from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, contact_service, crm, group_service, location_service, organization_service, reporting_service, staff_service, student_service, trial_service
+from app.services import audit_service, billing_service, contact_service, crm, group_service, location_service, organization_service, reporting_service, staff_service, student_service, trial_service
 
 router = APIRouter()
 
@@ -644,6 +644,29 @@ def create_payment(data: PaymentCreate, access: OrgAccess = Depends(require_org_
 @router.get("/payments", response_model=list[PaymentRead])
 def payments(student_id: UUID | None = None, status: PaymentStatus | None = None, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)), db: Session = Depends(get_db)):
     return crm.list_payments(db, org_id, student_id, status)
+
+
+@router.get("/payments/page", response_model=PaymentPage)
+def payments_page(
+    q: str | None = None,
+    status: PaymentStatus | None = None,
+    overdue: bool | None = None,
+    sort: str = Query(default="newest", pattern="^(newest|due|student)$"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT)),
+    db: Session = Depends(get_db),
+):
+    return billing_service.paginate_payments(
+        db,
+        org_id,
+        q=q,
+        status=status,
+        overdue=overdue,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/payments/{payment_id}/receipts", response_model=PaymentRead, status_code=201)

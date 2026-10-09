@@ -2670,5 +2670,7 @@ body{
 .registryPager button:disabled{opacity:.4;cursor:not-allowed}
 .registryLoading{opacity:.55;pointer-events:none}
 .registryError{margin:10px 0;padding:10px 12px;border:1px solid #b84b4b66;border-radius:10px;background:#b84b4b18;color:var(--ak-accent-text);font-size:12px}
+.paymentRegistryControls{display:grid;grid-template-columns:minmax(220px,1fr) repeat(3,minmax(140px,180px));align-items:end;gap:10px;margin:12px 0}
 @media(max-width:900px){.groupsHeadActions{flex-wrap:wrap}.groupsHeadActions .registrySearch{flex:1 1 260px}.registryToolbar{width:100%;justify-content:flex-start}.registrySearch{min-width:min(100%,280px)}}
-@media(max-width:650px){.registryToolbar{align-items:stretch;flex-direction:column}.registrySearch{width:100%;min-width:0}.registryPager{align-items:stretch;flex-direction:column}.registryPager>div{display:grid;grid-template-columns:1fr 1fr}.groupsHeadActions .candidateSelect,.groupsHeadActions .registrySearch{width:100%;flex-basis:100%}}
+@media(max-width:800px){.paymentRegistryControls{grid-template-columns:repeat(2,minmax(0,1fr))}.paymentRegistryControls .registrySearch{grid-column:1/-1}}
+@media(max-width:650px){.registryToolbar{align-items:stretch;flex-direction:column}.registrySearch{width:100%;min-width:0}.registryPager{align-items:stretch;flex-direction:column}.registryPager>div{display:grid;grid-template-columns:1fr 1fr}.groupsHeadActions .candidateSelect,.groupsHeadActions .registrySearch{width:100%;flex-basis:100%}.paymentRegistryControls{grid-template-columns:1fr}.paymentRegistryControls .registrySearch{grid-column:auto}}
