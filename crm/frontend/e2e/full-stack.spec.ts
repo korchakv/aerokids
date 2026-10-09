@@ -79,6 +79,7 @@ test("moving a lead to waiting does not start enrollment", async ({ page }) => {
   if (!isMobile) {
     await expect(page.getByTestId("lead-drawer")).toHaveCount(0);
     await waitingCard.click();
+    await page.setViewportSize({ width: 390, height: 844 });
   }
   await expect(page.getByTestId("lead-drawer")).toBeVisible();
   await page.locator(".mobileLeadPrimaryAction").click();
