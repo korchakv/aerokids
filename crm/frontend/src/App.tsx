@@ -561,7 +561,9 @@ function App() {
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedMissingDetails = selected ? leadMissingDetails(selected) : [];
-  const selectedStudent = leads.find((lead) => lead.id === selectedStudentId) ?? null;
+  const selectedStudent = leads.find((lead) => lead.id === selectedStudentId)
+    ?? studentRegistryRows.find((lead) => lead.id === selectedStudentId)
+    ?? null;
   const activeStudents = leads.filter((lead) => lead.status === "Зарахований");
   const activeLocations = useMemo(() => locations.filter((location) => location.isActive), [locations]);
 
@@ -662,8 +664,37 @@ function App() {
     return true;
   }), [activeStudents, studentStates, studentFilter]);
 
-  const registryStudents = apiEnabled ? studentRegistryRows : visibleStudents;
-  const registryGroups = apiEnabled ? groupRegistryRows : groups;
+  const demoRegistryStudents = useMemo(() => {
+    const query = normalizedSearch(studentRegistryQuery);
+    return visibleStudents.filter((student) => !query || normalizedSearch([
+      student.child, student.parent, student.phone, student.childPhone, student.groupName,
+    ].filter(Boolean).join(" ")).includes(query));
+  }, [visibleStudents, studentRegistryQuery]);
+
+  const demoRegistryGroups = useMemo(() => {
+    const query = normalizedSearch(groupRegistryQuery);
+    return groups
+      .filter((group) => !query || normalizedSearch([group.name, group.location, group.teacherName].filter(Boolean).join(" ")).includes(query))
+      .sort((a, b) => groupRegistrySort === "size_desc"
+        ? (b.memberCount ?? b.members.length) - (a.memberCount ?? a.members.length)
+        : groupRegistrySort === "size_asc"
+          ? (a.memberCount ?? a.members.length) - (b.memberCount ?? b.members.length)
+          : a.name.localeCompare(b.name, "uk-UA"));
+  }, [groups, groupRegistryQuery, groupRegistrySort]);
+
+  const registryStudents = apiEnabled ? studentRegistryRows : demoRegistryStudents;
+  const registryGroups = apiEnabled
+    ? groupRegistryRows.map((group) => {
+      const hydrated = groups.find((item) => item.id === group.id);
+      return hydrated ? {
+        ...hydrated,
+        ...group,
+        schedule: hydrated.schedule,
+        members: hydrated.members,
+        teacherName: group.teacherName ?? hydrated.teacherName,
+      } : group;
+    })
+    : demoRegistryGroups;
   const registryStudentStates = useMemo(
     () => ({ ...studentStates, ...studentRegistryStates }),
     [studentStates, studentRegistryStates],
