@@ -6,12 +6,13 @@ from datetime import date, time
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models.core import (
     Attendance,
     AttendanceStatus,
+    Contact,
     Enrollment,
     EnrollmentStatus,
     Group,
@@ -24,8 +25,10 @@ from app.models.core import (
     Organization,
     Payment,
     PaymentStatus,
+    PaymentTransaction,
     StaffRole,
     Student,
+    StudentContact,
     StudentStatus,
     StudentSubscription,
     SubscriptionPlan,
@@ -282,6 +285,13 @@ def group_roster(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
 
 
 def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> dict:
+    """Return one group detail using a bounded number of SQL queries.
+
+    The previous implementation loaded student/contact/attendance/billing data
+    inside the enrollment loop, which made query count grow with every member
+    and every payment. This projection batches each domain once and preserves
+    the existing API response shape.
+    """
     if role == StaffRole.ACCOUNTANT:
         group = _scoped_get(db, Group, org_id, group_id)
     else:
@@ -305,31 +315,192 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
         )
         .order_by(Enrollment.started_at, Enrollment.id)
     ))
-    finance_visible = role in {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER, StaffRole.ACCOUNTANT}
-    members = []
-    today = date.today()
+    if not enrollments:
+        return {"group": group, "schedules": schedules, "members": []}
 
-    for enrollment in enrollments:
-        student = _scoped_get(db, Student, org_id, enrollment.student_id)
-        contact = workspace_service._primary_contact_for_student(db, org_id, student.id)
+    student_ids = [item.student_id for item in enrollments]
+    students = {
+        item.id: item
+        for item in db.scalars(
+            select(Student).where(
+                Student.organization_id == org_id,
+                Student.id.in_(student_ids),
+            )
+        )
+    }
 
-        attendance_rows = list(db.scalars(
-            select(Attendance)
-            .join(LessonSession, LessonSession.id == Attendance.session_id)
+    primary_contacts: dict[UUID, Contact] = {}
+    contact_rows = db.execute(
+        select(StudentContact.student_id, Contact)
+        .join(Contact, Contact.id == StudentContact.contact_id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id.in_(student_ids),
+            Contact.organization_id == org_id,
+        )
+        .order_by(
+            StudentContact.student_id,
+            StudentContact.is_primary.desc(),
+            Contact.created_at.asc(),
+            Contact.id.asc(),
+        )
+    ).all()
+    for student_id, contact in contact_rows:
+        primary_contacts.setdefault(student_id, contact)
+
+    attendance_by_student: dict[UUID, dict[str, int]] = {
+        student_id: {"present": 0, "absent": 0, "late": 0, "excused": 0}
+        for student_id in student_ids
+    }
+    attendance_rows = db.execute(
+        select(Attendance.student_id, Attendance.status, func.count(Attendance.id))
+        .join(LessonSession, LessonSession.id == Attendance.session_id)
+        .where(
+            Attendance.organization_id == org_id,
+            Attendance.student_id.in_(student_ids),
+            LessonSession.organization_id == org_id,
+            LessonSession.group_id == group.id,
+        )
+        .group_by(Attendance.student_id, Attendance.status)
+    ).all()
+    status_key = {
+        AttendanceStatus.PRESENT: "present",
+        AttendanceStatus.ABSENT: "absent",
+        AttendanceStatus.LATE: "late",
+        AttendanceStatus.EXCUSED: "excused",
+    }
+    for student_id, status, count in attendance_rows:
+        key = status_key.get(status)
+        if key is not None:
+            attendance_by_student.setdefault(
+                student_id,
+                {"present": 0, "absent": 0, "late": 0, "excused": 0},
+            )[key] = int(count)
+
+    # Teachers receive academic data only. This is both a privacy rule and
+    # avoids performing finance queries only to strip them later.
+    finance_visible = role in {
+        StaffRole.OWNER,
+        StaffRole.ADMIN,
+        StaffRole.MANAGER,
+        StaffRole.ACCOUNTANT,
+    }
+    payments_by_student: dict[UUID, list[Payment]] = {student_id: [] for student_id in student_ids}
+    subscriptions_by_student: dict[UUID, list[StudentSubscription]] = {student_id: [] for student_id in student_ids}
+    plans_by_id: dict[UUID, SubscriptionPlan] = {}
+    usage_by_subscription: dict[UUID, int] = {}
+
+    if finance_visible:
+        payment_rows = list(db.scalars(
+            select(Payment)
             .where(
-                Attendance.organization_id == org_id,
-                Attendance.student_id == student.id,
-                LessonSession.organization_id == org_id,
-                LessonSession.group_id == group.id,
+                Payment.organization_id == org_id,
+                Payment.student_id.in_(student_ids),
+            )
+            .order_by(Payment.student_id, Payment.created_at.desc(), Payment.id.desc())
+        ))
+        for payment in payment_rows:
+            payments_by_student.setdefault(payment.student_id, []).append(payment)
+
+        payment_ids = [payment.id for payment in payment_rows]
+        transactions_by_payment: dict[UUID, list[PaymentTransaction]] = {
+            payment_id: [] for payment_id in payment_ids
+        }
+        if payment_ids:
+            for transaction in db.scalars(
+                select(PaymentTransaction)
+                .where(
+                    PaymentTransaction.organization_id == org_id,
+                    PaymentTransaction.payment_id.in_(payment_ids),
+                )
+                .order_by(PaymentTransaction.payment_id, PaymentTransaction.occurred_at, PaymentTransaction.id)
+            ):
+                transactions_by_payment.setdefault(transaction.payment_id, []).append(transaction)
+
+        for payment in payment_rows:
+            transactions = transactions_by_payment.get(payment.id, [])
+            increases = sum(item.amount_minor for item in transactions if item.kind == "adjustment_increase")
+            decreases = sum(item.amount_minor for item in transactions if item.kind == "adjustment_decrease")
+            adjusted_amount = max(0, payment.amount_minor + increases - decreases)
+            paid_minor = sum(item.amount_minor for item in transactions if item.kind == "payment")
+            refunded_minor = sum(item.amount_minor for item in transactions if item.kind == "refund")
+            if not transactions and payment.status == PaymentStatus.PAID:
+                paid_minor = adjusted_amount
+            net_paid = max(0, paid_minor - refunded_minor)
+            payment.adjusted_amount_minor = adjusted_amount
+            payment.paid_minor = paid_minor
+            payment.refunded_minor = refunded_minor
+            payment.balance_minor = max(0, adjusted_amount - net_paid)
+            payment.credit_minor = max(0, net_paid - adjusted_amount)
+
+        subscriptions = list(db.scalars(
+            select(StudentSubscription)
+            .where(
+                StudentSubscription.organization_id == org_id,
+                StudentSubscription.student_id.in_(student_ids),
+            )
+            .order_by(
+                StudentSubscription.student_id,
+                StudentSubscription.starts_on.desc(),
+                StudentSubscription.created_at.desc(),
+                StudentSubscription.id.desc(),
             )
         ))
-        attendance_counts = {
-            "present": sum(row.status == AttendanceStatus.PRESENT for row in attendance_rows),
-            "absent": sum(row.status == AttendanceStatus.ABSENT for row in attendance_rows),
-            "late": sum(row.status == AttendanceStatus.LATE for row in attendance_rows),
-            "excused": sum(row.status == AttendanceStatus.EXCUSED for row in attendance_rows),
+        subscription_by_id = {item.id: item for item in subscriptions}
+        for subscription in subscriptions:
+            subscriptions_by_student.setdefault(subscription.student_id, []).append(subscription)
+
+        for payment in payment_rows:
+            linked = subscription_by_id.get(payment.subscription_id) if payment.subscription_id else None
+            payment.plan_id = linked.plan_id if linked else None
+
+        plan_ids = {item.plan_id for item in subscriptions}
+        if plan_ids:
+            plans_by_id = {
+                plan.id: plan
+                for plan in db.scalars(
+                    select(SubscriptionPlan).where(
+                        SubscriptionPlan.organization_id == org_id,
+                        SubscriptionPlan.id.in_(plan_ids),
+                    )
+                )
+            }
+
+        latest_subscription_ids = {
+            items[0].id for items in subscriptions_by_student.values() if items
         }
-        attendance_total = len(attendance_rows)
+        if latest_subscription_ids:
+            usage_rows = db.execute(
+                select(
+                    SubscriptionUsage.subscription_id,
+                    func.coalesce(func.sum(SubscriptionUsage.units), 0),
+                )
+                .where(
+                    SubscriptionUsage.organization_id == org_id,
+                    SubscriptionUsage.subscription_id.in_(latest_subscription_ids),
+                )
+                .group_by(SubscriptionUsage.subscription_id)
+            ).all()
+            usage_by_subscription = {
+                subscription_id: int(units or 0)
+                for subscription_id, units in usage_rows
+            }
+
+    today = date.today()
+    members = []
+    for enrollment in enrollments:
+        student = students.get(enrollment.student_id)
+        if student is None:
+            # Tenant integrity audit should catch this, but a broken historical
+            # reference must not crash the whole group detail response.
+            continue
+        contact = primary_contacts.get(student.id)
+
+        attendance_counts = attendance_by_student.get(
+            student.id,
+            {"present": 0, "absent": 0, "late": 0, "excused": 0},
+        )
+        attendance_total = sum(attendance_counts.values())
         attended = attendance_counts["present"] + attendance_counts["late"]
         attendance_summary = {
             **attendance_counts,
@@ -337,46 +508,48 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
             "attendance_rate": round(attended / attendance_total * 100, 1) if attendance_total else 0.0,
         }
 
+        payment_rows = payments_by_student.get(student.id, []) if finance_visible else []
         billing = None
-        payment_rows: list[Payment] = []
         if finance_visible:
-            payment_rows = list(db.scalars(
-                select(Payment)
-                .where(Payment.organization_id == org_id, Payment.student_id == student.id)
-                .order_by(Payment.created_at.desc())
-            ))
-            subscriptions = list(db.scalars(
-                select(StudentSubscription)
-                .where(StudentSubscription.organization_id == org_id, StudentSubscription.student_id == student.id)
-                .order_by(StudentSubscription.starts_on.desc())
-            ))
-            subscription_by_id = {item.id: item for item in subscriptions}
-            for payment in payment_rows:
-                linked = subscription_by_id.get(payment.subscription_id) if payment.subscription_id else None
-                payment.plan_id = linked.plan_id if linked else None
-                billing_service._attach_payment_financials(db, org_id, payment)
-
+            subscriptions = subscriptions_by_student.get(student.id, [])
             latest_subscription = subscriptions[0] if subscriptions else None
-            plan = _scoped_get(db, SubscriptionPlan, org_id, latest_subscription.plan_id) if latest_subscription else None
+            plan = plans_by_id.get(latest_subscription.plan_id) if latest_subscription else None
             lessons_used = None
             lessons_remaining = None
             if latest_subscription and plan:
-                usage_summary = billing_service.subscription_usage_summary(db, org_id, latest_subscription)
-                lessons_used = usage_summary["used_lessons"]
-                lessons_remaining = usage_summary["remaining_lessons"]
-            pending = [item for item in payment_rows if item.status != PaymentStatus.CANCELLED and item.balance_minor > 0]
+                lessons_used = usage_by_subscription.get(latest_subscription.id, 0)
+                included_for_usage = latest_subscription.lessons_included
+                if included_for_usage is None and latest_subscription.period_days is None:
+                    included_for_usage = plan.lessons_included
+                lessons_remaining = (
+                    max(0, included_for_usage - lessons_used)
+                    if included_for_usage is not None
+                    else None
+                )
+
+            pending = [
+                item for item in payment_rows
+                if item.status != PaymentStatus.CANCELLED and item.balance_minor > 0
+            ]
             dated_pending = [item for item in pending if item.due_date is not None]
             overdue = [item for item in dated_pending if item.due_date < today]
             due_today = [item for item in dated_pending if item.due_date == today]
             next_due_date = min((item.due_date for item in dated_pending), default=None)
-            last_paid = next((item for item in payment_rows if item.paid_minor - item.refunded_minor > 0), None)
+            last_paid = next(
+                (item for item in payment_rows if item.paid_minor - item.refunded_minor > 0),
+                None,
+            )
             if overdue:
                 billing_status = "overdue"
             elif due_today:
                 billing_status = "due"
             elif pending:
                 billing_status = "upcoming"
-            elif latest_subscription and latest_subscription.status == SubscriptionStatus.ACTIVE and (latest_subscription.ends_on is None or latest_subscription.ends_on >= today):
+            elif (
+                latest_subscription
+                and latest_subscription.status == SubscriptionStatus.ACTIVE
+                and (latest_subscription.ends_on is None or latest_subscription.ends_on >= today)
+            ):
                 billing_status = "current"
             else:
                 billing_status = "no_plan"
@@ -385,12 +558,20 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
                 "status": billing_status,
                 "plan_name": plan.name if plan else None,
                 "lessons_used": lessons_used,
-                "lessons_included": latest_subscription.lessons_included if latest_subscription else (plan.lessons_included if plan else None),
+                "lessons_included": (
+                    latest_subscription.lessons_included
+                    if latest_subscription
+                    else (plan.lessons_included if plan else None)
+                ),
                 "lessons_remaining": lessons_remaining,
                 "amount_due_minor": sum(item.balance_minor for item in pending),
                 "next_due_date": next_due_date,
                 "last_paid_at": last_paid.paid_at if last_paid else None,
-                "last_paid_minor": (last_paid.paid_minor - last_paid.refunded_minor) if last_paid else None,
+                "last_paid_minor": (
+                    last_paid.paid_minor - last_paid.refunded_minor
+                    if last_paid
+                    else None
+                ),
                 "subscription_ends_on": latest_subscription.ends_on if latest_subscription else None,
             }
 
@@ -410,5 +591,4 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
         })
 
     return {"group": group, "schedules": schedules, "members": members}
-
 
