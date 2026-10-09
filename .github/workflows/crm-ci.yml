@@ -140,6 +140,32 @@ jobs:
           PY
           alembic upgrade head
 
+      - name: Verify logical backup and restore into isolated PostgreSQL database
+        env:
+          DATABASE_URL_UNPOOLED: postgresql://schoolcrm:schoolcrm@localhost:5432/schoolcrm_ci
+          RESTORE_DATABASE_URL: postgresql://schoolcrm:schoolcrm@localhost:5432/schoolcrm_restore_ci
+          BACKUP_DIR: ${{ runner.temp }}/crm-restore-drill
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-16
+          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          python - <<'PY'
+          import os
+          import psycopg
+          with psycopg.connect(os.environ["DATABASE_URL_UNPOOLED"], autocommit=True) as db:
+              db.execute('CREATE DATABASE schoolcrm_restore_ci')
+              db.execute('CREATE TABLE restore_drill_sentinel (value text NOT NULL)')
+              db.execute("INSERT INTO restore_drill_sentinel VALUES ('restored row')")
+          PY
+          bash ../scripts/backup-postgres.sh
+          bash ../scripts/restore-drill.sh "$BACKUP_DIR"/*.dump
+          python - <<'PY'
+          import os
+          import psycopg
+          with psycopg.connect(os.environ["RESTORE_DATABASE_URL"]) as db:
+              assert db.execute('SELECT value FROM restore_drill_sentinel').fetchall() == [('restored row',)]
+          PY
+
   full-stack-smoke:
     runs-on: ubuntu-latest
     steps:

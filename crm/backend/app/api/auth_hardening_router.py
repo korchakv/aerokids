@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access
@@ -25,6 +25,7 @@ def _require_staff_management(access: OrgAccess = Depends(get_org_access), db: S
 @router.post("/organization-invitations", response_model=OrganizationInvitationResult, status_code=201)
 def create_invitation(
     data: OrganizationInvitationCreate,
+    background_tasks: BackgroundTasks,
     access: OrgAccess = Depends(_require_staff_management),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -40,13 +41,15 @@ def create_invitation(
         data.can_teach,
     )
     organization = crm.require_organization(db, access.organization_id)
-    notifications.enqueue_invitation(db, organization.id, invitation.email, raw_token, organization.name)
+    outbox = notifications.enqueue_invitation(db, organization.id, invitation.email, raw_token, organization.name,
+                                             expires_at=invitation.expires_at)
     crm.record_audit(db, organization.id, "organization_invitation", invitation.id, "staff.invitation_created", {
         "email": invitation.email,
         "role": invitation.role.value,
         "can_teach": invitation.can_teach,
     }, access.user_id)
     db.commit()
+    background_tasks.add_task(notifications.deliver_one, organization.id, outbox.id)
     return OrganizationInvitationResult(
         invitation_id=invitation.id,
         email=invitation.email,
@@ -60,6 +63,7 @@ def create_invitation(
 @router.post("/password-reset-links", response_model=PasswordResetLinkResult, status_code=201)
 def create_password_reset_link(
     data: PasswordResetLinkCreate,
+    background_tasks: BackgroundTasks,
     access: OrgAccess = Depends(_require_staff_management),
     db: Session = Depends(get_db),
 ):
@@ -71,12 +75,14 @@ def create_password_reset_link(
         data.email,
     )
     organization = crm.require_organization(db, access.organization_id)
-    notifications.enqueue_password_reset(db, organization.id, user.email, raw_token, organization.name)
+    outbox = notifications.enqueue_password_reset(db, organization.id, user.email, raw_token, organization.name,
+                                                 expires_at=reset.expires_at)
     crm.record_audit(db, organization.id, "user", user.id, "auth.password_reset_link_created", {
         "email": user.email,
         "reset_id": str(reset.id),
     }, access.user_id)
     db.commit()
+    background_tasks.add_task(notifications.deliver_one, organization.id, outbox.id)
     return PasswordResetLinkResult(
         email=user.email,
         reset_token=raw_token,

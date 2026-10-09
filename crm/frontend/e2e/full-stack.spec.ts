@@ -101,6 +101,11 @@ test("owner can open modular schedule workspace", async ({ page }) => {
   await page.getByText("Розклад", { exact: true }).first().click();
   await expect(page.getByTestId("schedule-workspace")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Додати заняття" })).toBeVisible();
+  const currentDate = await page.evaluate(() => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  });
+  await expect(page.getByLabel("Дата і час: дата", { exact: true })).toHaveValue(currentDate);
 });
 
 test("owner can open modular attendance workspace", async ({ page }) => {
