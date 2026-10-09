@@ -26,17 +26,23 @@ Create an isolated disposable PostgreSQL database or database branch. Never poin
 
 ```bash
 cd crm
-RESTORE_DATABASE_URL='postgresql://isolated-test-db' \
+RESTORE_DATABASE_URL='postgresql://user@isolated-host/test_db' \
+DATABASE_URL_UNPOOLED='postgresql://user@source-host/source_db' \
   ./scripts/restore-drill.sh ./backups/schoolcrm-YYYYMMDDTHHMMSSZ.dump
 ```
 
-The restore script refuses to proceed when `RESTORE_DATABASE_URL` exactly matches the source database URL available in the environment.
+The source URL is required. The script refuses matching host, port and database identities even with different credentials, SSL options or SQLAlchemy driver markers; it also recognizes Neon pooled/direct aliases. Other DNS aliases or endpoints for the same database cannot be identified by URL alone: the operator must verify the target is a separate disposable database before running the drill.
+
+Restore uses an explicit `--dbname` and a single transaction with `--exit-on-error`, so a restore error rolls back instead of leaving a partial result.
 
 After restore it runs:
 
 ```bash
+python -m app.jobs.check_migration_head
 python -m app.jobs.audit_invariants
 ```
+
+The migration check is read-only and requires the restored Alembic revisions to equal this checkout's heads. It does not silently upgrade an older backup.
 
 The drill is successful only when the restore completes and the invariant audit exits successfully.
 

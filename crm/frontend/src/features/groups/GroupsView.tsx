@@ -24,6 +24,17 @@ type GroupsViewProps = {
   candidateSort: CandidateSort;
   groupSchedule: DraftScheduleSlot[];
   groupLocationId: EntityId | "";
+  groupQuery: string;
+  groupSort: "name" | "size_desc" | "size_asc";
+  groupPageTotal: number;
+  groupPageLimit: number;
+  groupPageOffset: number;
+  groupPageLoading: boolean;
+  groupPageError: string;
+  onGroupQueryChange: (value: string) => void;
+  onGroupSortChange: (value: "name" | "size_desc" | "size_asc") => void;
+  onPreviousGroupPage: () => void;
+  onNextGroupPage: () => void;
   teacherNameForGroup: (groupId: EntityId) => string | undefined;
   onOpenGroup: (groupId: EntityId) => void;
   onOpenCreation: (context: "groups" | "candidates") => void;
@@ -49,6 +60,17 @@ export function GroupsView({
   candidateSort,
   groupSchedule,
   groupLocationId,
+  groupQuery,
+  groupSort,
+  groupPageTotal,
+  groupPageLimit,
+  groupPageOffset,
+  groupPageLoading,
+  groupPageError,
+  onGroupQueryChange,
+  onGroupSortChange,
+  onPreviousGroupPage,
+  onNextGroupPage,
   teacherNameForGroup,
   onOpenGroup,
   onOpenCreation,
@@ -68,16 +90,24 @@ export function GroupsView({
           <p className="sectionLead">Відкрийте групу, щоб побачити учасників, відвідування, пропуски, оплати та історію.</p>
         </div>
         <div className="groupsHeadActions">
-          <span className="counter">{groups.length}</span>
+          <label className="registrySearch"><span>Пошук</span><input value={groupQuery} onChange={(e) => onGroupQueryChange(e.target.value)} placeholder="Група, локація або викладач" /></label>
+          <label className="candidateSelect">Сортування<select value={groupSort} onChange={(e) => onGroupSortChange(e.target.value as "name" | "size_desc" | "size_asc")}>
+            <option value="name">За назвою</option>
+            <option value="size_desc">Більші групи</option>
+            <option value="size_asc">Менші групи</option>
+          </select></label>
+          <span className="counter">{groupPageTotal}</span>
           {waiting.length > 0 && <button className="search" onClick={() => document.getElementById("waiting-groups")?.scrollIntoView({ behavior: "smooth" })}>Очікують: {waiting.length}</button>}
           <button className="primary compact" onClick={() => onOpenCreation("groups")}>+ Нова група</button>
         </div>
       </div>
 
-      {groups.length === 0 ? <div className="groupsEmptyPrimary">
-        <strong>Ще немає створених груп</strong>
-        <span>Створіть групу наперед, задайте локацію та регулярний час. Учнів можна додати пізніше.</span>
-        <button className="primary compact" onClick={() => onOpenCreation("groups")}>+ Створити групу</button>
+      {groupPageError && <div className="registryError" role="alert">{groupPageError}</div>}
+      {groupPageLoading && groups.length === 0 ? <div className="groupsEmptyPrimary"><strong>Завантаження груп…</strong></div>
+      : groups.length === 0 ? <div className="groupsEmptyPrimary">
+        <strong>{groupQuery.trim() ? "За пошуком груп не знайдено" : "Ще немає створених груп"}</strong>
+        <span>{groupQuery.trim() ? "Змініть пошуковий запит або очистьте поле." : "Створіть групу наперед, задайте локацію та регулярний час. Учнів можна додати пізніше."}</span>
+        {!groupQuery.trim() && <button className="primary compact" onClick={() => onOpenCreation("groups")}>+ Створити групу</button>}
       </div> : <div className="groupCards groupCardsPrimary">
         {groups.map((group) => {
           const teacherName = group.teacherName ?? teacherNameForGroup(group.id);
@@ -88,11 +118,15 @@ export function GroupsView({
             </div>
             <div className="groupCardFact"><small>Розклад</small><b>{group.schedule}</b></div>
             <div className="groupCardFact"><small>Локація</small><b>{group.location}</b></div>
-            <div className="groupCardFact groupCardStudents"><small>Учні</small><b>{group.members.length}/{group.capacity}</b></div>
+            <div className="groupCardFact groupCardStudents"><small>Учні</small><b>{group.memberCount ?? group.members.length}/{group.capacity}</b></div>
             <strong className="groupCardOpen">Відкрити групу →</strong>
           </button>;
         })}
       </div>}
+      <div className="registryPager" aria-label="Сторінки груп">
+        <span>{groupPageTotal === 0 ? "0" : `${groupPageOffset + 1}–${Math.min(groupPageOffset + groupPageLimit, groupPageTotal)}`} з {groupPageTotal}</span>
+        <div><button disabled={groupPageLoading || groupPageOffset === 0} onClick={onPreviousGroupPage}>← Назад</button><button disabled={groupPageLoading || groupPageOffset + groupPageLimit >= groupPageTotal} onClick={onNextGroupPage}>Далі →</button></div>
+      </div>
     </article>
 
     <section className="waitingSecondary" id="waiting-groups">

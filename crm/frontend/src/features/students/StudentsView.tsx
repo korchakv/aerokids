@@ -14,6 +14,15 @@ type StudentsViewProps = {
   groupCount: number;
   studentFilter: StudentFilter;
   onFilterChange: (filter: StudentFilter) => void;
+  query: string;
+  onQueryChange: (value: string) => void;
+  pageTotal: number;
+  pageLimit: number;
+  pageOffset: number;
+  loading: boolean;
+  error: string;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
   studentStates: Record<EntityId, StudentLifecycleLabel>;
   groupForStudent: (studentId: EntityId) => GroupItem | undefined;
   onOpenStudent: (studentId: EntityId, currentGroupId: EntityId | null) => void;
@@ -27,6 +36,15 @@ export function StudentsView({
   groupCount,
   studentFilter,
   onFilterChange,
+  query,
+  onQueryChange,
+  pageTotal,
+  pageLimit,
+  pageOffset,
+  loading,
+  error,
+  onPreviousPage,
+  onNextPage,
   studentStates,
   groupForStudent,
   onOpenStudent,
@@ -35,26 +53,37 @@ export function StudentsView({
     <article className="panel studentsPanel">
       <div className="panelHead">
         <div><p className="eyebrow">База учнів</p><h2>Активні учні</h2></div>
-        <div className="filters">
+        <div className="registryToolbar">
+          <label className="registrySearch"><span>Пошук</span><input value={query} onChange={(e) => onQueryChange(e.target.value)} placeholder="Ім’я або телефон" /></label>
+          <div className="filters">
           <button className={"chip " + (studentFilter === "all" ? "active" : "")} onClick={() => onFilterChange("all")}>Усі</button>
           <button className={"chip " + (studentFilter === "active" ? "active" : "")} onClick={() => onFilterChange("active")}>Активні</button>
           <button className={"chip " + (studentFilter === "paused" ? "active" : "")} onClick={() => onFilterChange("paused")}>Пауза</button>
           <button className={"chip " + (studentFilter === "archived" ? "active" : "")} onClick={() => onFilterChange("archived")}>Архів</button>
+          </div>
         </div>
       </div>
-      <div className="studentTable">
+      {error && <div className="registryError" role="alert">{error}</div>}
+      <div className={"studentTable " + (loading ? "registryLoading" : "")}>
         <div className="studentRow studentHead"><span>Учень</span><span>Група</span><span>Контакт</span><span>Статус</span></div>
-        {students.length === 0 && <div className="emptyState">За цим фільтром учнів немає.</div>}
+        {loading && students.length === 0 && <div className="emptyState">Завантаження учнів…</div>}
+        {!loading && students.length === 0 && <div className="emptyState">За цим фільтром учнів немає.</div>}
         {students.map((student) => {
           const group = groupForStudent(student.id);
+          const groupName = student.groupName ?? group?.name;
+          const groupId = student.groupId ?? group?.id ?? null;
           const state = studentStates[student.id] ?? "Активний";
-          return <button className="studentRow studentButton" key={student.id} onClick={() => onOpenStudent(student.id, group?.id ?? null)}>
+          return <button className="studentRow studentButton" key={student.id} onClick={() => onOpenStudent(student.id, groupId)}>
             <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років</small></b></span>
-            <span>{group?.name ?? "Без групи"}</span>
+            <span>{groupName ?? "Без групи"}</span>
             <span>{student.parent}<small>{student.phone}</small></span>
             <span className={"studentState " + state.toLowerCase()}>{state}</span>
           </button>;
         })}
+      </div>
+      <div className="registryPager" aria-label="Сторінки учнів">
+        <span>{pageTotal === 0 ? "0" : `${pageOffset + 1}–${Math.min(pageOffset + pageLimit, pageTotal)}`} з {pageTotal}</span>
+        <div><button disabled={loading || pageOffset === 0} onClick={onPreviousPage}>← Назад</button><button disabled={loading || pageOffset + pageLimit >= pageTotal} onClick={onNextPage}>Далі →</button></div>
       </div>
     </article>
     <aside className="studentSummary panel">
