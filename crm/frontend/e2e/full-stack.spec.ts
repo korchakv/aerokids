@@ -23,6 +23,69 @@ test("owner can sign in and see the real smoke lead", async ({ page }) => {
   await expect(page.getByTestId("lead-drawer")).toHaveCount(0);
 });
 
+test("moving a lead to waiting does not start enrollment", async ({ page }) => {
+  await login(page);
+
+  const uniqueSuffix = Array.from({ length: 8 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
+  const childName = `Waitlist ${uniqueSuffix}`;
+  const childPhone = `+38067${Math.floor(1_000_000 + Math.random() * 9_000_000)}`;
+  const intake = await page.evaluate(async ({ childName, childPhone }) => {
+    const session = JSON.parse(sessionStorage.getItem("school-crm-session") ?? "null");
+    const response = await fetch("/api/intake", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.accessToken}`,
+        "X-Organization-Id": session.organizationId,
+      },
+      body: JSON.stringify({
+        child_first_name: childName,
+        child_age: 9,
+        contact_name: "Тестова мама",
+        phone: childPhone,
+        source: "phone",
+      }),
+    });
+    return { status: response.status };
+  }, { childName, childPhone });
+  expect(intake.status).toBe(201);
+
+  await page.reload();
+  await expect(page.getByText("Дашборд", { exact: true }).first()).toBeVisible();
+  await page.getByText("Заявки", { exact: true }).first().click();
+
+  const newColumn = page.locator(".kanbanColumn.column-new");
+  const waitingColumn = page.locator(".kanbanColumn.column-waiting");
+  const card = newColumn.locator(".leadKanbanCard").filter({ hasText: childName });
+  await expect(card).toBeVisible();
+  const isMobile = (page.viewportSize()?.width ?? 1280) <= 500;
+
+  const transitionResponse = page.waitForResponse((response) =>
+    response.url().includes("/crm-status") && response.request().method() === "PATCH"
+  );
+  if (isMobile) {
+    await card.click();
+    await page.locator(".mobileLeadMoreAction").click();
+    await page.getByRole("button", { name: "Перемістити заявку" }).click();
+    await page.locator(".mobileLeadStageList").getByRole("button", { name: /Очікує групу/ }).click();
+  } else {
+    await card.dragTo(waitingColumn);
+  }
+  expect((await transitionResponse).ok()).toBeTruthy();
+  const waitingCard = waitingColumn.locator(".leadKanbanCard").filter({ hasText: childName });
+  await expect(waitingCard).toBeVisible();
+  await expect(page.getByTestId("lead-enrollment-workflow")).toHaveCount(0);
+
+  if (!isMobile) {
+    await expect(page.getByTestId("lead-drawer")).toHaveCount(0);
+    await waitingCard.click();
+    await page.setViewportSize({ width: 390, height: 844 });
+  }
+  await expect(page.getByTestId("lead-drawer")).toBeVisible();
+  await page.locator(".mobileLeadPrimaryAction").click();
+  await expect(page.getByTestId("lead-enrollment-workflow")).toBeVisible();
+});
+
 test("mobile shell does not overflow horizontally", async ({ page }) => {
   await login(page);
   const dimensions = await page.evaluate(() => ({

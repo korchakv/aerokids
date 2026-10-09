@@ -132,6 +132,7 @@ function App() {
   const [leadSourceFilter, setLeadSourceFilter] = useState("all");
   const [leadMoveSavingId, setLeadMoveSavingId] = useState<EntityId | null>(null);
   const [leadProcedureTarget, setLeadProcedureTarget] = useState<LeadKanbanColumnId | null>(null);
+  const [leadEnrollmentOpen, setLeadEnrollmentOpen] = useState(false);
   const [leadEnrollmentGroupId, setLeadEnrollmentGroupId] = useState<EntityId | "">("");
   const [leadEnrollmentSaving, setLeadEnrollmentSaving] = useState(false);
   const [leadActionsOpen, setLeadActionsOpen] = useState(false);
@@ -911,6 +912,20 @@ function App() {
     setActive("Заявки");
   };
 
+  const moveLeadToWaiting = async (id: EntityId) => {
+    if (apiEnabled && session) {
+      await apiPatch(`/students/${id}/crm-status`, {
+        crm_status: "waiting_for_group",
+      }, session);
+      await syncWorkspace(session);
+      return;
+    }
+    setLeads((items) => items.map((item) => item.id !== id ? item : {
+      ...item,
+      status: "Очікує групу",
+    }));
+  };
+
   const moveLeadOnBoard = async (lead: Lead, target: LeadKanbanColumnId) => {
     if (leadMoveSavingId || lead.status === "Зарахований") return;
     const currentColumn = leadKanbanColumn(lead);
@@ -940,8 +955,14 @@ function App() {
       return;
     }
     if (target === "waiting") {
-      openLead(lead.id);
-      setLeadProcedureTarget("waiting");
+      setLeadMoveSavingId(lead.id);
+      try {
+        await moveLeadToWaiting(lead.id);
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося перемістити заявку.");
+      } finally {
+        setLeadMoveSavingId(null);
+      }
       return;
     }
     if (target === "deferred") {
@@ -983,6 +1004,15 @@ function App() {
   };
 
   const updateStatus = async (id: EntityId, status: LeadStatus) => {
+    if (status === "Очікує групу") {
+      try {
+        setWorkspaceError("");
+        await moveLeadToWaiting(id);
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося змінити статус заявки.");
+      }
+      return;
+    }
     if (apiEnabled && session) {
       try {
         await apiPatch(`/students/${id}/crm-status`, { crm_status: crmStatusValue(status) }, session);
@@ -1079,6 +1109,7 @@ function App() {
     setPostTrialMode(null);
     setPreferenceMode(false);
     setLeadProcedureTarget(null);
+    setLeadEnrollmentOpen(false);
     setLeadEnrollmentGroupId("");
     setLeadActionsOpen(false);
     setLeadStatusMenuOpen(false);
@@ -1186,13 +1217,17 @@ function App() {
     if (apiEnabled && session) {
       try {
         setWorkspaceError("");
-        await apiPatch(`/students/${selected.id}/lead-outcome`, {
-          crm_status: crmStatus,
-          next_contact_at: options.nextContactAt ? new Date(options.nextContactAt).toISOString() : null,
-          close_reason: options.closeReason || null,
-          close_note: options.closeNote || null,
-        }, session);
-        await syncWorkspace(session);
+        if (crmStatus === "waiting_for_group") {
+          await moveLeadToWaiting(selected.id);
+        } else {
+          await apiPatch(`/students/${selected.id}/lead-outcome`, {
+            crm_status: crmStatus,
+            next_contact_at: options.nextContactAt ? new Date(options.nextContactAt).toISOString() : null,
+            close_reason: options.closeReason || null,
+            close_note: options.closeNote || null,
+          }, session);
+          await syncWorkspace(session);
+        }
         setPostTrialMode(null);
         return;
       } catch (error) {
@@ -1209,13 +1244,17 @@ function App() {
       no_response: "Не відповідає",
       not_relevant: "Неактуально",
     };
-    setLeads((items) => items.map((item) => item.id === selected.id ? {
-      ...item,
-      status: statusMap[crmStatus] ?? item.status,
-      nextContactAt: options.nextContactAt || undefined,
-      closeReason: options.closeReason || undefined,
-      closeNote: options.closeNote || undefined,
-    } : item));
+    if (crmStatus === "waiting_for_group") {
+      await moveLeadToWaiting(selected.id);
+    } else {
+      setLeads((items) => items.map((item) => item.id === selected.id ? {
+        ...item,
+        status: statusMap[crmStatus] ?? item.status,
+        nextContactAt: options.nextContactAt || undefined,
+        closeReason: options.closeReason || undefined,
+        closeNote: options.closeNote || undefined,
+      } : item));
+    }
     setPostTrialMode(null);
   };
 
@@ -1355,7 +1394,9 @@ function App() {
     setLeadStatusMenuOpen(false);
     setTrialMode(null);
     setPostTrialMode(null);
-    setLeadProcedureTarget("waiting");
+    setLeadProcedureTarget(null);
+    setLeadEnrollmentGroupId("");
+    setLeadEnrollmentOpen(true);
     revealLeadWorkflow("lead-enrollment-workflow");
   };
 
@@ -1445,7 +1486,7 @@ function App() {
           : group));
         setLeads((items) => items.map((lead) => lead.id === selected.id ? { ...lead, status: "Зарахований" } : lead));
       }
-      setLeadProcedureTarget(null);
+      setLeadEnrollmentOpen(false);
       setSelectedId(null);
       setSelectedStudentId(selected.id);
       setActive("Учні");
@@ -1468,7 +1509,7 @@ function App() {
         setLeads((items) => items.map((lead) => lead.id === selected.id ? { ...lead, status: "Зарахований" } : lead));
         setStudentStates((items) => ({ ...items, [selected.id]: "Активний" }));
       }
-      setLeadProcedureTarget(null);
+      setLeadEnrollmentOpen(false);
       setSelectedId(null);
       setSelectedStudentId(selected.id);
       setActive("Учні");
@@ -3690,6 +3731,7 @@ function App() {
         recommendedLevel,
         teacherNotes,
         leadProcedureTarget,
+        leadEnrollmentOpen,
         postTrialMode,
         followUpAt,
         deferAt,
@@ -3730,6 +3772,7 @@ function App() {
         setRecommendedLevel,
         setTeacherNotes,
         setLeadProcedureTarget,
+        setLeadEnrollmentOpen,
         setPostTrialMode,
         setFollowUpAt,
         setDeferAt,

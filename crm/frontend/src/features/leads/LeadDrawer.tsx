@@ -51,6 +51,7 @@ export type LeadDrawerProps = {
   recommendedLevel: string;
   teacherNotes: string;
   leadProcedureTarget: LeadKanbanColumnId | null;
+  leadEnrollmentOpen: boolean;
   postTrialMode: "thinking" | "defer" | "close" | null;
   followUpAt: string;
   deferAt: string;
@@ -91,6 +92,7 @@ export type LeadDrawerProps = {
   setRecommendedLevel: Setter<string>;
   setTeacherNotes: Setter<string>;
   setLeadProcedureTarget: Setter<LeadKanbanColumnId | null>;
+  setLeadEnrollmentOpen: Setter<boolean>;
   setPostTrialMode: Setter<"thinking" | "defer" | "close" | null>;
   setFollowUpAt: Setter<string>;
   setDeferAt: Setter<string>;
@@ -160,6 +162,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
     recommendedLevel,
     teacherNotes,
     leadProcedureTarget,
+    leadEnrollmentOpen,
     postTrialMode,
     followUpAt,
     deferAt,
@@ -200,6 +203,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
     setRecommendedLevel,
     setTeacherNotes,
     setLeadProcedureTarget,
+    setLeadEnrollmentOpen,
     setPostTrialMode,
     setFollowUpAt,
     setDeferAt,
@@ -241,9 +245,9 @@ export function LeadDrawer(props: LeadDrawerProps) {
     auditEventDetail
   } = props;
 
-  return <div className="drawerBackdrop leadDrawerBackdrop" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>
+  return <div className="drawerBackdrop leadDrawerBackdrop" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); setLeadEnrollmentOpen(false); }}>
         <aside className="drawer leadDrawer" data-testid="lead-drawer" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); }}>×</button>
+          <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); setLeadEnrollmentOpen(false); }}>×</button>
           <p className="eyebrow">Картка заявки</p>
           <div className="leadDrawerTitleRow">
             <div className="leadDrawerIdentity">
@@ -362,8 +366,8 @@ export function LeadDrawer(props: LeadDrawerProps) {
             {selected.status === "Очікує групу" && <small>Готові навчатися · можна зарахувати в групу або без групи.</small>}
           </div>}
 
-          {leadProcedureTarget === "waiting" && <div id="lead-enrollment-workflow" className="workflowBox leadWorkflowBox leadDirectEnrollmentStep">
-            <div className="workflowHead"><h3>Зарахувати учня</h3><button onClick={() => { setLeadProcedureTarget(null); setLeadEnrollmentGroupId(""); }}>×</button></div>
+          {leadEnrollmentOpen && <div id="lead-enrollment-workflow" data-testid="lead-enrollment-workflow" className="workflowBox leadWorkflowBox leadDirectEnrollmentStep">
+            <div className="workflowHead"><h3>Зарахувати учня</h3><button onClick={() => { setLeadEnrollmentOpen(false); setLeadEnrollmentGroupId(""); }}>×</button></div>
             <p className="softPreferenceHint">Учень може навчатися в групі або окремо. Група та локація не є обов’язковими.</p>
             <label>Група<select value={leadEnrollmentGroupId} onChange={(e) => setLeadEnrollmentGroupId(e.target.value)}>
               <option value="">Оберіть групу</option>
