@@ -80,14 +80,6 @@ When the CRM appears unhealthy:
 8. If the latest deploy introduced the failure, roll back to the last known-good Render deploy.
 9. Do not run manual data-repair SQL until a backup/restore point exists and the exact repair has been reviewed.
 
-## Transactional email
-
-Invitation/reset creation commits the outbox row before an immediate background delivery attempt in a separate session. The worker filters by organization and row ID. PostgreSQL row locks prevent concurrent workers from sending the same row simultaneously; SMTP can still duplicate a message if the process dies after acceptance but before commit.
-
-Credential expiry is stored as UTC metadata. Expired queued credentials are scrubbed without sending, including exhausted retries; successful delivery also removes the link. Provider exception text is not persisted. Failed valid rows retain their link for up to five attempts.
-
-SMTP remains disabled until a real provider is securely configured and tested. Daily maintenance is the fallback worker; add frequent dedicated outbox retries before email production acceptance, since daily retries are too slow for one-hour reset links. Do not shorten the billing-maintenance interval just to deliver mail.
-
 ## Database recovery
 
 See `backup-restore.md`.
