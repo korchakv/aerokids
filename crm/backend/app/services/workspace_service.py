@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.core import (
     Contact,
+    CrmStatus,
     Enrollment,
     EnrollmentStatus,
     Group,
@@ -16,9 +18,11 @@ from app.models.core import (
     Staff,
     StaffRole,
     Student,
+    StudentAvailability,
     StudentContact,
     StudentStatus,
     TrialLesson,
+    TrialStatus,
 )
 from app.services import crm
 
@@ -191,6 +195,272 @@ def assigned_group_ids_for_user(db: Session, org_id: UUID, user_id: UUID | None,
         GroupStaff.organization_id == org_id,
         GroupStaff.staff_id == staff.id,
     )))
+
+
+
+LEAD_COLUMNS = {"new", "contacted", "trial", "no_show", "after_trial", "waiting", "deferred", "closed"}
+
+
+def _lead_projection_subqueries(org_id: UUID):
+    contact_name = (
+        select(Contact.full_name)
+        .join(StudentContact, StudentContact.contact_id == Contact.id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == Student.id,
+            Contact.organization_id == org_id,
+        )
+        .order_by(StudentContact.is_primary.desc(), Contact.created_at)
+        .limit(1)
+        .correlate(Student)
+        .scalar_subquery()
+    )
+    contact_phone = (
+        select(Contact.phone)
+        .join(StudentContact, StudentContact.contact_id == Contact.id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == Student.id,
+            Contact.organization_id == org_id,
+        )
+        .order_by(StudentContact.is_primary.desc(), Contact.created_at)
+        .limit(1)
+        .correlate(Student)
+        .scalar_subquery()
+    )
+    preferred_location_name = (
+        select(Location.name)
+        .where(Location.organization_id == org_id, Location.id == Student.preferred_location_id)
+        .limit(1)
+        .correlate(Student)
+        .scalar_subquery()
+    )
+
+    def trial_field(column):
+        return (
+            select(column)
+            .where(
+                TrialLesson.organization_id == org_id,
+                TrialLesson.student_id == Student.id,
+            )
+            .order_by(TrialLesson.starts_at.desc(), TrialLesson.id.desc())
+            .limit(1)
+            .correlate(Student)
+            .scalar_subquery()
+        )
+
+    latest_trial_id = trial_field(TrialLesson.id)
+    latest_trial_at = trial_field(TrialLesson.starts_at)
+    latest_trial_status = trial_field(TrialLesson.status)
+    latest_trial_location_id = trial_field(TrialLesson.location_id)
+    latest_trial_level = trial_field(TrialLesson.recommended_level)
+    latest_trial_notes = trial_field(TrialLesson.teacher_notes)
+    trial_location_name = (
+        select(Location.name)
+        .where(Location.organization_id == org_id, Location.id == latest_trial_location_id)
+        .limit(1)
+        .correlate(Student)
+        .scalar_subquery()
+    )
+    return {
+        "contact_name": contact_name,
+        "contact_phone": contact_phone,
+        "preferred_location_name": preferred_location_name,
+        "latest_trial_id": latest_trial_id,
+        "latest_trial_at": latest_trial_at,
+        "latest_trial_status": latest_trial_status,
+        "latest_trial_location_id": latest_trial_location_id,
+        "latest_trial_level": latest_trial_level,
+        "latest_trial_notes": latest_trial_notes,
+        "trial_location_name": trial_location_name,
+    }
+
+
+def _lead_column_condition(column: str, latest_trial_status, now: datetime):
+    closed_statuses = (CrmStatus.DECLINED, CrmStatus.NO_RESPONSE, CrmStatus.NOT_RELEVANT)
+    closed = Student.crm_status.in_(closed_statuses)
+    deferred = and_(
+        ~closed,
+        Student.deferred_until.is_not(None),
+        Student.deferred_until > now,
+    )
+    active_now = or_(Student.deferred_until.is_(None), Student.deferred_until <= now)
+    if column == "closed":
+        return closed
+    if column == "deferred":
+        return deferred
+    if column == "no_show":
+        return and_(~closed, active_now, Student.crm_status == CrmStatus.CONTACTED, latest_trial_status == TrialStatus.NO_SHOW)
+    if column == "after_trial":
+        return and_(~closed, active_now, Student.crm_status == CrmStatus.TRIAL_COMPLETED)
+    if column == "trial":
+        return and_(~closed, active_now, Student.crm_status == CrmStatus.TRIAL_SCHEDULED)
+    if column == "waiting":
+        return and_(~closed, active_now, Student.crm_status == CrmStatus.WAITING_FOR_GROUP)
+    if column == "new":
+        return and_(~closed, active_now, Student.crm_status == CrmStatus.NEW)
+    if column == "contacted":
+        return and_(
+            ~closed,
+            active_now,
+            Student.crm_status == CrmStatus.CONTACTED,
+            or_(latest_trial_status.is_(None), latest_trial_status != TrialStatus.NO_SHOW),
+        )
+    raise HTTPException(status_code=422, detail="Unsupported lead column")
+
+
+def paginate_lead_overview(
+    db: Session,
+    org_id: UUID,
+    *,
+    q: str | None = None,
+    column: str | None = None,
+    source: str | None = None,
+    sort: str = "priority",
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Database-backed lead page with batched availability and no ORM N+1 loop."""
+    projection = _lead_projection_subqueries(org_id)
+    now = datetime.now(timezone.utc)
+    filters = [
+        Student.organization_id == org_id,
+        Student.student_status == StudentStatus.PROSPECT,
+    ]
+    if column is not None:
+        if column not in LEAD_COLUMNS:
+            raise HTTPException(status_code=422, detail="Unsupported lead column")
+        filters.append(_lead_column_condition(column, projection["latest_trial_status"], now))
+    if source:
+        filters.append(Student.source == source)
+
+    needle = (q or "").strip()
+    if needle:
+        pattern = f"%{needle}%"
+        contact_match = exists(
+            select(StudentContact.id)
+            .join(Contact, Contact.id == StudentContact.contact_id)
+            .where(
+                StudentContact.organization_id == org_id,
+                StudentContact.student_id == Student.id,
+                Contact.organization_id == org_id,
+                or_(Contact.full_name.ilike(pattern), Contact.phone.ilike(pattern)),
+            )
+        )
+        filters.append(or_(
+            Student.first_name.ilike(pattern),
+            Student.last_name.ilike(pattern),
+            Student.phone.ilike(pattern),
+            contact_match,
+        ))
+
+    total = int(db.scalar(select(func.count(Student.id)).where(*filters)) or 0)
+    statement = select(
+        Student,
+        projection["contact_name"].label("contact_name"),
+        projection["contact_phone"].label("contact_phone"),
+        projection["preferred_location_name"].label("preferred_location_name"),
+        projection["latest_trial_id"].label("latest_trial_id"),
+        projection["latest_trial_at"].label("latest_trial_at"),
+        projection["latest_trial_status"].label("latest_trial_status"),
+        projection["latest_trial_location_id"].label("trial_location_id"),
+        projection["trial_location_name"].label("trial_location_name"),
+        projection["latest_trial_level"].label("recommended_level"),
+        projection["latest_trial_notes"].label("teacher_notes"),
+    ).where(*filters)
+
+    next_action = func.coalesce(Student.next_contact_at, projection["latest_trial_at"])
+    priority = case(
+        (and_(Student.next_contact_at.is_not(None), Student.next_contact_at <= now), 0),
+        (projection["latest_trial_status"] == TrialStatus.NO_SHOW, 1),
+        (projection["latest_trial_status"] == TrialStatus.CANCELLED, 2),
+        (and_(Student.crm_status == CrmStatus.TRIAL_COMPLETED, Student.next_contact_at.is_(None)), 3),
+        (Student.crm_status == CrmStatus.NEW, 4),
+        (Student.crm_status == CrmStatus.TRIAL_SCHEDULED, 5),
+        (Student.next_contact_at.is_not(None), 6),
+        (Student.crm_status == CrmStatus.CONTACTED, 7),
+        (Student.crm_status == CrmStatus.WAITING_FOR_GROUP, 8),
+        else_=9,
+    )
+    if sort == "newest":
+        statement = statement.order_by(Student.created_at.desc(), Student.id)
+    elif sort == "next_action":
+        statement = statement.order_by(next_action.is_(None), next_action, priority, Student.created_at.desc(), Student.id)
+    else:
+        statement = statement.order_by(priority, next_action.is_(None), next_action, Student.created_at.desc(), Student.id)
+
+    rows = db.execute(statement.offset(offset).limit(limit)).all()
+    student_ids = [row[0].id for row in rows]
+    availability_by_student: dict[UUID, list[dict]] = {student_id: [] for student_id in student_ids}
+    if student_ids:
+        availability_rows = db.scalars(
+            select(StudentAvailability)
+            .where(
+                StudentAvailability.organization_id == org_id,
+                StudentAvailability.student_id.in_(student_ids),
+            )
+            .order_by(StudentAvailability.student_id, StudentAvailability.weekday, StudentAvailability.start_time)
+        )
+        for slot in availability_rows:
+            availability_by_student.setdefault(slot.student_id, []).append({
+                "weekday": slot.weekday,
+                "start_time": slot.start_time,
+                "end_time": slot.end_time,
+                "preference": slot.preference,
+                "note": slot.note,
+            })
+
+    items = []
+    for row in rows:
+        student = row[0]
+        items.append({
+            "student_id": student.id,
+            "created_at": student.created_at,
+            "first_name": student.first_name,
+            "last_name": student.last_name,
+            "student_phone": student.phone,
+            "age": student.age_at_inquiry,
+            "source": student.source,
+            "comment": student.notes,
+            "preferred_location_id": student.preferred_location_id,
+            "preferred_location_name": row.preferred_location_name,
+            "availability": availability_by_student.get(student.id, []),
+            "crm_status": student.crm_status,
+            "contact_name": row.contact_name,
+            "contact_phone": row.contact_phone,
+            "latest_trial_id": row.latest_trial_id,
+            "latest_trial_at": row.latest_trial_at,
+            "latest_trial_status": row.latest_trial_status,
+            "trial_location_id": row.trial_location_id,
+            "trial_location_name": row.trial_location_name,
+            "recommended_level": row.recommended_level,
+            "teacher_notes": row.teacher_notes,
+            "next_contact_at": student.next_contact_at,
+            "deferred_until": student.deferred_until,
+            "deferred_reason": student.deferred_reason,
+            "deferred_note": student.deferred_note,
+            "close_reason": student.lead_close_reason,
+            "close_note": student.lead_close_note,
+        })
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+def lead_column_counts(db: Session, org_id: UUID) -> dict[str, int]:
+    projection = _lead_projection_subqueries(org_id)
+    now = datetime.now(timezone.utc)
+    base = [
+        Student.organization_id == org_id,
+        Student.student_status == StudentStatus.PROSPECT,
+    ]
+    result: dict[str, int] = {}
+    for column in LEAD_COLUMNS:
+        result[column] = int(db.scalar(
+            select(func.count(Student.id)).where(
+                *base,
+                _lead_column_condition(column, projection["latest_trial_status"], now),
+            )
+        ) or 0)
+    return result
 
 
 def paginate_student_overview(
