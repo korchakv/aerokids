@@ -149,3 +149,41 @@ def test_github_oidc_rejects_other_workflow(monkeypatch):
         pass
     else:
         raise AssertionError("unexpected workflow must be rejected")
+
+
+def test_github_oidc_verifies_real_rs256_signature(monkeypatch):
+    # Production must install PyJWT's RSA backend, not only mock jwt.decode.
+    import time
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+    now = int(time.time())
+    claims = {
+        "sub": "repo:korchakv/aerokids:ref:refs/heads/main",
+        "iss": operations_auth.GITHUB_OIDC_ISSUER,
+        "aud": settings.maintenance_oidc_audience,
+        "iat": now,
+        "exp": now + 300,
+        "repository": settings.maintenance_github_repository,
+        "ref": settings.maintenance_github_ref,
+        "event_name": "schedule",
+        "workflow_ref": (
+            f"{settings.maintenance_github_repository}/"
+            f".github/workflows/crm-maintenance.yml@{settings.maintenance_github_ref}"
+        ),
+    }
+    token = jwt.encode(claims, private_key, algorithm="RS256")
+
+    class Key:
+        key = public_key
+
+    monkeypatch.setattr(operations_auth._jwks_client, "get_signing_key_from_jwt", lambda token: Key())
+    assert operations_auth.verify_github_actions_token(token)["event_name"] == "schedule"
+
+    other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    forged_token = jwt.encode(claims, other_key, algorithm="RS256")
+    import pytest
+    with pytest.raises(operations_auth.MaintenanceIdentityError):
+        operations_auth.verify_github_actions_token(forged_token)
