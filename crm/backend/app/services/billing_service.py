@@ -5,7 +5,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, case, func, or_, select, exists
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -897,6 +897,198 @@ def create_payment(db: Session, org_id: UUID, data, actor_user_id: UUID | None =
     db.refresh(item)
     item.plan_id = subscription.plan_id if data.subscription_id is not None else None
     return _attach_payment_financials(db, org_id, item)
+
+
+
+def paginate_payments(
+    db: Session,
+    org_id: UUID,
+    *,
+    q: str | None = None,
+    status: PaymentStatus | None = None,
+    overdue: bool | None = None,
+    sort: str = "newest",
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Database-backed payment page with ledger aggregates and student projections."""
+    organization = require_organization(db, org_id)
+    try:
+        today = datetime.now(ZoneInfo(organization.timezone)).date()
+    except Exception:
+        today = datetime.now(timezone.utc).date()
+
+    transaction_totals = (
+        select(
+            PaymentTransaction.payment_id.label("payment_id"),
+            func.count(PaymentTransaction.id).label("transaction_count"),
+            func.coalesce(func.sum(case((PaymentTransaction.kind == "adjustment_increase", PaymentTransaction.amount_minor), else_=0)), 0).label("increase_minor"),
+            func.coalesce(func.sum(case((PaymentTransaction.kind == "adjustment_decrease", PaymentTransaction.amount_minor), else_=0)), 0).label("decrease_minor"),
+            func.coalesce(func.sum(case((PaymentTransaction.kind == "payment", PaymentTransaction.amount_minor), else_=0)), 0).label("paid_minor_raw"),
+            func.coalesce(func.sum(case((PaymentTransaction.kind == "refund", PaymentTransaction.amount_minor), else_=0)), 0).label("refunded_minor"),
+        )
+        .where(PaymentTransaction.organization_id == org_id)
+        .group_by(PaymentTransaction.payment_id)
+        .subquery()
+    )
+    transaction_count = func.coalesce(transaction_totals.c.transaction_count, 0)
+    increases = func.coalesce(transaction_totals.c.increase_minor, 0)
+    decreases = func.coalesce(transaction_totals.c.decrease_minor, 0)
+    paid_raw = func.coalesce(transaction_totals.c.paid_minor_raw, 0)
+    refunded = func.coalesce(transaction_totals.c.refunded_minor, 0)
+
+    adjusted_raw = Payment.amount_minor + increases - decreases
+    adjusted = case((adjusted_raw < 0, 0), else_=adjusted_raw)
+    paid_effective = case(
+        (and_(transaction_count == 0, Payment.status == PaymentStatus.PAID), adjusted),
+        else_=paid_raw,
+    )
+    net_paid_raw = paid_effective - refunded
+    net_paid = case((net_paid_raw < 0, 0), else_=net_paid_raw)
+    balance_raw = adjusted - net_paid
+    balance = case((balance_raw < 0, 0), else_=balance_raw)
+    credit_raw = net_paid - adjusted
+    credit = case((credit_raw < 0, 0), else_=credit_raw)
+
+    contact_name = (
+        select(Contact.full_name)
+        .join(StudentContact, StudentContact.contact_id == Contact.id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == Payment.student_id,
+            Contact.organization_id == org_id,
+        )
+        .order_by(StudentContact.is_primary.desc(), Contact.created_at)
+        .limit(1)
+        .correlate(Payment)
+        .scalar_subquery()
+    )
+    contact_phone = (
+        select(Contact.phone)
+        .join(StudentContact, StudentContact.contact_id == Contact.id)
+        .where(
+            StudentContact.organization_id == org_id,
+            StudentContact.student_id == Payment.student_id,
+            Contact.organization_id == org_id,
+        )
+        .order_by(StudentContact.is_primary.desc(), Contact.created_at)
+        .limit(1)
+        .correlate(Payment)
+        .scalar_subquery()
+    )
+
+    filters = [Payment.organization_id == org_id]
+    if status is not None:
+        filters.append(Payment.status == status)
+    if overdue is True:
+        filters.extend([
+            Payment.status != PaymentStatus.CANCELLED,
+            Payment.due_date.is_not(None),
+            Payment.due_date < today,
+            balance > 0,
+        ])
+    elif overdue is False:
+        filters.append(or_(Payment.due_date.is_(None), Payment.due_date >= today, balance == 0))
+
+    needle = (q or "").strip()
+    if needle:
+        pattern = f"%{needle}%"
+        student_match = exists(
+            select(Student.id)
+            .where(
+                Student.organization_id == org_id,
+                Student.id == Payment.student_id,
+                or_(
+                    Student.first_name.ilike(pattern),
+                    Student.last_name.ilike(pattern),
+                    Student.phone.ilike(pattern),
+                ),
+            )
+            .correlate(Payment)
+        )
+        contact_match = exists(
+            select(StudentContact.id)
+            .join(Contact, Contact.id == StudentContact.contact_id)
+            .where(
+                StudentContact.organization_id == org_id,
+                StudentContact.student_id == Payment.student_id,
+                Contact.organization_id == org_id,
+                or_(Contact.full_name.ilike(pattern), Contact.phone.ilike(pattern)),
+            )
+            .correlate(Payment)
+        )
+        filters.append(or_(Payment.note.ilike(pattern), student_match, contact_match))
+
+    total = int(db.scalar(
+        select(func.count(Payment.id))
+        .outerjoin(transaction_totals, transaction_totals.c.payment_id == Payment.id)
+        .where(*filters)
+    ) or 0)
+
+    statement = (
+        select(
+            Payment,
+            Student.first_name.label("student_first_name"),
+            Student.last_name.label("student_last_name"),
+            Student.phone.label("student_phone"),
+            contact_name.label("contact_name"),
+            contact_phone.label("contact_phone"),
+            StudentSubscription.plan_id.label("plan_id"),
+            SubscriptionPlan.name.label("plan_name"),
+            adjusted.label("adjusted_amount_minor"),
+            paid_effective.label("paid_minor"),
+            refunded.label("refunded_minor"),
+            balance.label("balance_minor"),
+            credit.label("credit_minor"),
+        )
+        .join(Student, and_(Student.id == Payment.student_id, Student.organization_id == org_id))
+        .outerjoin(StudentSubscription, and_(
+            StudentSubscription.id == Payment.subscription_id,
+            StudentSubscription.organization_id == org_id,
+        ))
+        .outerjoin(SubscriptionPlan, and_(
+            SubscriptionPlan.id == StudentSubscription.plan_id,
+            SubscriptionPlan.organization_id == org_id,
+        ))
+        .outerjoin(transaction_totals, transaction_totals.c.payment_id == Payment.id)
+        .where(*filters)
+    )
+    if sort == "due":
+        statement = statement.order_by(Payment.due_date.is_(None), Payment.due_date, Payment.created_at.desc(), Payment.id)
+    elif sort == "student":
+        statement = statement.order_by(Student.first_name, Student.last_name, Payment.created_at.desc(), Payment.id)
+    else:
+        statement = statement.order_by(Payment.created_at.desc(), Payment.id)
+
+    rows = db.execute(statement.offset(offset).limit(limit)).all()
+    items = []
+    for row in rows:
+        payment = row[0]
+        items.append({
+            "id": payment.id,
+            "organization_id": payment.organization_id,
+            "student_id": payment.student_id,
+            "subscription_id": payment.subscription_id,
+            "plan_id": row.plan_id,
+            "plan_name": row.plan_name,
+            "student_name": " ".join(filter(None, [row.student_first_name, row.student_last_name])),
+            "student_phone": row.student_phone,
+            "contact_name": row.contact_name,
+            "contact_phone": row.contact_phone,
+            "amount_minor": payment.amount_minor,
+            "currency": payment.currency,
+            "status": payment.status,
+            "method": payment.method,
+            "due_date": payment.due_date,
+            "paid_at": payment.paid_at,
+            "note": payment.note,
+            "adjusted_amount_minor": int(row.adjusted_amount_minor or 0),
+            "paid_minor": int(row.paid_minor or 0),
+            "refunded_minor": int(row.refunded_minor or 0),
+            "balance_minor": int(row.balance_minor or 0),
+            "credit_minor": int(row.credit_minor or 0),
+        })
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 def list_payments(db: Session, org_id: UUID, student_id: UUID | None = None, status: PaymentStatus | None = None) -> list[Payment]:

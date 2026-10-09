@@ -836,6 +836,21 @@ class PaymentRead(ORMModel):
     credit_minor: int = 0
 
 
+class PaymentWorkspaceItem(PaymentRead):
+    plan_name: str | None = None
+    student_name: str
+    student_phone: str | None = None
+    contact_name: str | None = None
+    contact_phone: str | None = None
+
+
+class PaymentPage(BaseModel):
+    items: list[PaymentWorkspaceItem]
+    total: int
+    limit: int
+    offset: int
+
+
 class SubscriptionPlanChangeCreate(BaseModel):
     plan_id: UUID
     reason: str = Field(min_length=2, max_length=300)
