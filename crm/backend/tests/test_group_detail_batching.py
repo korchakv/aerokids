@@ -1,4 +1,4 @@
-from __future__ import annotations
+# Stage 3 regression: group detail query count must stay bounded as membership grows.\nfrom __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import date
