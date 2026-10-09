@@ -1,4 +1,4 @@
-# Stage 3 regression: payment pages must stay tenant-scoped and ledger-aggregated in SQL.\ndef _org(client, slug: str):
+# Rebased regression: payment pagination must pass with Stage 3 performance guards.\n# Stage 3 regression: payment pages must stay tenant-scoped and ledger-aggregated in SQL.\ndef _org(client, slug: str):
     response = client.post("/organizations", json={"name": slug, "slug": slug})
     assert response.status_code == 201, response.text
     return {"X-Organization-Id": response.json()["id"]}
