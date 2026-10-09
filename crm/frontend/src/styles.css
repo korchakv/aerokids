@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 48041)
-Total output lines: 2676
-
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-synthesis:none;--ak-bg:#030b0b;--ak-bg-glass:#030b0be8;--ak-surface:#071615;--ak-surface-2:#0b1d1c;--ak-border:#1d4240;--ak-text:#f4f4fa;--ak-text-soft:#b9c9c7;--ak-muted:#8ea8a5;--ak-muted-2:#55716e;--ak-accent:#16f5f2;--ak-accent-soft:#52c9c7;--ak-accent-strong:#2e8885;--ak-accent-text:#9fecea;--ak-primary-ink:#021212;--ak-overlay:#020812b8;--ak-overlay-strong:#020812c7;--ak-accent-shadow:#2e888566;--ak-accent-shadow-soft:#2e888520;--ak-accent-glow:#16f5f220;color:var(--ak-text);background:var(--ak-bg);color-scheme:dark}
 html[data-theme="light"]{--ak-bg:#f3f6f6;--ak-bg-glass:#ffffffea;--ak-surface:#ffffff;--ak-surface-2:#f8fbfb;--ak-border:#d5e0df;--ak-text:#182322;--ak-text-soft:#425653;--ak-muted:#657a77;--ak-muted-2:#81928f;--ak-accent:#0b8582;--ak-accent-soft:#197f7d;--ak-accent-strong:#116d6a;--ak-accent-text:#135f5d;--ak-primary-ink:#ffffff;--ak-overlay:#20302d66;--ak-overlay-strong:#20302d80;--ak-accent-shadow:#0b858233;--ak-accent-shadow-soft:#0b85821f;--ak-accent-glow:#0b85821f;color-scheme:light}
 *{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:250px 1fr}aside{position:sticky;top:0;height:100vh;padding:22px 16px;background:var(--ak-bg);border-right:1px solid var(--ak-surface);display:flex;flex-direction:column}.brand{display:flex;gap:12px;align-items:center;padding:8px 8px 24px}.mark{width:38px;height:38px;border-radius:12px;background:var(--ak-accent-strong);color:var(--ak-bg);display:grid;place-items:center;font-weight:900}.brand b{display:block}.brand small{display:block;color:var(--ak-muted);margin-top:2px}nav{display:grid;gap:4px}nav button{border:0;background:transparent;color:var(--ak-muted);text-align:left;padding:11px 12px;border-radius:10px;font:inherit;cursor:pointer}nav button:hover,nav button.active{background:var(--ak-surface);color:#fff}.asideFooter{margin-top:auto;padding:12px;color:var(--ak-muted-2);font-size:12px}main{padding:30px 34px 60px;max-width:1500px;width:100%}header{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:28px}.eyebrow{margin:0 0 5px;color:var(--ak-accent-strong);font-size:12px;text-transform:uppercase;letter-spacing:.1em;font-weight:800}h1,h2{margin:0}h1{font-size:32px}h2{font-size:20px}.headerActions{display:flex;gap:10px}button{font:inherit}.primary,.search,.link{border-radius:11px;padding:10px 14px;cursor:pointer}.primary{border:0;background:var(--ak-accent-strong);color:var(--ak-bg);font-weight:800}.search{border:1px solid var(--ak-bg);background:var(--ak-bg);color:var(--ak-text-soft)}.link{border:0;background:transparent;color:var(--ak-accent-strong)}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}.stats article,.panel{background:var(--ak-bg);border:1px solid var(--ak-surface);border-radius:16px}.stats article{padding:20px}.stats span,.stats small{color:var(--ak-muted);display:block}.stats strong{font-size:34px;display:block;margin:6px 0;color:#fff}.grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}.panel{padding:20px}.panel.wide{grid-row:span 2}.panelHead{display:flex;justify-content:space-between;align-items:start;margin-bottom:18px}.table{overflow:hidden}.row{display:grid;grid-template-columns:1.2fr .45fr 1.1fr .8fr 1fr;gap:12px;padding:13px 0;border-bottom:1px solid var(--ak-surface);align-items:center}.row span{color:var(--ak-muted)}.tableHead{font-size:12px;text-transform:uppercase;letter-spacing:.08em}.pill{justify-self:start;background:var(--ak-surface);padding:5px 8px;border-radius:999px;color:var(--ak-accent-soft)!important;font-size:12px}.timeline{display:grid;gap:4px;margin-top:14px}.timeline>div,.timelineButton{display:grid;grid-template-columns:58px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid var(--ak-surface)}.timelineButton{width:100%;border-top:0;border-left:0;border-right:0;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}.timelineButton:hover{background:var(--ak-bg)}.timeline time{color:var(--ak-accent-strong);font-weight:700}.timeline time small{display:block;color:var(--ak-muted);font-weight:400}.timeline p{margin:0}.timeline span{display:block;color:var(--ak-muted);font-size:13px;margin-top:2px}.suggestion{margin-top:14px;padding:16px;border-radius:13px;background:var(--ak-bg);display:grid;gap:8px}.suggestion strong{font-size:30px}.suggestion span{color:var(--ak-muted)}.suggestion .primary{margin-top:6px}@media(max-width:950px){.shell{grid-template-columns:76px 1fr}.brand div,nav button{font-size:0}.brand{padding-inline:0;justify-content:center}.mark{flex:0 0 auto}nav button:before{content:"•";font-size:20px}.asideFooter{display:none}.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.panel.wide{grid-row:auto}}@media(max-width:650px){main{padding:20px 14px 40px}.shell{display:block}aside{display:none}header{align-items:start;flex-direction:column}.stats{grid-template-columns:1fr 1fr}.stats article{padding:15px}.stats strong{font-size:28px}.panel{padding:16px}.row{grid-template-columns:1.2fr .4fr 1fr}.row span:nth-child(4),.row span:nth-child(5),.tableHead span:nth-child(4),.tableHead span:nth-child(5){display:none}}
@@ -101,7 +98,661 @@ html[data-theme="light"]{--ak-bg:#f3f6f6;--ak-bg-glass:#ffffffea;--ak-surface:#f
 @media(max-width:700px){.attendanceQuickActions{justify-content:flex-start}.attendanceButtons{display:grid;grid-template-columns:1fr 1fr}.attendanceButtons button{min-width:0}}
 
 /* Group list: one group per full-width row */
-.groupCardsPrimary{display:grid!important;grid-template-columns:1fr!important;gap:10px!important}.groupCardWide{display:grid!important;grid-template-columns:minmax(260px,1.5fr) minmax(170px,.9fr) minmax(150px,.8fr) 90px auto;align-items:center;gap:18px;width:100%;padding:14px 16px!important;text-align:left}.groupCardTitleBlock{display:flex;align-items:center;gap:12px;min-width:0}.groupCardTitleBlock>div{display:grid;gap:3px;min-width:0}.groupCardTitleBlock b{font-size:17px;line-height:1.2;color:var(--ak-accent-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupCardTitleBlock small{font-size:12px;color:var(--ak-muted)}.groupCardFact{display:grid;gap:3px;min-width:0}.groupCardFact small{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ak-muted-2)}.groupCardFact b{font-size:13px;line-height:1.35;color:var(--ak-accent-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupCardStudents b{font-size:15px}.groupCardOpen{justify-self:end;color:var(--ak-accent-soft);font-size:12px;white-space:nowrap}.groupTeacherAssign{display:flex;align-items:end;gap:10px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--ak-bg);border-radius:11px;background:var(--ak-bg)}.groupTeacherAssign label{display:grid;gap:5px;min-width:280px;color:var(--ak-muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em}.groupTeacherAssign select{padding:8px 10px;border:1px solid var(--ak-border);border-radius:9px;background:var(--ak-bg);color:var(--ak-accent-t…18041 tokens truncated…x;
+.groupCardsPrimary{display:grid!important;grid-template-columns:1fr!important;gap:10px!important}.groupCardWide{display:grid!important;grid-template-columns:minmax(260px,1.5fr) minmax(170px,.9fr) minmax(150px,.8fr) 90px auto;align-items:center;gap:18px;width:100%;padding:14px 16px!important;text-align:left}.groupCardTitleBlock{display:flex;align-items:center;gap:12px;min-width:0}.groupCardTitleBlock>div{display:grid;gap:3px;min-width:0}.groupCardTitleBlock b{font-size:17px;line-height:1.2;color:var(--ak-accent-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupCardTitleBlock small{font-size:12px;color:var(--ak-muted)}.groupCardFact{display:grid;gap:3px;min-width:0}.groupCardFact small{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ak-muted-2)}.groupCardFact b{font-size:13px;line-height:1.35;color:var(--ak-accent-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupCardStudents b{font-size:15px}.groupCardOpen{justify-self:end;color:var(--ak-accent-soft);font-size:12px;white-space:nowrap}.groupTeacherAssign{display:flex;align-items:end;gap:10px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--ak-bg);border-radius:11px;background:var(--ak-bg)}.groupTeacherAssign label{display:grid;gap:5px;min-width:280px;color:var(--ak-muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em}.groupTeacherAssign select{padding:8px 10px;border:1px solid var(--ak-border);border-radius:9px;background:var(--ak-bg);color:var(--ak-accent-text)}
+@media(max-width:1000px){.groupCardWide{grid-template-columns:minmax(220px,1fr) minmax(150px,.8fr) 80px auto}.groupCardWide .groupCardFact:nth-of-type(3){display:none}}
+@media(max-width:720px){.groupCardWide{grid-template-columns:1fr auto;gap:10px}.groupCardTitleBlock{grid-column:1}.groupCardFact{grid-column:1}.groupCardOpen{grid-column:2;grid-row:1 / span 3;align-self:center}.groupTeacherAssign{align-items:stretch;flex-direction:column}.groupTeacherAssign label{min-width:0}}
+
+/* Group page UX */
+.groupPageBackdrop{background:var(--ak-bg)!important;backdrop-filter:none!important;display:block!important;padding:0!important}
+.groupDetailDrawer{position:relative!important;inset:auto!important;overflow:auto!important}
+.groupPageTopbar{position:sticky;top:-22px;z-index:8;display:flex;justify-content:space-between;align-items:center;margin:-22px -28px 14px;padding:14px 28px;border-bottom:1px solid var(--ak-surface);background:rgba(7,20,30,.96);backdrop-filter:blur(10px)}
+.groupBackButton,.groupPageClose{border:1px solid var(--ak-surface-2);background:var(--ak-bg);color:var(--ak-accent-text);cursor:pointer}
+.groupBackButton{padding:9px 13px;border-radius:10px;font-weight:700}
+.groupBackButton:hover,.groupPageClose:hover{border-color:var(--ak-accent-soft);color:#fff}
+.groupPageClose{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;font-size:22px;line-height:1}
+.groupDetailIdentity{min-width:0}
+.groupDetailMeta{display:flex;flex-wrap:wrap;align-items:center;gap:7px 12px;margin-top:5px;color:var(--ak-muted);font-size:12px}
+.groupDetailMeta>span:not(:last-child)::after{content:"";display:inline-block;width:3px;height:3px;margin-left:12px;border-radius:50%;background:var(--ak-border);vertical-align:middle}
+.groupTeacherLink{padding:0;border:0;background:transparent;color:var(--ak-accent-strong);font:inherit;font-weight:700;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(99,211,227,.35);text-underline-offset:3px}
+.groupTeacherLink:hover{color:var(--ak-accent-text);text-decoration-color:currentColor}
+.groupTeacherAssign{align-items:end}
+.groupTeacherAssignActions{display:flex;gap:8px}
+.waitingSecondaryHead{align-items:flex-start!important}
+.groupCardWide{grid-template-columns:minmax(360px,1.45fr) minmax(190px,.75fr) minmax(180px,.7fr) 90px auto!important}
+.groupCardWide>div:first-child{justify-content:flex-start!important}
+.groupCardTitleBlock{justify-content:flex-start!important}
+.groupCardTitleBlock .groupCardIcon{flex:0 0 34px}
+.groupCardTitleBlock>div{flex:0 1 auto!important;width:auto!important}
+@media(max-width:1000px){
+  .groupPageTopbar{top:-18px;margin:-18px -18px 14px;padding:12px 18px}
+  .groupCardWide{grid-template-columns:minmax(280px,1fr) minmax(170px,.7fr) 80px auto!important}
+}
+@media(max-width:720px){
+  .groupPageTopbar{top:-16px;margin:-16px -16px 12px;padding:10px 16px}
+  .groupBackButton{padding:8px 10px}
+  .groupCardWide{grid-template-columns:1fr auto!important}
+  .groupTeacherAssignActions{width:100%}
+  .groupTeacherAssignActions button{flex:1}
+}
+
+/* AeroKids brand system — keep logo geometry unchanged, use one canonical asset */
+.brandLogo{width:46px;height:46px;flex:0 0 46px;border-radius:50%;object-fit:contain;display:block}
+.brandLogoLarge{width:56px;height:56px;flex-basis:56px}
+.brand b,.loginBrand b{color:var(--ak-accent-text);font-weight:800;letter-spacing:.01em}
+.loginScreen{background:radial-gradient(circle at 50% 18%,var(--ak-surface) 0,var(--ak-bg) 42%,var(--ak-bg) 100%)}
+.primary{box-shadow:0 8px 22px var(--ak-accent-shadow-soft)}
+.primary:hover{filter:brightness(1.06)}
+nav button.active{box-shadow:inset 3px 0 0 var(--ak-accent-strong)}
+@media(max-width:950px){.brandLogo{width:42px;height:42px;flex-basis:42px}.brand{justify-content:center}}
+
+/* Final AeroKids visual system */
+html,body{background:var(--ak-bg);color:var(--ak-text)}
+aside{background:var(--ak-surface);border-right-color:var(--ak-border)}
+.brandLogo{object-fit:contain;background:transparent;box-shadow:none}
+nav button{color:var(--ak-muted)}
+nav button:hover,nav button.active{background:var(--ak-surface-2);color:var(--ak-text)}
+nav button.active{box-shadow:inset 3px 0 0 var(--ak-accent)}
+.eyebrow,.link{color:var(--ak-accent)}
+.primary{background:var(--ak-accent);color:var(--ak-primary-ink);box-shadow:0 8px 22px var(--ak-accent-glow)}
+.search{border-color:var(--ak-border);background:var(--ak-surface);color:var(--ak-text-soft)}
+.panel,.stats article,.paymentStats article{background:var(--ak-surface-2);border-color:var(--ak-border)}
+input,select,textarea{accent-color:var(--ak-accent)}
+:focus-visible{outline-color:var(--ak-accent)}
+
+/* Theme switcher */
+.themeToggle{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:6px 10px 6px 7px;border:1px solid var(--ak-border);border-radius:11px;background:var(--ak-surface);color:var(--ak-text-soft);font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:border-color .18s ease,background .18s ease,color .18s ease}
+.themeToggle:hover{border-color:var(--ak-accent-soft);color:var(--ak-text)}
+.themeToggleTrack{position:relative;width:42px;height:24px;padding:2px;border-radius:999px;background:var(--ak-surface-2);border:1px solid var(--ak-border);display:flex;align-items:center}
+.themeToggleTrack i{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:var(--ak-accent);color:var(--ak-primary-ink);font-size:11px;font-style:normal;line-height:1;transform:translateX(0);transition:transform .2s ease}
+html[data-theme="light"] .themeToggleTrack i{transform:translateX(16px)}
+html[data-theme="light"] body,html[data-theme="light"] #root{background:var(--ak-bg);color:var(--ak-text)}
+html[data-theme="light"] .shell{background:var(--ak-bg);color:var(--ak-text)}
+html[data-theme="light"] .primary{background:var(--ak-accent);color:var(--ak-primary-ink)}
+html[data-theme="light"] nav button:hover,html[data-theme="light"] nav button.active{background:var(--ak-surface-2);color:var(--ak-text)}
+html[data-theme="light"] .stats strong,html[data-theme="light"] .suggestion strong{color:var(--ak-text)}
+html[data-theme="light"] .mark{color:var(--ak-primary-ink)}
+html[data-theme="light"] .attendanceButtons button.active{color:var(--ak-text)}
+html[data-theme="light"] .groupBackButton:hover,html[data-theme="light"] .groupPageClose:hover{color:var(--ak-text)}
+html[data-theme="light"] .groupModal input[type="date"]{color-scheme:light}
+html[data-theme="light"] .search,html[data-theme="light"] .themeToggle{background:var(--ak-surface);color:var(--ak-text-soft);border-color:var(--ak-border)}
+html[data-theme="light"] .panel,html[data-theme="light"] .stats article,html[data-theme="light"] .paymentStats article,html[data-theme="light"] .groupCard,html[data-theme="light"] .contactCard,html[data-theme="light"] .noteBox,html[data-theme="light"] .workflowBox,html[data-theme="light"] .groupModal,html[data-theme="light"] .drawer,html[data-theme="light"] .dayColumn,html[data-theme="light"] .lessonDetailsEditor{box-shadow:0 8px 28px rgba(36,63,60,.05)}
+html[data-theme="light"] input,html[data-theme="light"] select,html[data-theme="light"] textarea{background:var(--ak-surface);color:var(--ak-text);border-color:var(--ak-border);color-scheme:light}
+html[data-theme="light"] input::placeholder,html[data-theme="light"] textarea::placeholder{color:#8a9b98}
+html[data-theme="light"] .modalBackdrop,html[data-theme="light"] .drawerBackdrop{background:var(--ak-overlay-strong)}
+html[data-theme="light"] .groupPageBackdrop{background:var(--ak-bg)!important}
+html[data-theme="light"] .groupPageTopbar{background:rgba(255,255,255,.94)}
+html[data-theme="light"] .attendanceRow.unmarked{background:#fff8e7;border-color:#ddc482}
+html[data-theme="light"] .unmarkedBadge{background:#fff0bd;color:#7a5a08}
+html[data-theme="light"] .attendanceFooter small{color:#8a6812}
+html[data-theme="light"] .attendanceButtons button.late.active{background:#fff1b8;border-color:#c29b2e;color:#574100}
+html[data-theme="light"] .attendanceButtons button.absent.active{background:#ffe4e6;border-color:#d98991;color:#781f2a}
+html[data-theme="light"] .attendanceButtons button.present.active{background:#e4f4f1;border-color:#79aaa4;color:#174b46}
+html[data-theme="light"] .attendanceButtons button.excused.active{background:#e9f0ef;border-color:#9eb3b0;color:#314b48}
+html[data-theme="light"] .paymentStatus.paid{background:#e5f3f0;color:#17665f}
+html[data-theme="light"] .paymentStatus.pending{background:#fff4c8;color:#70570c}
+html[data-theme="light"] .paymentStatus.overdue{background:#ffe4e7;color:#8b2530}
+html[data-theme="light"] .syncBanner.error{background:#ffe9eb;color:#932f3a;border-color:#e5a1a8}
+@media(max-width:760px){.headerActions{width:100%;flex-wrap:wrap}.themeToggle{order:-1}.themeToggle>span:last-child{display:none}}
+
+/* Today dashboard */
+.todayDashboard{display:grid;gap:14px;max-width:1180px}.todayIntro{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;padding:2px 2px 4px}.todayIntro h2{font-size:24px}.todayTaskCount{display:grid;place-items:center;min-height:34px;padding:0 12px;border:1px solid var(--ak-border);border-radius:999px;background:var(--ak-surface);color:var(--ak-accent-text);font-size:13px;font-weight:800}.todaySectionHead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:10px}.todayLessonList,.todayActionList{display:grid}.todayLessonRow{display:flex;align-items:stretch;border-top:1px solid var(--ak-border)}.todayLessonRow:first-child{border-top:0}.todayLessonMain{flex:1;min-width:0;display:grid;grid-template-columns:68px minmax(0,1fr) auto;gap:14px;align-items:center;padding:13px 4px;border:0;background:transparent;color:var(--ak-text);text-align:left;cursor:pointer}.todayLessonMain:hover .todayActionArrow,.todayLessonMain:hover em{color:var(--ak-accent)}.todayLessonMain time{font-size:19px;font-weight:850;color:var(--ak-accent-text)}.todayLessonMain>span{display:grid;gap:3px;min-width:0}.todayLessonMain b{font-size:15px}.todayLessonMain small{color:var(--ak-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.todayLessonMain em{font-style:normal;color:var(--ak-muted);font-size:12px}.todayGroupLink{align-self:center;margin-left:8px;padding:7px 10px;border:1px solid var(--ak-border);border-radius:9px;background:var(--ak-surface);color:var(--ak-muted);cursor:pointer}.todayGroupLink:hover{border-color:var(--ak-accent-soft);color:var(--ak-text)}.todayTrialRow{width:100%;padding:0;border-left:0;border-right:0;border-bottom:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.todayTrialRow .todayLessonMain{pointer-events:none}.todayTrialRow .todayLessonMain b:after{content:"пробне";display:inline-block;margin-left:8px;padding:3px 6px;border-radius:999px;background:var(--ak-surface);color:var(--ak-accent-text);font-size:9px;text-transform:uppercase;letter-spacing:.05em;vertical-align:middle}.todayActionRow{width:100%;display:grid;grid-template-columns:86px minmax(0,1fr) 24px;gap:13px;align-items:center;padding:13px 4px;border:0;border-top:1px solid var(--ak-border);background:transparent;color:var(--ak-text);text-align:left;cursor:pointer}.todayActionRow:first-child{border-top:0}.todayActionRow:hover{background:var(--ak-surface)}.todayActionType{justify-self:start;padding:5px 8px;border-radius:999px;background:var(--ak-surface);color:var(--ak-accent-text);font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.05em}.todayActionType.payment{color:#d7b957}.todayActionType.payment.urgent{background:rgba(219,87,100,.12);color:#e48c95}.todayActionText{display:grid;gap:3px;min-width:0}.todayActionText b{font-size:14px}.todayActionText small{color:var(--ak-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.todayActionArrow{justify-self:end;color:var(--ak-muted);font-size:18px}.todayActionRow:hover .todayActionArrow{color:var(--ak-accent)}.todayEmpty{padding:20px 4px;color:var(--ak-muted);text-align:center}.todayEmpty.done{padding:28px 6px}.paymentFocused{position:relative;background:var(--ak-surface)!important;box-shadow:inset 3px 0 0 var(--ak-accent)}html[data-theme="light"] .todayActionType.payment{color:#806515}html[data-theme="light"] .todayActionType.payment.urgent{background:#ffe4e7;color:#8b2530}
+@media(max-width:720px){.todayIntro{align-items:flex-start;flex-direction:column}.todayLessonMain{grid-template-columns:55px minmax(0,1fr)}.todayLessonMain em{display:none}.todayGroupLink{margin-left:4px}.todayActionRow{grid-template-columns:76px minmax(0,1fr) 18px}.todayActionText small,.todayLessonMain small{white-space:normal}.todayIntro h2{font-size:21px}}
+
+/* Weekly lesson calendar */
+.scheduleToolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:10px}.scheduleNav{display:flex;gap:7px}.scheduleNav .search:disabled{opacity:.45;cursor:default}.weekGridConcrete{grid-template-columns:repeat(7,minmax(145px,1fr));gap:8px;overflow-x:auto;padding-bottom:4px}.scheduleDay{min-width:145px;padding:0!important;overflow:hidden}.scheduleDay.today{border-color:var(--ak-accent-soft);box-shadow:inset 0 3px 0 var(--ak-accent)}.scheduleDayHead{display:flex;justify-content:space-between;align-items:center;padding:10px 11px;border-bottom:1px solid var(--ak-border);background:var(--ak-surface)}.scheduleDayHead b{text-transform:capitalize;font-size:12px;color:var(--ak-muted)}.scheduleDayHead span{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;font-weight:850;font-size:13px}.scheduleDay.today .scheduleDayHead span{background:var(--ak-accent);color:var(--ak-primary-ink)}.scheduleDayLessons{display:grid;gap:7px;padding:8px}.weekGridConcrete .concreteLessonCard{display:grid;gap:5px;width:100%;padding:10px;border:1px solid var(--ak-border);border-radius:11px;background:var(--ak-surface-2);color:var(--ak-text);text-align:left;cursor:pointer}.weekGridConcrete .concreteLessonCard:hover{border-color:var(--ak-accent-soft);background:var(--ak-surface)}.scheduleCardTop{display:flex;align-items:center;justify-content:space-between;gap:8px}.scheduleCardTop time{font-size:15px;font-weight:900;color:var(--ak-accent-text)}.scheduleCardTop span{padding:3px 6px;border-radius:999px;background:var(--ak-surface);color:var(--ak-muted);font-size:10px}.weekGridConcrete .concreteLessonCard strong{font-size:12px;line-height:1.25}.weekGridConcrete .concreteLessonCard small{color:var(--ak-muted);font-size:11px;line-height:1.35}.weekGridConcrete .concreteLessonCard em{margin-top:3px;color:var(--ak-accent-soft);font-size:10px;font-style:normal}.scheduleDayEmpty{padding:18px 4px;color:var(--ak-muted-2);font-size:11px;text-align:center}.scheduleSideHint{margin:8px 0 14px;color:var(--ak-muted);font-size:12px;line-height:1.5}.recurringSettings{opacity:.94}.lessonJournalHead{display:grid;gap:10px}.lessonBackButton{justify-self:start;padding:0;border:0;background:transparent;color:var(--ak-accent-text);font:inherit;font-size:12px;font-weight:750;cursor:pointer}.lessonBackButton:hover{text-decoration:underline}.lessonJournalHead .panelHead{margin-bottom:8px}
+@media(max-width:1100px){.scheduleLayout{grid-template-columns:1fr}.scheduleSide{grid-template-columns:1fr 1fr}.weekGridConcrete{grid-template-columns:repeat(7,160px)}}
+@media(max-width:720px){.scheduleToolbar{align-items:flex-start;flex-direction:column}.scheduleNav{width:100%}.scheduleNav .search:nth-child(2){flex:1}.scheduleSide{grid-template-columns:1fr}.weekGridConcrete{grid-template-columns:repeat(7,150px)}}
+
+/* CRM typography and overflow audit */
+html{font-size:16px}body{font-size:14px;line-height:1.45}button,input,select,textarea{font-size:14px;line-height:1.35}small{font-size:12px;line-height:1.4}h1{font-size:clamp(27px,2.1vw,32px);line-height:1.12;letter-spacing:-.02em}h2{font-size:20px;line-height:1.22;letter-spacing:-.01em}h3{font-size:15px;line-height:1.3}.eyebrow{font-size:11.5px;line-height:1.25}.brand b{font-size:15px}.brand small{font-size:11.5px}nav button{font-size:14px}.primary,.search,.link{font-size:13.5px;line-height:1.25}.chip,.pill,.paymentStatus,.staffStatus,.studentState{font-size:12px}.tableHead,.paymentHead,.staffHead,.studentHead{font-size:11.5px;line-height:1.25}
+.panel,.panelHead,.row,.studentRow,.staffRow,.paymentRow,.groupCard,.groupMemberCard,.todayActionRow,.todayLessonRow{min-width:0}.panelHead>*,.row>*,.studentRow>*,.staffRow>*,.paymentRow>*,.todayActionText,.todayLessonMain>span,.staffIdentity>b,.studentIdentity>b{min-width:0}
+.row span,.studentRow span,.staffRow span,.paymentRow span,.groupCard span,.groupMemberCard span{overflow-wrap:anywhere}.studentIdentity small,.staffIdentity small,.paymentIdentity small{overflow-wrap:anywhere}
+input,select,textarea{min-width:0;max-width:100%}textarea{resize:vertical}
+.scheduleToolbar h2{font-size:19px}.scheduleDayHead b{font-size:12px}.scheduleDayHead span{font-size:13px}.scheduleCardTop time{font-size:15px}.scheduleCardTop span{font-size:11px}.weekGridConcrete .concreteLessonCard strong{font-size:13px;line-height:1.3}.weekGridConcrete .concreteLessonCard small{font-size:12px;line-height:1.4}.weekGridConcrete .concreteLessonCard em{font-size:12px;line-height:1.3}.scheduleDayEmpty{font-size:12px}.scheduleSideHint,.lessonBackButton{font-size:12.5px}.lessonMeta{font-size:13px}
+.attendanceRow{min-width:0}.attendanceButtons{display:flex;flex-wrap:wrap;gap:6px}.attendanceButtons button{font-size:12.5px;white-space:normal}.attendanceReasonInput{font-size:13px}.lessonDetailsEditor label{font-size:12.5px}.lessonDetailsEditor input,.lessonDetailsEditor textarea{font-size:14px}
+.todayIntro h2{font-size:22px}.todayTaskCount{font-size:12.5px}.todayLessonMain b,.todayActionText b{font-size:14px}.todayLessonMain small,.todayActionText small{font-size:12.5px}.todayLessonMain em{font-size:12px}.todayActionType{font-size:10.5px}
+.paymentStats strong,.reportStats strong,.reportBig{font-size:26px}.stats strong{font-size:30px}.suggestion strong{font-size:26px}
+.drawer h2{font-size:24px}.detailGrid b{font-size:15px}.history h3{font-size:14px}
+@media(max-width:1100px){main{padding-left:24px;padding-right:24px}.panel{padding:18px}.paymentRow{min-width:760px}}
+@media(max-width:720px){body{font-size:13.5px}h1{font-size:26px}h2{font-size:19px}.panel{padding:15px}.primary,.search,.link{font-size:13px}.todayIntro h2{font-size:20px}.weekGridConcrete{grid-template-columns:repeat(7,148px)}.weekGridConcrete .concreteLessonCard{padding:9px}.attendanceButtons button{flex:1 1 120px}}
+
+/* Attendance geometry pass */
+.attendanceLayout{grid-template-columns:330px minmax(0,1fr);gap:16px;align-items:start}
+.lessonListPanel,.attendanceLayout>.panel{min-width:0}
+.lessonListPanel{padding:18px}
+.lessonList{gap:8px}
+.lessonRow{min-height:62px;grid-template-columns:60px minmax(0,1fr) 42px;gap:10px;padding:10px 12px;border-color:var(--ak-border)}
+.lessonRow time{font-size:13px;line-height:1.25}
+.lessonRow span b{font-size:13px;line-height:1.25}
+.lessonRow span small,.lessonRow time small{font-size:11.5px;line-height:1.3}
+.lessonRow i{justify-self:end;font-size:12px}
+.lessonJournalHead{gap:12px}
+.lessonJournalHead .panelHead{align-items:center;gap:16px}
+.lessonJournalHead .panelHead>div:first-child{min-width:0}
+.attendanceQuickActions{display:grid;grid-template-columns:repeat(2,max-content);gap:8px}
+.attendanceQuickActions .search{min-height:40px;padding:9px 13px}
+.lessonDetailsEditor{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:16px;border-color:var(--ak-border);border-radius:14px}
+.lessonDetailsEditor label{min-width:0}
+.lessonDetailsEditor input,.lessonDetailsEditor textarea{height:74px;min-height:74px;padding:11px 12px;border-radius:10px;line-height:1.4;vertical-align:top}
+.lessonDetailsEditor input{display:block}
+.lessonDetailsActions{min-height:42px;margin-top:0}
+.lessonDetailsActions .search{min-height:40px;white-space:nowrap}
+.attendanceTable{margin-top:4px}
+.attendanceRow{grid-template-columns:minmax(210px,1fr) minmax(420px,520px);gap:18px;min-height:68px;padding:11px 4px}
+.attendanceRow>div:first-child{min-width:0}
+.attendanceButtons{display:grid;grid-template-columns:repeat(4,minmax(98px,1fr));gap:7px;width:100%;justify-content:stretch}
+.attendanceButtons button{min-width:0!important;min-height:36px;padding:7px 8px;border-color:var(--ak-border);white-space:normal;line-height:1.15}
+.attendanceReasonInput{grid-column:2;width:100%;min-height:38px}
+.attendanceFooter{min-height:64px;padding:10px 14px;border-radius:14px}
+.attendanceFooter .primary{min-height:40px;padding:10px 15px}
+@media(max-width:1200px){
+  .attendanceRow{grid-template-columns:minmax(180px,1fr) minmax(380px,470px)}
+  .attendanceButtons{grid-template-columns:repeat(2,minmax(130px,1fr))}
+}
+@media(max-width:1050px){
+  .attendanceLayout{grid-template-columns:1fr}
+  .lessonListPanel{order:2}
+  .attendanceRow{grid-template-columns:minmax(180px,1fr) minmax(420px,520px)}
+  .attendanceButtons{grid-template-columns:repeat(4,minmax(98px,1fr))}
+}
+@media(max-width:760px){
+  .lessonJournalHead .panelHead{align-items:flex-start;flex-direction:column}
+  .attendanceQuickActions{grid-template-columns:1fr 1fr;width:100%}
+  .lessonDetailsEditor{grid-template-columns:1fr}
+  .lessonDetailsActions{flex-direction:column;align-items:stretch}
+  .attendanceRow{grid-template-columns:1fr;gap:9px;padding:13px 0}
+  .attendanceButtons{grid-template-columns:1fr 1fr}
+  .attendanceReasonInput{grid-column:1}
+}
+
+.attendanceReasonWrap{grid-column:2;display:grid;gap:6px;width:100%;justify-self:end}.attendanceReasonWrap .attendanceReasonInput{grid-column:auto}.attendanceChargeChoice{display:flex!important;align-items:center;justify-content:flex-end;gap:7px;color:var(--ak-muted)!important;font-size:12px!important;text-transform:none!important;letter-spacing:0!important}.attendanceChargeChoice input{width:15px!important;height:15px!important;margin:0}.policyFields{margin-top:10px}.policyFields label{min-width:0}.policyFields select{width:100%}
+@media(max-width:760px){.attendanceReasonWrap{grid-column:1}.attendanceChargeChoice{justify-content:flex-start}.policyFields{grid-template-columns:1fr}}
+
+/* Group compact rows and weekly journal v2 */
+aside{display:flex!important;flex-direction:column!important}.asideFooter{margin-top:auto!important;display:grid;gap:9px;padding-top:12px}.asideFooter small{color:var(--ak-muted-2);font-size:10.5px}.asideThemeToggle{width:100%;justify-content:flex-start!important;padding:8px 9px!important}.asideThemeToggle>span:last-child{display:inline!important}
+.groupCandidateRows,.groupMemberList{display:grid;gap:8px}.groupMemberSectionHead{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 2px}.groupMemberSectionHead>div{display:flex;align-items:baseline;gap:9px}.groupMemberSectionHead b{font-size:14px}.groupMemberSectionHead small{color:var(--ak-muted);font-size:11px}
+.groupCandidateMemberRow{display:grid;grid-template-columns:minmax(250px,1.4fr) minmax(220px,1fr) auto;align-items:center;gap:14px;padding:10px 12px!important;border-color:var(--ak-accent-shadow)!important;background:var(--ak-accent-glow)!important}.candidateRowMatch{display:grid;justify-items:start;gap:4px;min-width:0}.candidateRowMatch small{color:var(--ak-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.groupDetailDrawer .groupMemberCardCompact{display:grid!important;grid-template-columns:minmax(270px,1.15fr) minmax(250px,.9fr) minmax(300px,1.15fr)!important;grid-template-areas:none!important;gap:9px!important;align-items:stretch!important;padding:9px 10px!important}.groupMemberIdentityCell{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}.groupMemberIdentityCell .groupMemberTop{min-width:0}.groupMemberIdentityCell .groupMemberTop>div{min-width:0}.groupMemberIdentityCell small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.groupMemberMetricButton,.groupMemberMetricStatic{display:grid;align-content:center;gap:2px;width:100%;min-width:0;padding:8px 10px;border:1px solid var(--ak-border);border-radius:10px;background:var(--ak-surface-2);color:var(--ak-text);text-align:left}.groupMemberMetricButton{cursor:pointer}.groupMemberMetricButton:hover{border-color:var(--ak-accent-soft);background:var(--ak-surface)}.groupMemberMetricButton small,.groupMemberMetricStatic small{font-size:10.5px;text-transform:uppercase;letter-spacing:.045em;color:var(--ak-muted)}.groupMemberMetricButton b,.groupMemberMetricStatic b{font-size:13px}.groupMemberMetricButton em,.groupMemberMetricStatic em{font-size:11px;font-style:normal;color:var(--ak-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.groupMemberMetricButton i{margin-top:2px;font-size:10.5px;font-style:normal;color:var(--ak-accent-soft)}.groupMemberFinanceCell{display:grid;gap:5px;min-width:0}.memberPaymentsInline{margin:0!important}.memberPaymentsInline summary{padding:1px 3px!important;font-size:10.5px!important;color:var(--ak-muted)}.memberPaymentHistoryRow{display:grid;grid-template-columns:1fr auto;gap:9px;width:100%;padding:6px 7px;border:0;border-top:1px solid var(--ak-border);background:transparent;color:var(--ak-text);text-align:left;cursor:pointer}.memberPaymentHistoryRow:hover{background:var(--ak-surface)}.memberPaymentHistoryRow span,.memberPaymentHistoryRow b{display:grid;font-size:11px}.memberPaymentHistoryRow small{font-size:10px;color:var(--ak-muted);font-weight:400}
+.attendanceWeekHead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.attendanceWeekHead h2{font-size:17px}.attendanceWeekNav{display:grid;grid-template-columns:auto 1fr auto;gap:6px;margin:10px 0 12px}.attendanceWeekNav .search{min-width:0;padding:7px 9px}.lessonRow{position:relative}.lessonRow time{display:grid;gap:1px}.lessonRow time>b{font-size:10.5px;color:var(--ak-text-soft)}.lessonRow.completed{border-color:rgba(54,190,143,.28);background:rgba(54,190,143,.055)}.lessonRow.completed>i{color:#78d8b5}.lessonRow.missed{border-color:rgba(226,116,126,.30);background:rgba(226,116,126,.045)}.lessonRow.missed>i{color:#e88791}.lessonRow.planned>i{color:var(--ak-muted)}.lessonRow.active{box-shadow:inset 3px 0 0 var(--ak-accent)}.lessonRow span small{line-height:1.3}.lessonSaveNotice{position:sticky;top:8px;z-index:9;justify-self:end;width:max-content;margin:0 0 8px auto;padding:8px 11px;border:1px solid var(--ak-accent-strong);border-radius:999px;background:var(--ak-surface);color:var(--ak-accent-text);font-size:12px;font-weight:800;box-shadow:0 8px 22px var(--ak-accent-shadow-soft)}.lessonMeta b{color:var(--ak-text);font-weight:800}.attendanceRow.focusedStudent{border-radius:10px;background:var(--ak-accent-glow);box-shadow:inset 3px 0 0 var(--ak-accent)}
+.searchModal{max-height:min(760px,86vh);overflow:auto}.searchResults button small{white-space:normal}.searchResults button i{max-width:180px;text-align:right}
+@media(max-width:1100px){.groupDetailDrawer .groupMemberCardCompact{grid-template-columns:1fr 1fr!important}.groupMemberIdentityCell{grid-column:1/-1}.groupMemberFinanceCell{min-width:0}}
+@media(max-width:760px){.groupCandidateMemberRow{grid-template-columns:1fr}.groupDetailDrawer .groupMemberCardCompact{grid-template-columns:1fr!important}.groupMemberIdentityCell{grid-column:auto;align-items:flex-start}.groupMemberMetricButton em,.groupMemberMetricStatic em,.groupMemberIdentityCell small{white-space:normal}.asideThemeToggle>span:last-child{display:inline!important}}
+
+/* Completed lesson protocol */
+.lessonEditButton{align-self:flex-start;min-height:34px;padding:7px 11px;border:1px solid var(--ak-border);border-radius:9px;background:var(--ak-surface);color:var(--ak-accent-text);font:inherit;font-size:12px;font-weight:750;cursor:pointer}.lessonEditButton:hover{border-color:var(--ak-accent-soft);background:var(--ak-surface-2)}
+.attendanceFooterActions{display:flex;align-items:center;gap:8px}.lessonProtocol{display:grid;gap:14px}.lessonProtocolSummary{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:10px}.lessonProtocolSummary>div{display:grid;gap:5px;min-height:78px;padding:13px 14px;border:1px solid var(--ak-border);border-radius:12px;background:var(--ak-surface-2)}.lessonProtocolSummary small{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ak-muted)}.lessonProtocolSummary strong{font-size:14px;line-height:1.45;white-space:pre-wrap;font-weight:650}
+.lessonProtocolTable{overflow:hidden;border:1px solid var(--ak-border);border-radius:12px}.lessonProtocolRow{display:grid;grid-template-columns:minmax(220px,1.2fr) minmax(140px,.55fr) minmax(220px,1fr);gap:14px;align-items:center;min-height:56px;padding:9px 13px;border-top:1px solid var(--ak-border)}.lessonProtocolRow:first-child{border-top:0}.lessonProtocolHead{min-height:38px;background:var(--ak-surface-2);color:var(--ak-muted);font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.045em}.protocolStudent{display:flex;align-items:center;gap:10px;min-width:0}.protocolStudent>i{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:var(--ak-surface-2);color:var(--ak-accent-text);font-style:normal;font-weight:850}.protocolStudent>b{display:grid;min-width:0;font-size:13px}.protocolStudent small{font-size:11px;color:var(--ak-muted);font-weight:400}.protocolStatus{display:inline-flex;width:max-content;padding:5px 8px;border-radius:999px;font-size:11px}.protocolStatus.present{background:rgba(54,190,143,.12);color:#6fd2ae}.protocolStatus.late{background:rgba(223,181,75,.13);color:#d5b65f}.protocolStatus.absent{background:rgba(226,116,126,.12);color:#df828c}.protocolStatus.excused{background:var(--ak-accent-glow);color:var(--ak-accent-text)}.protocolStatus.unmarked{background:var(--ak-surface-2);color:var(--ak-muted)}.protocolNote{font-size:12px;color:var(--ak-text-soft);overflow-wrap:anywhere}.lessonProtocolRow.focusedStudent{background:var(--ak-accent-glow);box-shadow:inset 3px 0 0 var(--ak-accent)}
+.lessonProtocolFooter{display:flex;flex-wrap:wrap;gap:8px}.lessonProtocolFooter span{padding:7px 10px;border:1px solid var(--ak-border);border-radius:999px;background:var(--ak-surface-2);color:var(--ak-muted);font-size:11px}.lessonProtocolFooter b{color:var(--ak-text);font-size:12px}
+@media(max-width:760px){.lessonProtocolSummary{grid-template-columns:1fr}.lessonProtocolTable{overflow-x:auto}.lessonProtocolRow{min-width:650px}.attendanceFooterActions{width:100%;justify-content:flex-end}.attendanceFooter{align-items:flex-start;flex-direction:column}}
+
+.leadDirectEnrollmentStep{border-color:var(--ak-accent-soft)!important}.leadDirectEnrollmentStep .softPreferenceHint{margin-top:0}.leadDirectEnrollmentStep select{width:100%}
+
+/* Kanban fit-screen + closed dock */
+.kanbanBoard{display:grid;gap:10px;min-width:0}.leadKanban{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:8px!important;overflow:visible!important;padding:2px 0 4px!important}.kanbanColumn{min-width:0!important;min-height:430px!important;padding:8px!important;border-radius:13px!important}.kanbanColumnHead{gap:6px!important;padding:3px 2px 8px!important}.kanbanColumnHead>div{grid-template-columns:7px minmax(0,1fr)!important;gap:1px 6px!important}.kanbanColumnHead i{width:7px!important;height:7px!important}.kanbanColumnHead b{font-size:11.5px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kanbanColumnHead span{font-size:9.5px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kanbanColumnHead>strong{min-width:22px!important;height:22px!important;font-size:10px!important}.kanbanCards{gap:7px!important;margin-top:7px!important}.leadKanbanCard{padding:9px!important;border-radius:10px!important;box-shadow:none!important}.kanbanCardTop{grid-template-columns:28px minmax(0,1fr) auto!important;gap:6px!important}.leadMiniAvatar{width:28px!important;height:28px!important;border-radius:8px!important;font-size:11px}.kanbanCardTop b{font-size:11.5px}.kanbanCardTop small{font-size:9.5px}.kanbanMore{font-size:13px!important}.kanbanMeta{gap:3px!important;margin-top:6px!important}.kanbanMeta span{padding:3px 5px!important;font-size:8.5px!important}.kanbanNextAction{gap:5px!important;margin-top:6px!important;padding:6px 7px!important;border-radius:7px!important;font-size:9.5px!important;line-height:1.25!important}.kanbanNextAction i{width:6px!important;height:6px!important;margin-top:3px!important}.kanbanPhone{margin-top:6px!important;font-size:9.5px!important}.kanbanComment{display:none!important}.kanbanEmpty{min-height:66px!important;padding:8px!important;font-size:9.5px!important}.closedKanbanDock{border:1px solid var(--ak-border);border-radius:11px;background:var(--ak-surface-2);overflow:hidden;transition:border-color .15s ease}.closedKanbanDock.dragOver{border-color:#d96c75;box-shadow:0 0 0 2px rgba(217,108,117,.10)}.closedKanbanToggle{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;padding:8px 11px;border:0;background:transparent;color:var(--ak-text);cursor:pointer;text-align:left}.closedKanbanToggle>span{display:flex;align-items:center;gap:7px;min-width:0}.closedKanbanToggle i{width:7px;height:7px;border-radius:50%;background:#d96c75}.closedKanbanToggle b{font-size:11.5px}.closedKanbanToggle small{font-size:9.5px;color:var(--ak-muted)}.closedKanbanToggle strong{display:grid;place-items:center;min-width:22px;height:22px;border-radius:999px;background:var(--ak-surface);font-size:10px}.closedKanbanToggle em{font-size:10px;color:var(--ak-muted);font-style:normal}.closedKanbanContent{padding:0 8px 8px}.closedKanbanContent>.kanbanColumn{min-height:0!important;background:transparent!important;border:0!important;padding:0!important}.closedKanbanContent .kanbanColumnHead{display:none}.closedKanbanContent .kanbanCards{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));display:grid}.closedKanbanContent .kanbanEmpty{grid-column:1/-1}
+@media(max-width:1400px){.leadKanban{grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:6px!important}.kanbanColumn{padding:6px!important}.leadKanbanCard{padding:7px!important}.kanbanMeta .locationBadge,.kanbanMeta .levelBadge{display:none}.kanbanPhone{display:none}.kanbanColumnHead span{display:none}}
+@media(max-width:1000px){.leadKanban{grid-template-columns:repeat(3,minmax(0,1fr))!important}.kanbanColumn{min-height:300px!important}}
+@media(max-width:700px){.leadKanban{grid-template-columns:1fr!important}.closedKanbanToggle small{display:none}}
+
+/* Group readability and student attendance view */
+.groupDetailDrawer .groupMemberList,.groupDetailDrawer .groupCandidatePicker{width:min(100%,1480px);margin-left:auto;margin-right:auto}.groupDetailDrawer .groupMemberCardCompact{grid-template-columns:minmax(250px,.9fr) minmax(250px,.8fr) minmax(360px,1.15fr)!important;gap:8px!important;padding:8px 9px!important}.groupMemberIdentityCell{align-items:center}.groupMemberIdentityCell .groupMemberTop{gap:9px}.groupMemberIdentityCell .groupMemberTop small{font-size:10.5px}.groupMemberOpen{white-space:nowrap}.groupMemberMetricButton{min-height:68px;padding:8px 10px}.groupMemberMetricButton b{font-size:13.5px}.groupMemberMetricButton em{font-size:10.8px}.groupMemberFinanceCell{overflow:hidden;gap:0!important;border:1px solid var(--ak-border);border-radius:10px;background:var(--ak-surface-2)}.groupMemberFinanceCell>.groupMemberMetricButton{border:0;border-radius:0;background:transparent}.memberPaymentsInline{border-top:1px solid var(--ak-border);padding:3px 7px 5px}.memberPaymentsInline summary{padding:3px 0!important}.groupMemberCardCompact .candidateAvatar{width:30px;height:30px;flex-basis:30px}.groupMemberSectionHead{margin-top:2px}
+.leadCancelBeforeHistory{display:flex;justify-content:flex-end;margin:12px 0 4px;padding-top:10px;border-top:1px solid var(--ak-border)}.leadCancelBeforeHistory .dangerSoft{font-size:12px}
+.studentAttendanceOverview{display:grid;gap:14px}.studentAttendanceHero{display:grid;gap:10px}.studentAttendanceTitle{display:flex;align-items:center;gap:10px}.studentAttendanceTitle>span{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--ak-surface-2);color:var(--ak-accent-text);font-weight:900}.studentAttendanceTitle>div{display:grid;gap:1px}.studentAttendanceTitle h2{margin:0}.studentAttendanceTitle small{color:var(--ak-muted)}.studentAttendanceStats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.studentAttendanceStats article{display:grid;gap:2px;padding:10px 11px;border:1px solid var(--ak-border);border-radius:10px;background:var(--ak-surface-2)}.studentAttendanceStats small{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ak-muted)}.studentAttendanceStats strong{font-size:21px;line-height:1.1}.studentAttendanceStats span{font-size:10.5px;color:var(--ak-muted)}
+.studentAttendanceHistory{overflow:hidden;border:1px solid var(--ak-border);border-radius:11px}.studentAttendanceHistoryHead,.studentAttendanceHistoryRow{display:grid;grid-template-columns:135px minmax(220px,1fr) 145px minmax(160px,.75fr) 80px;gap:10px;align-items:center;padding:8px 11px}.studentAttendanceHistoryHead{min-height:34px;background:var(--ak-surface-2);color:var(--ak-muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.045em}.studentAttendanceHistoryRow{min-height:58px;border-top:1px solid var(--ak-border)}.studentAttendanceHistoryRow time,.studentAttendanceHistoryRow>span{display:grid;gap:1px;min-width:0}.studentAttendanceHistoryRow time b{font-size:10.5px}.studentAttendanceHistoryRow time span,.studentAttendanceHistoryRow small{font-size:10.5px;color:var(--ak-muted)}.studentAttendanceHistoryRow>span>b{font-size:12px}.studentAttendanceHistoryRow .link{justify-self:end}
+@media(max-width:1200px){.groupDetailDrawer .groupMemberCardCompact{grid-template-columns:1fr 1fr!important}.groupMemberFinanceCell{grid-column:1/-1}.studentAttendanceStats{grid-template-columns:repeat(2,1fr)}.studentAttendanceHistory{overflow-x:auto}.studentAttendanceHistoryHead,.studentAttendanceHistoryRow{min-width:780px}}
+@media(max-width:760px){.groupDetailDrawer .groupMemberCardCompact{grid-template-columns:1fr!important}.groupMemberFinanceCell{grid-column:auto}.studentAttendanceStats{grid-template-columns:1fr 1fr}}
+
+/* Simplified funnel controls */
+.kanbanSummarySimple{display:flex!important;align-items:center;gap:8px;flex-wrap:wrap}.kanbanSummaryStat{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--ak-border);border-radius:999px;background:var(--ak-surface-2);color:var(--ak-text-soft);font-size:11px}.kanbanSummaryStat strong{display:grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:var(--ak-surface);color:var(--ak-text);font-size:11px}.kanbanSummaryStat.attention{border-color:rgba(226,116,126,.28)}.kanbanSummaryStat.attention strong{background:rgba(226,116,126,.14);color:#d96c75}.kanbanSummarySimple .kanbanHint{margin-left:2px}.leadsHead{align-items:flex-start!important}.leadControls{align-items:flex-end!important}
+
+.singleLocationField{display:flex;align-items:center;min-height:42px;padding:10px 12px;border:1px solid var(--ak-border);border-radius:10px;background:var(--ak-surface-2);color:var(--ak-text);font-size:13px;font-weight:650}
+
+/* Semantic CRM actions */
+.kanbanNextAction{align-items:center!important}.kanbanNextAction>i{display:grid!important;place-items:center!important;width:22px!important;height:22px!important;margin:0!important;border-radius:7px!important;font-style:normal!important;font-size:11px!important;font-weight:900!important}.kanbanNextAction>span{display:grid;gap:1px;min-width:0}.kanbanNextAction>span>b{font-size:9px;text-transform:uppercase;letter-spacing:.045em}.kanbanNextAction>span>small{font-size:10px;line-height:1.25;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kanbanNextAction.action-call{background:rgba(54,145,190,.09);color:#78bfe0}.kanbanNextAction.action-call>i{background:rgba(54,145,190,.15);color:#8ac9e6}
+.kanbanNextAction.action-trial{background:rgba(146,102,224,.09);color:#b8a1ec}.kanbanNextAction.action-trial>i{background:rgba(146,102,224,.15);color:#c5b1ef}
+.kanbanNextAction.action-decision{background:rgba(219,166,67,.10);color:#d8b86e}.kanbanNextAction.action-decision>i{background:rgba(219,166,67,.16);color:#e1c37c}
+.kanbanNextAction.action-group{background:rgba(42,165,137,.09);color:#72cbb5}.kanbanNextAction.action-group>i{background:rgba(42,165,137,.15);color:#7bd1bc}
+.kanbanNextAction.action-closed{background:rgba(128,137,144,.08);color:var(--ak-muted)}.kanbanNextAction.action-closed>i{background:rgba(128,137,144,.13)}
+.kanbanNextAction.overdue{background:rgba(217,108,117,.11)!important;color:#df858e!important}.kanbanNextAction.overdue>i{background:rgba(217,108,117,.18)!important;color:#e88f98!important}
+.actionReminder{border-left:3px solid var(--ak-border)!important}.actionReminderLabel{display:flex!important;align-items:center;gap:7px!important}.actionReminderLabel i{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;font-style:normal;font-size:11px;font-weight:900}.actionReminder.call{border-left-color:#4fa0c8!important}.actionReminder.call i{background:rgba(54,145,190,.14);color:#78bfe0}.actionReminder.trial{border-left-color:#9266e0!important}.actionReminder.trial i{background:rgba(146,102,224,.14);color:#b8a1ec}.actionReminder.decision{border-left-color:#dba643!important}.actionReminder.decision i{background:rgba(219,166,67,.14);color:#d8b86e}.actionReminder.group{border-left-color:#2aa589!important}.actionReminder.group i{background:rgba(42,165,137,.14);color:#72cbb5}.actionReminder.overdue{border-left-color:#d96c75!important}.actionReminder.overdue i{background:rgba(217,108,117,.15);color:#df858e}
+.actionTag{display:flex!important;align-items:center;gap:6px}.actionTag>i{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;font-style:normal;font-size:10px;font-weight:900}.actionTag.action-call>i{background:rgba(54,145,190,.14);color:#78bfe0}.actionTag.action-trial>i{background:rgba(146,102,224,.14);color:#b8a1ec}.actionTag.action-decision>i{background:rgba(219,166,67,.14);color:#d8b86e}.actionTag.action-group>i{background:rgba(42,165,137,.14);color:#72cbb5}.actionTag.overdue>i{background:rgba(217,108,117,.15);color:#df858e}
+.todayActionType.action-call{border-color:rgba(54,145,190,.22)!important;color:#78bfe0!important}.todayActionType.action-trial{border-color:rgba(146,102,224,.22)!important;color:#b8a1ec!important}.todayActionType.action-decision{border-color:rgba(219,166,67,.22)!important;color:#d8b86e!important}.todayActionType.action-group{border-color:rgba(42,165,137,.22)!important;color:#72cbb5!important}
+html[data-theme="light"] .kanbanNextAction.action-call{color:#26749b}.kanbanNextAction.action-trial{ }.trialSummary>span{color:var(--ak-muted)!important}
+
+/* Inline expanding global search */
+.headerActions{position:relative;align-items:center}
+.globalSearchShell{position:relative;width:94px;min-width:94px;transition:width .2s ease;z-index:80}
+.globalSearchShell.open{width:min(420px,42vw)}
+.globalSearchTrigger{width:100%;white-space:nowrap}
+.globalSearchBar{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px;height:42px;padding:0 8px 0 11px;border:1px solid var(--ak-border);border-radius:11px;background:var(--ak-surface);box-shadow:0 8px 24px var(--ak-accent-shadow-soft);animation:searchOpen .18s ease}
+.globalSearchBar>span{color:var(--ak-muted);font-size:15px}
+.globalSearchBar input{min-width:0;width:100%;height:100%;padding:0;border:0;outline:0;background:transparent;color:var(--ak-text);font:inherit;font-size:13px}
+.globalSearchBar input::placeholder{color:var(--ak-muted-2)}
+.globalSearchBar button{display:grid;place-items:center;width:27px;height:27px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--ak-muted);font-size:18px;cursor:pointer}
+.globalSearchBar button:hover{background:var(--ak-surface-2);color:var(--ak-text)}
+.globalSearchDropdown{position:absolute;right:0;top:calc(100% + 7px);width:min(560px,calc(100vw - 290px));max-height:min(610px,70vh);overflow:auto;padding:8px;border:1px solid var(--ak-border);border-radius:13px;background:var(--ak-surface);box-shadow:0 22px 60px rgba(0,0,0,.18);animation:searchDrop .16s ease;z-index:100}
+.searchHint.compact{padding:16px 10px;font-size:12px}
+.compactResults{margin-top:7px!important;gap:4px!important}
+.compactResults:first-of-type{margin-top:0!important}
+.compactResults h3{padding:3px 4px;margin:0 0 2px!important;font-size:10px!important}
+.compactResults button{padding:8px 9px!important;border-radius:9px!important}
+.compactResults button b{font-size:12px}
+.compactResults button small{font-size:10.5px;line-height:1.3}
+.compactResults button i{font-size:10.5px!important;white-space:nowrap}
+@keyframes searchOpen{from{opacity:.7;transform:scaleX(.92);transform-origin:right}to{opacity:1;transform:scaleX(1)}}
+@keyframes searchDrop{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:950px){.globalSearchShell.open{width:min(360px,55vw)}.globalSearchDropdown{width:min(520px,calc(100vw - 110px))}}
+@media(max-width:650px){.globalSearchShell{width:100%}.globalSearchShell.open{width:100%}.globalSearchDropdown{position:fixed;left:10px;right:10px;top:78px;width:auto;max-height:65vh}.headerActions{width:100%;flex-wrap:wrap}.globalSearchShell{order:-1}}
+
+/* CRM responsive system v3 */
+html,body,#root{max-width:100%;overflow-x:hidden}
+.shell,main,.panel,.stats article,.drawer,.groupModal{min-width:0}
+button,input,select,textarea{max-width:100%}
+img,svg{max-width:100%}
+.table{max-width:100%}
+
+@media(min-width:1501px){
+  main{max-width:1680px;padding-left:36px;padding-right:36px}
+}
+
+@media(max-width:1280px){
+  .shell{grid-template-columns:210px minmax(0,1fr)}
+  aside{padding:18px 12px}
+  .brand{padding:6px 6px 18px}
+  nav button{padding:10px}
+  main{padding:24px 22px 54px;max-width:none}
+  header{gap:14px;margin-bottom:22px}
+  h1{font-size:28px}
+  .panel{padding:16px}
+  .stats{gap:10px}
+  .stats article{padding:16px}
+  .stats strong{font-size:30px}
+  .grid,.groupsLayout,.paymentsLayout,.scheduleLayout,.attendanceLayout,.settingsLayout{gap:12px}
+  .todayDashboard{max-width:none}
+  .drawer{width:min(460px,46vw)}
+  .groupDetailDrawer{width:min(980px,82vw)!important}
+  .groupCardInfo{grid-template-columns:1fr}
+  .groupCardsPrimary{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+  .studentAttendanceHistoryHead,.studentAttendanceHistoryRow{grid-template-columns:120px minmax(180px,1fr) 130px minmax(150px,.75fr) 72px}
+}
+
+@media(max-width:1024px){
+  .shell{grid-template-columns:176px minmax(0,1fr)}
+  aside{padding:16px 10px}
+  .brand{gap:8px}
+  .brand small{display:none}
+  nav{gap:3px}
+  nav button{font-size:12px!important;padding:9px 10px}
+  nav button:before{content:none!important}
+  .asideFooter{display:grid!important;padding:10px 4px}
+  .asideThemeToggle>span:last-child{font-size:11px}
+  main{padding:20px 18px 48px}
+  header{align-items:flex-start}
+  .headerActions{justify-content:flex-end;flex-wrap:wrap}
+  .orgSwitcher{width:auto!important;order:0!important}
+  .orgSwitcher select{max-width:190px}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid,.groupsLayout,.paymentsLayout,.scheduleLayout,.attendanceLayout,.settingsLayout{grid-template-columns:1fr!important}
+  .groupsSide,.scheduleSide{grid-template-columns:1fr 1fr}
+  .weekGridConcrete{grid-template-columns:repeat(7,150px);overflow-x:auto}
+  .leadKanban{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .kanbanColumn{min-height:300px!important}
+  .groupDetailDrawer{width:min(860px,92vw)!important}
+  .groupDetailDrawer .groupMemberCardCompact{grid-template-columns:1fr 1fr!important}
+  .groupMemberFinanceCell{grid-column:1/-1}
+  .lessonProtocolSummary{grid-template-columns:1fr 1fr}
+  .studentAttendanceStats{grid-template-columns:repeat(2,1fr)}
+  .studentAttendanceHistory{overflow-x:auto}
+  .studentAttendanceHistoryHead,.studentAttendanceHistoryRow{min-width:760px}
+  .paymentRow{min-width:900px}
+  .modalBackdrop{padding:18px}
+  .groupModal{width:min(720px,96vw);max-height:90vh;overflow:auto}
+}
+
+@media(max-width:720px){
+  body{padding-bottom:76px}
+  .shell{display:block!important}
+  aside{
+    display:block!important;
+    position:fixed!important;
+    left:0;right:0;top:auto!important;bottom:0;
+    z-index:120;
+    width:100%;height:auto!important;
+    padding:6px 8px calc(6px + env(safe-area-inset-bottom));
+    border-right:0;border-top:1px solid var(--ak-border);
+    background:var(--ak-bg-glass);
+    backdrop-filter:blur(16px);
+  }
+  .brand,.asideFooter{display:none!important}
+  nav{
+    display:flex!important;
+    gap:4px;
+    overflow-x:auto;
+    scrollbar-width:none;
+    padding:0;
+  }
+  nav::-webkit-scrollbar{display:none}
+  nav button{
+    flex:0 0 auto;
+    min-width:76px;
+    padding:8px 9px!important;
+    border-radius:9px;
+    font-size:10px!important;
+    text-align:center!important;
+    white-space:nowrap;
+  }
+  nav button:before{content:none!important}
+  main{padding:14px 10px 26px!important}
+  header{
+    display:grid!important;
+    grid-template-columns:1fr;
+    gap:10px!important;
+    margin-bottom:14px!important;
+  }
+  header>div:first-child{min-width:0}
+  h1{font-size:24px!important;line-height:1.1}
+  h2{font-size:18px}
+  .eyebrow{font-size:10px}
+  .headerActions{
+    display:grid!important;
+    grid-template-columns:1fr 1fr;
+    width:100%;
+    gap:7px!important;
+  }
+  .orgSwitcher{
+    grid-column:1/-1;
+    display:grid!important;
+    grid-template-columns:1fr auto;
+    width:100%!important;
+  }
+  .orgSwitcher select{max-width:none!important;width:100%}
+  .globalSearchShell{grid-column:1/-1;width:100%!important;min-width:0!important;order:-1}
+  .globalSearchShell.open{width:100%!important}
+  .globalSearchDropdown{
+    position:absolute!important;
+    left:0!important;right:0!important;top:calc(100% + 6px)!important;
+    width:100%!important;max-height:60vh!important;
+  }
+  .headerActions>.primary,.headerActions>.search{width:100%;min-height:40px;padding:9px 10px}
+  .panel{padding:12px!important;border-radius:13px}
+  .stats{grid-template-columns:1fr 1fr!important;gap:8px}
+  .stats article{padding:12px}
+  .stats strong{font-size:25px}
+  .panelHead,.todaySectionHead,.scheduleToolbar,.groupDetailHero{
+    flex-direction:column!important;
+    align-items:stretch!important;
+    gap:8px!important;
+  }
+  .panelHead>*,.todaySectionHead>*,.scheduleToolbar>*{min-width:0}
+  .filters,.groupsHeadActions,.staffActions,.miniActions{
+    width:100%;display:flex;gap:6px;overflow-x:auto;flex-wrap:nowrap!important;padding-bottom:2px
+  }
+  .filters::-webkit-scrollbar,.groupsHeadActions::-webkit-scrollbar{display:none}
+  .chip,.groupsHeadActions>*{flex:0 0 auto}
+  .leadControls{display:grid!important;grid-template-columns:1fr 1fr;width:100%;gap:6px!important}
+  .leadControls .leadSort{min-width:0}
+  .leadSort select{min-width:0!important;width:100%!important}
+  .kanbanSummarySimple{align-items:stretch!important}
+  .kanbanSummarySimple .kanbanHint{width:100%;font-size:10.5px}
+  .leadKanban{grid-template-columns:1fr!important;gap:8px!important}
+  .kanbanColumn{min-height:0!important}
+  .kanbanColumnHead span{display:block!important}
+  .leadKanbanCard{padding:9px!important}
+  .kanbanPhone{display:block!important}
+  .kanbanMeta .locationBadge,.kanbanMeta .levelBadge{display:inline-flex!important}
+  .closedKanbanToggle{align-items:flex-start}
+  .closedKanbanToggle>span:last-child{margin-left:auto}
+  .closedKanbanToggle small{display:none}
+  .closedKanbanContent .kanbanCards{grid-template-columns:1fr!important}
+  .todayIntro{align-items:flex-start!important}
+  .todayLessonRow{display:grid}
+  .todayLessonMain{grid-template-columns:52px minmax(0,1fr)!important;gap:9px!important;padding:10px 2px!important}
+  .todayLessonMain time{font-size:16px}
+  .todayLessonMain em{display:none}
+  .todayGroupLink{justify-self:end;margin:0 0 8px}
+  .todayActionRow{grid-template-columns:70px minmax(0,1fr) 16px!important;gap:8px!important;padding:10px 2px!important}
+  .todayActionType{font-size:8.5px;padding:4px 6px}
+  .todayActionText small,.todayLessonMain small{white-space:normal!important}
+  .groupsPage{gap:12px}
+  .groupCardsPrimary{grid-template-columns:1fr!important}
+  .groupsSide{grid-template-columns:1fr!important}
+  .groupCard{padding:11px}
+  .candidate{grid-template-columns:22px 34px minmax(0,1fr);gap:8px}
+  .selectionBar{position:static;display:grid;grid-template-columns:1fr;gap:8px}
+  .selectionBar .primary{width:100%}
+  .groupDetailDrawer{
+    width:100%!important;
+    max-width:none!important;
+    height:100dvh!important;
+    border-radius:0!important;
+    padding:18px 12px 90px!important;
+  }
+  .groupDetailDrawer .groupMemberCardCompact{grid-template-columns:1fr!important}
+  .groupMemberIdentityCell{align-items:flex-start!important}
+  .groupMemberFinanceCell{grid-column:auto!important}
+  .groupCandidateMemberRow{grid-template-columns:1fr!important}
+  .candidateRowMatch{justify-items:start!important}
+  .drawerBackdrop{align-items:stretch}
+  .drawer{
+    width:100%!important;
+    height:100dvh!important;
+    padding:20px 14px 88px!important;
+    border-left:0!important;
+  }
+  .drawerClose{top:10px;right:10px}
+  .drawer h2{font-size:22px;margin-bottom:16px}
+  .detailGrid,.formTwo,.policyFields,.lessonDetailsEditor{
+    grid-template-columns:1fr!important;
+  }
+  .drawerActions,.resultActions,.postTrialActions{grid-template-columns:1fr!important}
+  .workflowBox{padding:12px;margin:12px 0}
+  .dateTimeEditor,.slotRow,.availabilityRow{grid-template-columns:1fr!important}
+  .availabilityRow .windowNote,.availabilityRow .danger{grid-column:auto!important}
+  .groupModal{
+    width:100%!important;
+    max-width:none!important;
+    max-height:calc(100dvh - 16px)!important;
+    border-radius:14px!important;
+    padding:18px 12px!important;
+  }
+  .modalBackdrop{padding:8px!important;align-items:flex-end!important}
+  .scheduleToolbar{align-items:stretch!important}
+  .scheduleNav{display:grid;grid-template-columns:auto 1fr auto}
+  .scheduleNav .search{min-width:0}
+  .weekGridConcrete{grid-template-columns:repeat(7,138px)!important}
+  .scheduleSide{grid-template-columns:1fr!important}
+  .attendanceLayout{grid-template-columns:1fr!important}
+  .attendanceWeekNav{grid-template-columns:auto 1fr auto}
+  .lessonRow{grid-template-columns:58px minmax(0,1fr) 24px!important;padding:8px!important}
+  .lessonRow span small{white-space:normal}
+  .attendanceQuickActions{grid-template-columns:1fr!important;width:100%}
+  .attendanceQuickActions .search{width:100%}
+  .attendanceRow{grid-template-columns:1fr!important;gap:8px!important}
+  .attendanceButtons{grid-template-columns:1fr 1fr!important}
+  .attendanceReasonWrap,.attendanceReasonInput{grid-column:1!important}
+  .attendanceFooter{position:sticky;bottom:76px;z-index:8;align-items:stretch!important;gap:8px;background:var(--ak-bg-glass);backdrop-filter:blur(12px)}
+  .attendanceFooterActions{width:100%;display:grid!important;grid-template-columns:1fr}
+  .attendanceFooterActions button{width:100%}
+  .lessonProtocolSummary{grid-template-columns:1fr!important}
+  .lessonProtocolTable,.studentAttendanceHistory{overflow-x:auto}
+  .lessonProtocolRow{min-width:620px}
+  .studentAttendanceStats{grid-template-columns:1fr 1fr!important}
+  .studentAttendanceHistoryHead,.studentAttendanceHistoryRow{min-width:720px}
+  .paymentsTable,.table{overflow-x:auto}
+  .paymentRow{min-width:820px}
+  .reminderRow{grid-template-columns:1fr!important}
+  .reminderActions{grid-column:auto!important;display:grid!important;grid-template-columns:1fr}
+  .reminderActions button{width:100%}
+  .staffGrid,.locationGrid,.reportGrid,.settingsLayout{grid-template-columns:1fr!important}
+  .loginShell{padding:12px}
+  .loginCard{width:100%;padding:22px 16px!important}
+  .loginCard h1{font-size:24px!important}
+}
+
+@media(max-width:420px){
+  main{padding-left:8px!important;padding-right:8px!important}
+  h1{font-size:22px!important}
+  .stats{grid-template-columns:1fr!important}
+  .headerActions{grid-template-columns:1fr!important}
+  .orgSwitcher,.globalSearchShell{grid-column:1}
+  .leadControls{grid-template-columns:1fr!important}
+  .studentAttendanceStats{grid-template-columns:1fr!important}
+  .attendanceButtons{grid-template-columns:1fr!important}
+  .todayActionRow{grid-template-columns:62px minmax(0,1fr) 14px!important}
+  nav button{min-width:72px;padding-inline:8px!important}
+}
+
+.kanbanContact{display:grid;gap:1px;margin-top:7px;padding-top:6px;border-top:1px solid var(--ak-border);min-width:0}
+.kanbanContact b{font-size:10.5px;font-weight:700;color:var(--ak-text-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kanbanContact small{font-size:9.5px;color:var(--ak-muted);white-space:nowrap}
+@media(max-width:1400px){.kanbanContact small{font-size:9px}}
+@media(max-width:720px){.kanbanContact b{font-size:11px}.kanbanContact small{font-size:10px}}
+
+/* Group page visual redesign v4 */
+.groupDetailDrawer{background:var(--ak-bg)!important}
+.groupDetailDrawer .groupPageTopbar{position:sticky;top:0;z-index:20;margin:-22px -28px 14px;padding:10px 20px;border-bottom:1px solid var(--ak-border);background:var(--ak-bg-glass);backdrop-filter:blur(14px)}
+.groupDetailDrawer>.eyebrow,.groupDetailDrawer>.groupDetailHero,.groupDetailDrawer>.groupTeacherAssign,.groupDetailDrawer>.groupCandidatePicker,.groupDetailDrawer>.groupMemberList,.groupDetailDrawer>.emptyState{width:min(1360px,100%);margin-left:auto;margin-right:auto}
+.groupDetailHero{margin-top:0!important;padding:16px 18px!important;border:1px solid var(--ak-border)!important;border-radius:16px!important;background:linear-gradient(180deg,var(--ak-surface),var(--ak-surface-2))!important}
+.groupDetailHero h2{font-size:24px!important;letter-spacing:-.02em}
+.groupDetailMeta{display:flex;flex-wrap:wrap;gap:7px 14px!important;margin-top:5px}
+.groupDetailMeta>span,.groupTeacherLink{font-size:11px!important;color:var(--ak-muted)!important}
+.groupDetailHeroActions{display:flex;align-items:center;gap:10px}
+.groupDetailHeroActions>strong{font-size:22px!important;color:var(--ak-text)!important;letter-spacing:-.02em}
+.groupDetailHeroActions .primary.compact{min-height:34px;padding:7px 11px!important;border-radius:10px}
+.groupRoster{gap:9px!important;margin-top:16px!important}
+.groupMemberSectionHead{padding:0 2px 4px!important}
+.groupMemberSectionHead>div{display:flex;align-items:baseline;gap:8px}
+.groupMemberSectionHead b{font-size:14px!important}
+.groupMemberSectionHead small{font-size:10.5px!important}
+.groupRosterHint{color:var(--ak-muted-2);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.groupRosterRow{display:grid!important;grid-template-columns:minmax(300px,1.05fr) minmax(260px,.8fr) minmax(380px,1.15fr)!important;gap:10px!important;align-items:stretch!important;padding:9px!important;border:1px solid var(--ak-border)!important;border-radius:14px!important;background:var(--ak-surface)!important;box-shadow:0 6px 18px rgba(0,0,0,.035)!important;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease}
+.groupRosterRow:hover{border-color:var(--ak-accent-shadow)!important;box-shadow:0 10px 28px rgba(0,0,0,.06)!important;transform:translateY(-1px)}
+.groupRosterIdentity{display:grid!important;grid-template-columns:1fr auto;gap:10px!important;align-items:center!important;padding:7px 8px!important;min-width:0}
+.groupRosterAvatar{width:38px!important;height:38px!important;flex:0 0 38px!important;background:var(--ak-accent-glow)!important;border:1px solid var(--ak-accent-shadow)!important;color:var(--ak-accent-text)!important}
+.groupRosterIdentity .groupMemberTop{min-width:0;gap:10px!important}
+.groupRosterIdentity .groupMemberTop>div{min-width:0}
+.groupRosterIdentity .groupMemberTop b{font-size:14px!important;line-height:1.25}
+.groupRosterIdentity .groupMemberTop small{font-size:10.5px!important;line-height:1.35}
+.groupRosterContact{color:var(--ak-text-soft)!important}
+.groupRosterStudentLink{align-self:center;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:var(--ak-accent-text);font:inherit;font-size:10.5px;font-weight:750;white-space:nowrap;cursor:pointer}
+.groupRosterStudentLink:hover{background:var(--ak-accent-glow)}
+.groupRosterMetric{display:grid!important;grid-template-rows:auto auto auto auto;gap:5px!important;align-content:center!important;min-height:86px!important;padding:10px 11px!important;border:1px solid var(--ak-border)!important;border-radius:11px!important;background:var(--ak-surface-2)!important}
+.groupRosterMetric:hover{border-color:var(--ak-accent-soft)!important;background:var(--ak-surface)!important}
+.groupRosterMetricHead{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.groupRosterMetricHead small{font-size:9.5px!important;text-transform:uppercase;letter-spacing:.055em;color:var(--ak-muted)}
+.groupRosterMetricHead>b{font-size:15px!important;color:var(--ak-text)}
+.groupRosterProgress{display:block;height:5px;border-radius:999px;background:var(--ak-border);overflow:hidden}
+.groupRosterProgress>i{display:block;height:100%;border-radius:inherit;background:var(--ak-accent);transition:width .2s ease}
+.groupRosterMetric em{font-size:10.5px!important;line-height:1.35!important;color:var(--ak-muted)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.groupRosterOpen{font-size:10px;color:var(--ak-accent-text);font-weight:700}
+.groupRosterFinance{display:grid!important;grid-template-rows:1fr auto;gap:0!important;min-width:0;border:1px solid var(--ak-border)!important;border-radius:11px!important;background:var(--ak-surface-2)!important;overflow:hidden}
+.groupRosterPayment{display:grid!important;gap:6px!important;align-content:center!important;min-height:86px!important;padding:10px 11px!important;border:0!important;border-radius:0!important;background:transparent!important}
+.groupRosterPayment:hover{background:var(--ak-surface)!important}
+.groupPaymentBadge{padding:4px 7px;border-radius:999px;font-size:10px!important;font-weight:800}
+.groupPaymentBadge.current{background:rgba(54,190,143,.12);color:#60c7a1!important}
+.groupPaymentBadge.upcoming{background:var(--ak-accent-glow);color:var(--ak-accent-text)!important}
+.groupPaymentBadge.due{background:rgba(219,166,67,.12);color:#caa651!important}
+.groupPaymentBadge.overdue{background:rgba(217,108,117,.12);color:#d96c75!important}
+.groupRosterPlan{display:flex;align-items:baseline;gap:8px;min-width:0}
+.groupRosterPlan>b{font-size:12px!important;color:var(--ak-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.groupRosterPlan>small{font-size:10px;color:var(--ak-muted);white-space:nowrap}
+.groupRosterPaymentFooter{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.groupRosterPaymentFooter>small{font-size:10px;color:var(--ak-muted)}
+.groupRosterPaymentFooter>b{font-size:10.5px}
+.groupRosterPaymentFooter>.debt{color:#d96c75}.groupRosterPaymentFooter>.paid{color:#60c7a1}
+.groupRosterHistory{margin:0!important;padding:4px 10px 6px!important;border-top:1px solid var(--ak-border)!important}
+.groupRosterHistory summary{padding:2px 0!important;font-size:10px!important;color:var(--ak-muted)!important}
+.groupRosterHistory[open]{background:var(--ak-surface)}
+.memberPaymentHistoryRow{padding:6px 0!important}
+html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04)!important}
+
+@media(max-width:1180px){
+  .groupRosterRow{grid-template-columns:1fr 1fr!important}
+  .groupRosterIdentity{grid-column:1/-1}
+  .groupRosterFinance{grid-column:auto!important}
+}
+@media(max-width:760px){
+  .groupDetailDrawer .groupPageTopbar{margin:-18px -12px 12px;padding:9px 12px}
+  .groupDetailHero{padding:13px!important}
+  .groupDetailHeroActions{width:100%;justify-content:space-between}
+  .groupRosterHint{display:none}
+  .groupRosterRow{grid-template-columns:1fr!important;padding:8px!important}
+  .groupRosterIdentity,.groupRosterFinance{grid-column:auto!important}
+  .groupRosterIdentity{grid-template-columns:1fr!important}
+  .groupRosterStudentLink{justify-self:start;padding-left:0}
+  .groupRosterMetric,.groupRosterPayment{min-height:0!important}
+  .groupRosterPlan{display:grid;gap:2px}
+  .groupRosterPlan>small{white-space:normal}
+}
+
+/* Universal group creation + clear calendar */
+.groupCreateModal{width:min(680px,96vw)!important}.groupCreateScheduleHead{display:flex;justify-content:space-between;gap:10px;margin:14px 0 4px}.groupCreateScheduleHead>div{display:grid;gap:2px}.groupCreateScheduleHead b{font-size:13px}.groupCreateScheduleHead small{font-size:11px;color:var(--ak-muted);line-height:1.35}.createGroupInline{margin-top:8px}.groupsEmptyPrimary{display:grid;justify-items:start;gap:8px}
+.scheduleWorkspace{display:grid;gap:12px}.scheduleCalendar{min-width:0}.scheduleToolbarClear{align-items:flex-start!important}.scheduleToolbarActions{display:flex;align-items:end;gap:10px}.scheduleGroupFilter{display:grid;gap:4px;color:var(--ak-muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em}.scheduleGroupFilter select{min-width:190px;padding:8px 9px;border:1px solid var(--ak-border);border-radius:9px;background:var(--ak-surface);color:var(--ak-text)}
+.scheduleWeekSummary{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}.scheduleWeekSummary span{display:inline-flex;align-items:center;gap:4px;padding:4px 7px;border-radius:999px;background:var(--ak-surface-2);color:var(--ak-muted);font-size:10px}.scheduleWeekSummary b{color:var(--ak-text)}.scheduleWeekSummary .done{color:#55b991}.scheduleWeekSummary .attention{color:#cf7079}.scheduleWeekSummary .trial{color:#9a78dd}
+.scheduleLegend{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 8px;padding:0 2px}.scheduleLegend span{display:flex;align-items:center;gap:5px;color:var(--ak-muted);font-size:10px}.scheduleLegend i{width:8px;height:8px;border-radius:50%;background:var(--ak-muted)}.scheduleLegend .planned i{background:var(--ak-accent-soft)}.scheduleLegend .completed i{background:#55b991}.scheduleLegend .missed i{background:#cf7079}.scheduleLegend .trial i{background:#9a78dd}
+.scheduleWeekClear{grid-template-columns:repeat(7,minmax(145px,1fr))!important;gap:7px!important;overflow-x:auto;padding-bottom:4px}.scheduleWeekClear .scheduleDay{min-width:145px;border:1px solid var(--ak-border);border-radius:12px;background:var(--ak-surface-2);overflow:hidden}.scheduleWeekClear .scheduleDay.today{border-color:var(--ak-accent-strong);box-shadow:inset 0 3px 0 var(--ak-accent)}.scheduleDayHead{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px;padding:9px 9px 8px!important;border-bottom:1px solid var(--ak-border)}.scheduleDayHead>div{display:grid;gap:2px;min-width:0}.scheduleDayHead b{font-size:11px!important;text-transform:none!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.scheduleDayHead em{font-size:8.5px;font-style:normal;color:var(--ak-accent-text);text-transform:uppercase;letter-spacing:.05em}.scheduleDayHead>span{font-size:11px!important;color:var(--ak-muted)!important}.scheduleDayLessons{display:grid;gap:6px;padding:7px!important}
+.scheduleCard{display:grid!important;gap:5px!important;padding:8px!important;border:1px solid var(--ak-border)!important;border-left-width:3px!important;border-radius:9px!important;background:var(--ak-surface)!important;text-align:left!important}.scheduleCard.planned{border-left-color:var(--ak-accent-soft)!important}.scheduleCard.completed{border-left-color:#55b991!important}.scheduleCard.missed{border-left-color:#cf7079!important}.trialCalendarCard{border-left-color:#9a78dd!important}.scheduleCard:hover{transform:translateY(-1px);border-color:var(--ak-accent-soft)!important}.scheduleCardTop{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:5px}.scheduleCardTop time{font-size:13px!important;font-weight:850!important}.scheduleStatus{padding:3px 5px;border-radius:999px;font-size:7.5px!important;font-weight:800;text-transform:uppercase;letter-spacing:.035em;white-space:nowrap}.scheduleStatus.planned{background:var(--ak-accent-glow);color:var(--ak-accent-text)}.scheduleStatus.completed{background:rgba(54,190,143,.12);color:#55b991}.scheduleStatus.missed{background:rgba(217,108,117,.12);color:#cf7079}.scheduleStatus.trial{background:rgba(146,102,224,.12);color:#9a78dd}.scheduleCard strong{font-size:11.5px!important;line-height:1.25}.scheduleCard>small{font-size:9.5px!important;line-height:1.3;color:var(--ak-muted)!important}.scheduleCardMeta{display:flex;justify-content:space-between;gap:5px;flex-wrap:wrap;color:var(--ak-muted-2);font-size:8.5px}.scheduleDayEmpty{min-height:58px!important;display:grid;place-items:center;color:var(--ak-muted-2);font-size:9.5px}
+.scheduleTools{display:grid;grid-template-columns:1fr 1fr;gap:12px}.scheduleTools .panel{padding:14px!important}.scheduleToolHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}.scheduleToolHead>div{display:grid;gap:1px}.scheduleToolHead h2{font-size:16px!important}.scheduleToolHead>span{max-width:210px;color:var(--ak-muted);font-size:10px;line-height:1.35;text-align:right}
+@media(max-width:1050px){.scheduleToolbarActions{display:grid;justify-items:stretch}.scheduleGroupFilter select{min-width:0}.scheduleWeekClear{grid-template-columns:repeat(7,150px)!important}.scheduleTools{grid-template-columns:1fr}}
+@media(max-width:720px){.scheduleToolbarActions{width:100%}.scheduleGroupFilter{width:100%}.scheduleGroupFilter select{width:100%}.scheduleNav{width:100%}.scheduleWeekClear{grid-template-columns:repeat(7,138px)!important}.scheduleTools{grid-template-columns:1fr}.scheduleToolHead{display:grid}.scheduleToolHead>span{max-width:none;text-align:left}}
+
+/* Mobile UX simplification v6 */
+.appNav button{display:flex;align-items:center;gap:9px}
+.appNav button svg{flex:0 0 auto}
+.iconButton{display:grid!important;place-items:center!important;width:40px;min-width:40px;height:40px;padding:0!important;border-radius:10px!important}
+.headerThemeButton{display:none!important}
+@media(min-width:721px){.headerThemeButton{display:grid!important}}
+.headerPrimaryAction{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.loginAction{display:flex!important;align-items:center;justify-content:center;gap:8px}
+.groupBackButton,.lessonBackButton{display:inline-flex!important;align-items:center;gap:6px}
+
+@media(max-width:720px){
+  html,body,#root{min-height:100%;overflow-x:hidden}
+  body{padding-bottom:calc(74px + env(safe-area-inset-bottom))!important}
+  .shell{display:block!important}
+
+  /* Only the real CRM sidebar becomes the bottom mobile navigation. */
+  .shell>.appSidebar{
+    display:block!important;
+    position:fixed!important;
+    inset:auto 0 0 0!important;
+    z-index:130!important;
+    width:100%!important;
+    height:auto!important;
+    min-height:0!important;
+    padding:6px 6px calc(6px + env(safe-area-inset-bottom))!important;
+    border:0!important;
+    border-top:1px solid var(--ak-border)!important;
+    background:var(--ak-bg-glass)!important;
+    backdrop-filter:blur(18px)!important;
+    box-shadow:0 -8px 28px rgba(0,0,0,.08);
+  }
+  /* Undo the old generic aside rule for content sidebars. */
+  .shell main aside{
+    position:static!important;
+    inset:auto!important;
+    width:auto!important;
+    height:auto!important;
+    min-height:0!important;
+    padding:0!important;
+    border:0!important;
+    background:transparent!important;
+    backdrop-filter:none!important;
+    box-shadow:none!important;
+  }
+  .shell>.appSidebar .brand,.shell>.appSidebar .asideFooter{display:none!important}
+  .appNav{
+    display:flex!important;
+    gap:3px!important;
+    width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    padding:0 1px!important;
+    scrollbar-width:none!important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-x:contain;
+    touch-action:pan-x;
     scroll-snap-type:x proximity;
   }
   .appNav::-webkit-scrollbar{display:none!important}
