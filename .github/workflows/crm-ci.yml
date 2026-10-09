@@ -189,7 +189,7 @@ jobs:
         working-directory: crm/frontend
         run: |
           npm install
-          npx playwright install --with-deps chromium webkit
+          npx playwright install chromium webkit
       - name: Run desktop and mobile browser smoke tests
         working-directory: crm/frontend
         env:
