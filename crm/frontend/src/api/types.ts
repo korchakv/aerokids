@@ -183,6 +183,21 @@ export type ApiPayment = {
   credit_minor: number;
 };
 
+export type ApiPaymentWorkspaceItem = ApiPayment & {
+  plan_name: string | null;
+  student_name: string;
+  student_phone: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+};
+
+export type ApiPaymentPage = {
+  items: ApiPaymentWorkspaceItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type ApiStudentSubscription = {
   id: string;
   organization_id: string;

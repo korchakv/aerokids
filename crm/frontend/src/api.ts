@@ -2,6 +2,7 @@ export type {
   Membership, AuthUser, Session, StudentAvailabilitySlot, IntakeDuplicateMatch,
   WorkspaceLead, WorkspaceStudent, WorkspaceGroup, WorkspaceBundle, PageResult, ApiLocation,
   ApiStaff, ApiStaffProfile, ApiSubscriptionPlan, ApiPayment, ApiStudentSubscription,
+  ApiPaymentWorkspaceItem, ApiPaymentPage,
   OperationsBundle, InvitationStatus, ApiGroupSchedule, ApiLessonSession, ApiAttendance,
   ApiGroupMemberDetail, ApiGroupDetail, ApiPaymentReminder, ApiStudentAttendanceHistoryItem,
   ApiGroupRosterStudent, TeachingBundle, OverviewReport, ApiAuditEvent,
@@ -13,7 +14,8 @@ export { checkIntakeDuplicates } from "./api/intake";
 export { loadWorkspace, loadWorkspaceStudentsPage, loadWorkspaceGroupsPage } from "./api/workspace";
 export type { StudentPageOptions, GroupPageOptions } from "./api/workspace";
 export { loadOperations } from "./api/operations";
-export { runBillingRenewals, loadPaymentReminders, recordPaymentReminder } from "./api/billing";
+export { runBillingRenewals, loadPaymentPage, loadPaymentReminders, recordPaymentReminder } from "./api/billing";
+export type { PaymentPageOptions } from "./api/billing";
 export { loadStudentAttendanceHistory, loadGroupRoster, loadGroupDetail, loadTeaching, loadAttendance } from "./api/teaching";
 export { loadOverviewReport } from "./api/reports";
 export { loadAuditEvents } from "./api/audit";

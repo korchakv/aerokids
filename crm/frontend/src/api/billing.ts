@@ -1,5 +1,23 @@
-import type { ApiPaymentReminder, Session } from "./types";
+import type { ApiPaymentPage, ApiPaymentReminder, Session } from "./types";
 import { apiGet, apiPost } from "./client";
+
+export type PaymentPageOptions = {
+  q?: string;
+  status?: "pending" | "paid" | "refunded" | "cancelled";
+  overdue?: boolean;
+  sort?: "newest" | "due" | "student";
+  limit?: number;
+  offset?: number;
+};
+
+export function loadPaymentPage(session: Session, options: PaymentPageOptions = {}) {
+  const params = new URLSearchParams();
+  Object.entries(options).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== "") params.set(key, String(value));
+  });
+  const query = params.toString();
+  return apiGet<ApiPaymentPage>(`/payments/page${query ? `?${query}` : ""}`, session);
+}
 
 export function runBillingRenewals(session: Session) {
   return apiPost<{

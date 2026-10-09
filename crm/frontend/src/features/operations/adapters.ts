@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { ApiStudentSubscription, OperationsBundle } from "../../api";
+import type { ApiPaymentWorkspaceItem, ApiStudentSubscription, OperationsBundle } from "../../api";
 import type { LocationDemo } from "../locations/types";
 import type { PaymentDemo, PlanDemo } from "../billing/model";
 import { paymentMethodLabel } from "../billing/model";
@@ -63,5 +63,28 @@ export function applyOperations(
     method: paymentMethodLabel(item.method),
   })));
   setSubscriptions(bundle.subscriptions);
+}
+
+export function paymentPageItemToDemo(item: ApiPaymentWorkspaceItem): PaymentDemo {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    id: item.id,
+    studentId: item.student_id,
+    planId: item.plan_id ?? "",
+    subscriptionId: item.subscription_id ?? undefined,
+    amount: item.amount_minor / 100,
+    adjustedAmount: item.adjusted_amount_minor / 100,
+    paidAmount: item.paid_minor / 100,
+    refundedAmount: item.refunded_minor / 100,
+    balanceAmount: item.balance_minor / 100,
+    creditAmount: item.credit_minor / 100,
+    dueDate: item.due_date ?? "",
+    status: item.status === "pending" && item.due_date && item.due_date < today ? "overdue" : item.status,
+    studentName: item.student_name,
+    studentPhone: item.student_phone ?? undefined,
+    contactName: item.contact_name ?? undefined,
+    contactPhone: item.contact_phone ?? undefined,
+    planName: item.plan_name ?? undefined,
+  };
 }
 

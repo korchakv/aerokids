@@ -175,4 +175,17 @@ test("student and group registries use database-backed page search", async ({ pa
   await page.getByTestId("groups-workspace").locator(".registrySearch input").fill("definitely-no-group");
   expect((await groupRequest).ok()).toBeTruthy();
   await expect(page.getByTestId("groups-workspace").getByText("За пошуком груп не знайдено")).toBeVisible();
+
+  await page.getByText("Оплати", { exact: true }).first().click();
+  const paymentPageRequest = page.waitForResponse((response) =>
+    response.url().includes("/payments/page") && response.request().method() === "GET"
+  );
+  expect((await paymentPageRequest).ok()).toBeTruthy();
+  const paymentSearchRequest = page.waitForResponse((response) =>
+    response.url().includes("/payments/page")
+      && new URL(response.url()).searchParams.get("q") === "definitely-no-payment"
+  );
+  await page.getByTestId("payments-search").fill("definitely-no-payment");
+  expect((await paymentSearchRequest).ok()).toBeTruthy();
+  await expect(page.getByTestId("payments-workspace").getByText("За цим фільтром оплат не знайдено.")).toBeVisible();
 });
