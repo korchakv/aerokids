@@ -301,7 +301,7 @@ function App() {
   const [preferenceLocationId, setPreferenceLocationId] = useState<EntityId | "">("");
   const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindowDraft[]>([]);
   const [preferenceSaving, setPreferenceSaving] = useState(false);
-  const [trialAt, setTrialAt] = useState("2026-10-05T17:00");
+  const [trialAt, setTrialAt] = useState(() => `${localDateInput(new Date())}T17:00`);
   const [trialLocation, setTrialLocation] = useState("Основна локація");
   const [trialLocationId, setTrialLocationId] = useState<EntityId | "">("");
   const [recommendedLevel, setRecommendedLevel] = useState("Початковий");
@@ -320,7 +320,7 @@ function App() {
   const [groupCreateContext, setGroupCreateContext] = useState<"groups" | "candidates" | "lead">("groups");
   const [newGroupTeacherId, setNewGroupTeacherId] = useState<EntityId | "">("");
   const [newLessonGroupId, setNewLessonGroupId] = useState<EntityId>("1");
-  const [newLessonAt, setNewLessonAt] = useState("2026-10-07T17:00");
+  const [newLessonAt, setNewLessonAt] = useState(() => `${localDateInput(new Date())}T17:00`);
   const [newLessonDuration, setNewLessonDuration] = useState(60);
   const [newLessonTopic, setNewLessonTopic] = useState("FPV / електроніка");
   const [scheduleGroupId, setScheduleGroupId] = useState<EntityId>("1");
