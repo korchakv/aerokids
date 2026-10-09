@@ -36,7 +36,7 @@ test("moving a lead to waiting does not start enrollment", async ({ page }) => {
   await createDialog.getByLabel("Ім’я відповідальної особи *").fill("Тестова мама");
   await createDialog.getByLabel("Телефон відповідального *").fill(childPhone);
   const createResponse = page.waitForResponse((response) =>
-    response.url().includes("/intake") && response.request().method() === "POST"
+    new URL(response.url()).pathname.endsWith("/intake") && response.request().method() === "POST"
   );
   await createDialog.getByRole("button", { name: "Створити заявку" }).click();
   expect((await createResponse).ok()).toBeTruthy();
