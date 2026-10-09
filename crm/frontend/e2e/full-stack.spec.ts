@@ -58,20 +58,29 @@ test("moving a lead to waiting does not start enrollment", async ({ page }) => {
   const waitingColumn = page.locator(".kanbanColumn.column-waiting");
   const card = newColumn.locator(".leadKanbanCard").filter({ hasText: childName });
   await expect(card).toBeVisible();
+  const isMobile = (page.viewportSize()?.width ?? 1280) <= 500;
 
   const transitionResponse = page.waitForResponse((response) =>
-    response.url().includes("/lead-outcome") && response.request().method() === "PATCH"
+    response.url().includes("/crm-status") && response.request().method() === "PATCH"
   );
-  await card.dragTo(waitingColumn);
+  if (isMobile) {
+    await card.click();
+    await page.locator(".mobileLeadMoreAction").click();
+    await page.getByRole("button", { name: "Перемістити заявку" }).click();
+    await page.locator(".mobileLeadStageList").getByRole("button", { name: /Очікує групу/ }).click();
+  } else {
+    await card.dragTo(waitingColumn);
+  }
   expect((await transitionResponse).ok()).toBeTruthy();
   const waitingCard = waitingColumn.locator(".leadKanbanCard").filter({ hasText: childName });
   await expect(waitingCard).toBeVisible();
-  await expect(page.getByTestId("lead-drawer")).toHaveCount(0);
   await expect(page.getByTestId("lead-enrollment-workflow")).toHaveCount(0);
 
-  await waitingCard.click();
+  if (!isMobile) {
+    await expect(page.getByTestId("lead-drawer")).toHaveCount(0);
+    await waitingCard.click();
+  }
   await expect(page.getByTestId("lead-drawer")).toBeVisible();
-  await page.setViewportSize({ width: 390, height: 844 });
   await page.locator(".mobileLeadPrimaryAction").click();
   await expect(page.getByTestId("lead-enrollment-workflow")).toBeVisible();
 });
