@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+// Stage 3 regression: paginated registries must remain stable on desktop and mobile.\nimport { expect, test, type Page } from "@playwright/test";
 
 async function login(page: Page) {
   await page.goto("/");
