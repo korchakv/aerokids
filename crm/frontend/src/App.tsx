@@ -33,16 +33,20 @@ import { StaffDialogs } from "./features/staff/StaffDialogs";
 import { SettingsView } from "./features/settings/SettingsView";
 import { ReportsView } from "./features/reports/ReportsView";
 import { StudentDrawer, StudentsView, type StudentFilter, type StudentLifecycleLabel } from "./features/students/StudentsView";
-import { applyOperations } from "./features/operations/adapters";
-import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
+import { applyOperations, paymentPageItemToDemo } from "./features/operations/adapters";
+import { applyWorkspace, crmStatusLabel, crmStatusValue, workspaceGroupToGroupItem, workspaceStudentLifecycle, workspaceStudentToLead } from "./features/workspace/adapters";
 import { cleanSpaces, emailError, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
-import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
+import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
 
 
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
 const UI_SCALE_LEVELS: UiScale[] = [1, 1.1, 1.25, 1.4];
+const REGISTRY_PAGE_SIZE = 25;
+const PAYMENT_PAGE_SIZE = 50;
+type PaymentStatusFilter = "all" | "pending" | "paid" | "refunded" | "cancelled";
+type PaymentOverdueFilter = "all" | "yes" | "no";
 
 
 
@@ -134,6 +138,21 @@ function App() {
   const [leadStatusMenuOpen, setLeadStatusMenuOpen] = useState(false);
   const [leadDeleteSaving, setLeadDeleteSaving] = useState(false);
   const [studentFilter, setStudentFilter] = useState<StudentFilter>("all");
+  const [studentRegistryQuery, setStudentRegistryQuery] = useState("");
+  const [studentRegistryRows, setStudentRegistryRows] = useState<Lead[]>([]);
+  const [studentRegistryStates, setStudentRegistryStates] = useState<Record<EntityId, StudentLifecycleLabel>>({});
+  const [studentRegistryTotal, setStudentRegistryTotal] = useState(0);
+  const [studentRegistryOffset, setStudentRegistryOffset] = useState(0);
+  const [studentRegistryLoading, setStudentRegistryLoading] = useState(false);
+  const [studentRegistryError, setStudentRegistryError] = useState("");
+  const [groupRegistryQuery, setGroupRegistryQuery] = useState("");
+  const [groupRegistrySort, setGroupRegistrySort] = useState<"name" | "size_desc" | "size_asc">("name");
+  const [groupRegistryRows, setGroupRegistryRows] = useState<GroupItem[]>([]);
+  const [groupRegistryTotal, setGroupRegistryTotal] = useState(0);
+  const [groupRegistryOffset, setGroupRegistryOffset] = useState(0);
+  const [groupRegistryLoading, setGroupRegistryLoading] = useState(false);
+  const [groupRegistryError, setGroupRegistryError] = useState("");
+  const [registryRefreshTick, setRegistryRefreshTick] = useState(0);
   const [candidateAgeFilter, setCandidateAgeFilter] = useState<"all" | "8-10" | "11-13">("all");
   const [candidateLevelFilter, setCandidateLevelFilter] = useState("all");
   const [candidateLocationFilter, setCandidateLocationFilter] = useState("all");
@@ -197,6 +216,16 @@ function App() {
     { id: "1", studentId: "8", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 0, refundedAmount: 0, balanceAmount: 1800, creditAmount: 0, dueDate: "2026-10-05", status: "pending" },
     { id: "2", studentId: "9", planId: "1", amount: 1800, adjustedAmount: 1800, paidAmount: 1800, refundedAmount: 0, balanceAmount: 0, creditAmount: 0, dueDate: "2026-09-28", status: "paid", method: "Картка" },
   ]);
+  const [paymentRegistryRows, setPaymentRegistryRows] = useState<PaymentDemo[]>([]);
+  const [paymentRegistryTotal, setPaymentRegistryTotal] = useState(0);
+  const [paymentRegistryOffset, setPaymentRegistryOffset] = useState(0);
+  const [paymentRegistryQuery, setPaymentRegistryQuery] = useState("");
+  const [paymentRegistryStatus, setPaymentRegistryStatus] = useState<PaymentStatusFilter>("all");
+  const [paymentRegistryOverdue, setPaymentRegistryOverdue] = useState<PaymentOverdueFilter>("all");
+  const [paymentRegistrySort, setPaymentRegistrySort] = useState<"newest" | "due" | "student">("newest");
+  const [paymentRegistryLoading, setPaymentRegistryLoading] = useState(false);
+  const [paymentRegistryError, setPaymentRegistryError] = useState("");
+  const [paymentRegistryRefreshTick, setPaymentRegistryRefreshTick] = useState(0);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentStudentId, setPaymentStudentId] = useState<EntityId>("8");
   const [paymentPlanId, setPaymentPlanId] = useState<EntityId>("1");
@@ -301,7 +330,7 @@ function App() {
   const [preferenceLocationId, setPreferenceLocationId] = useState<EntityId | "">("");
   const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindowDraft[]>([]);
   const [preferenceSaving, setPreferenceSaving] = useState(false);
-  const [trialAt, setTrialAt] = useState("2026-10-05T17:00");
+  const [trialAt, setTrialAt] = useState(() => `${localDateInput(new Date())}T17:00`);
   const [trialLocation, setTrialLocation] = useState("Основна локація");
   const [trialLocationId, setTrialLocationId] = useState<EntityId | "">("");
   const [recommendedLevel, setRecommendedLevel] = useState("Початковий");
@@ -320,7 +349,7 @@ function App() {
   const [groupCreateContext, setGroupCreateContext] = useState<"groups" | "candidates" | "lead">("groups");
   const [newGroupTeacherId, setNewGroupTeacherId] = useState<EntityId | "">("");
   const [newLessonGroupId, setNewLessonGroupId] = useState<EntityId>("1");
-  const [newLessonAt, setNewLessonAt] = useState("2026-10-07T17:00");
+  const [newLessonAt, setNewLessonAt] = useState(() => `${localDateInput(new Date())}T17:00`);
   const [newLessonDuration, setNewLessonDuration] = useState(60);
   const [newLessonTopic, setNewLessonTopic] = useState("FPV / електроніка");
   const [scheduleGroupId, setScheduleGroupId] = useState<EntityId>("1");
@@ -416,6 +445,8 @@ function App() {
         return nearest?.id ?? "";
       });
       setWorkspaceLoaded(true);
+      setRegistryRefreshTick((value) => value + 1);
+      setPaymentRegistryRefreshTick((value) => value + 1);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити дані CRM");
       throw error;
@@ -445,6 +476,7 @@ function App() {
         ]);
         applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
         applyTeaching(teaching, setLessons, setGroups);
+        setRegistryRefreshTick((value) => value + 1);
       } catch {
         // Keep the current UI stable on a transient background refresh failure.
       } finally {
@@ -469,9 +501,120 @@ function App() {
     };
   }, [session?.accessToken, session?.organizationId]);
 
+  useEffect(() => {
+    setStudentRegistryOffset(0);
+  }, [studentFilter, studentRegistryQuery]);
+
+  useEffect(() => {
+    setGroupRegistryOffset(0);
+  }, [groupRegistryQuery, groupRegistrySort]);
+
+  useEffect(() => {
+    if (!apiEnabled || !session || active !== "Учні") return;
+    let cancelled = false;
+    setStudentRegistryLoading(true);
+    setStudentRegistryError("");
+    const timer = window.setTimeout(() => {
+      loadWorkspaceStudentsPage(session, {
+        q: studentRegistryQuery,
+        status: studentFilter === "all" ? undefined : studentFilter,
+        sort: "name",
+        limit: REGISTRY_PAGE_SIZE,
+        offset: studentRegistryOffset,
+      }).then((page) => {
+        if (cancelled) return;
+        if (page.total > 0 && studentRegistryOffset >= page.total) {
+          setStudentRegistryOffset(Math.floor((page.total - 1) / REGISTRY_PAGE_SIZE) * REGISTRY_PAGE_SIZE);
+          return;
+        }
+        setStudentRegistryRows(page.items.map(workspaceStudentToLead));
+        setStudentRegistryStates(Object.fromEntries(page.items.map((item) => [item.student_id, workspaceStudentLifecycle(item)])));
+        setStudentRegistryTotal(page.total);
+      }).catch((error) => {
+        if (!cancelled) setStudentRegistryError(error instanceof Error ? error.message : "Не вдалося завантажити сторінку учнів");
+      }).finally(() => {
+        if (!cancelled) setStudentRegistryLoading(false);
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [active, session?.accessToken, session?.organizationId, studentFilter, studentRegistryQuery, studentRegistryOffset, registryRefreshTick]);
+
+  useEffect(() => {
+    if (!apiEnabled || !session || active !== "Групи") return;
+    let cancelled = false;
+    setGroupRegistryLoading(true);
+    setGroupRegistryError("");
+    const timer = window.setTimeout(() => {
+      loadWorkspaceGroupsPage(session, {
+        q: groupRegistryQuery,
+        sort: groupRegistrySort,
+        limit: REGISTRY_PAGE_SIZE,
+        offset: groupRegistryOffset,
+      }).then((page) => {
+        if (cancelled) return;
+        if (page.total > 0 && groupRegistryOffset >= page.total) {
+          setGroupRegistryOffset(Math.floor((page.total - 1) / REGISTRY_PAGE_SIZE) * REGISTRY_PAGE_SIZE);
+          return;
+        }
+        setGroupRegistryRows(page.items.map((item) => workspaceGroupToGroupItem(item)));
+        setGroupRegistryTotal(page.total);
+      }).catch((error) => {
+        if (!cancelled) setGroupRegistryError(error instanceof Error ? error.message : "Не вдалося завантажити сторінку груп");
+      }).finally(() => {
+        if (!cancelled) setGroupRegistryLoading(false);
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [active, session?.accessToken, session?.organizationId, groupRegistryQuery, groupRegistrySort, groupRegistryOffset, registryRefreshTick]);
+
+  useEffect(() => {
+    setPaymentRegistryOffset(0);
+  }, [paymentRegistryQuery, paymentRegistryStatus, paymentRegistryOverdue, paymentRegistrySort]);
+
+  useEffect(() => {
+    if (!apiEnabled || !session || active !== "Оплати") return;
+    let cancelled = false;
+    setPaymentRegistryLoading(true);
+    setPaymentRegistryError("");
+    const timer = window.setTimeout(() => {
+      loadPaymentPage(session, {
+        q: paymentRegistryQuery,
+        status: paymentRegistryStatus === "all" ? undefined : paymentRegistryStatus,
+        overdue: paymentRegistryOverdue === "all" ? undefined : paymentRegistryOverdue === "yes",
+        sort: paymentRegistrySort,
+        limit: PAYMENT_PAGE_SIZE,
+        offset: paymentRegistryOffset,
+      }).then((page) => {
+        if (cancelled) return;
+        if (paymentRegistryOffset > 0 && paymentRegistryOffset >= page.total) {
+          setPaymentRegistryOffset(page.total === 0 ? 0 : Math.floor((page.total - 1) / PAYMENT_PAGE_SIZE) * PAYMENT_PAGE_SIZE);
+          return;
+        }
+        setPaymentRegistryRows(page.items.map(paymentPageItemToDemo));
+        setPaymentRegistryTotal(page.total);
+      }).catch((error) => {
+        if (!cancelled) setPaymentRegistryError(error instanceof Error ? error.message : "Не вдалося завантажити сторінку оплат");
+      }).finally(() => {
+        if (!cancelled) setPaymentRegistryLoading(false);
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [active, session?.accessToken, session?.organizationId, paymentRegistryQuery, paymentRegistryStatus, paymentRegistryOverdue, paymentRegistrySort, paymentRegistryOffset, paymentRegistryRefreshTick]);
+
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedMissingDetails = selected ? leadMissingDetails(selected) : [];
-  const selectedStudent = leads.find((lead) => lead.id === selectedStudentId) ?? null;
+  const selectedStudent = leads.find((lead) => lead.id === selectedStudentId)
+    ?? studentRegistryRows.find((lead) => lead.id === selectedStudentId)
+    ?? null;
   const activeStudents = leads.filter((lead) => lead.status === "Зарахований");
   const activeLocations = useMemo(() => locations.filter((location) => location.isActive), [locations]);
 
@@ -571,6 +714,42 @@ function App() {
     if (studentFilter === "archived") return state === "Архів";
     return true;
   }), [activeStudents, studentStates, studentFilter]);
+
+  const demoRegistryStudents = useMemo(() => {
+    const query = normalizedSearch(studentRegistryQuery);
+    return visibleStudents.filter((student) => !query || normalizedSearch([
+      student.child, student.parent, student.phone, student.childPhone, student.groupName,
+    ].filter(Boolean).join(" ")).includes(query));
+  }, [visibleStudents, studentRegistryQuery]);
+
+  const demoRegistryGroups = useMemo(() => {
+    const query = normalizedSearch(groupRegistryQuery);
+    return groups
+      .filter((group) => !query || normalizedSearch([group.name, group.location, group.teacherName].filter(Boolean).join(" ")).includes(query))
+      .sort((a, b) => groupRegistrySort === "size_desc"
+        ? (b.memberCount ?? b.members.length) - (a.memberCount ?? a.members.length)
+        : groupRegistrySort === "size_asc"
+          ? (a.memberCount ?? a.members.length) - (b.memberCount ?? b.members.length)
+          : a.name.localeCompare(b.name, "uk-UA"));
+  }, [groups, groupRegistryQuery, groupRegistrySort]);
+
+  const registryStudents = apiEnabled ? studentRegistryRows : demoRegistryStudents;
+  const registryGroups = apiEnabled
+    ? groupRegistryRows.map((group) => {
+      const hydrated = groups.find((item) => item.id === group.id);
+      return hydrated ? {
+        ...hydrated,
+        ...group,
+        schedule: hydrated.schedule,
+        members: hydrated.members,
+        teacherName: group.teacherName ?? hydrated.teacherName,
+      } : group;
+    })
+    : demoRegistryGroups;
+  const registryStudentStates = useMemo(
+    () => ({ ...studentStates, ...studentRegistryStates }),
+    [studentStates, studentRegistryStates],
+  );
 
   const candidateLevels = useMemo(() => Array.from(new Set(waiting.map((item) => item.recommendedLevel).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "uk-UA")), [waiting]);
 
@@ -1370,16 +1549,30 @@ function App() {
           student_ids: selectedCandidates,
           schedule_slots: groupSchedule,
         }, session);
-        if (newGroupTeacherId && canManageStaff) {
-          await apiPost(`/staff/${newGroupTeacherId}/groups`, {
-            group_id: created.group.id,
-            is_primary: true,
-          }, session);
-        }
-        await syncWorkspace(session);
+
+        // The primary mutation has succeeded at this point. Close the creation
+        // dialog immediately so a secondary refresh/assignment failure cannot
+        // make the user submit the same group twice.
         if (groupCreateContext === "lead") setLeadEnrollmentGroupId(created.group.id);
         setSelectedCandidates([]);
         setShowGroupForm(false);
+        setRegistryRefreshTick((value) => value + 1);
+
+        try {
+          if (newGroupTeacherId && canManageStaff) {
+            await apiPost(`/staff/${newGroupTeacherId}/groups`, {
+              group_id: created.group.id,
+              is_primary: true,
+            }, session);
+          }
+          await syncWorkspace(session);
+        } catch (secondaryError) {
+          setWorkspaceError(
+            secondaryError instanceof Error
+              ? `Групу створено, але не вдалося повністю оновити пов’язані дані: ${secondaryError.message}`
+              : "Групу створено, але не вдалося повністю оновити пов’язані дані.",
+          );
+        }
         return;
       } catch (error) {
         setGroupCreateError(error instanceof Error ? error.message : "Не вдалося створити групу.");
@@ -2347,10 +2540,48 @@ function App() {
     }
   };
 
-  const paymentTotals = {
-    paid: payments.reduce((sum, x) => sum + Math.max(0, x.paidAmount - x.refundedAmount), 0),
-    pending: payments.filter((x) => x.status === "pending" || x.status === "overdue").reduce((sum, x) => sum + x.balanceAmount, 0),
-    overdue: payments.filter((x) => x.status === "overdue").reduce((sum, x) => sum + x.balanceAmount, 0),
+  const demoPaymentFilteredRows = useMemo(() => {
+    const query = normalizedSearch(paymentRegistryQuery);
+    let rows = payments.filter((payment) => {
+      if (paymentRegistryStatus !== "all" && payment.status !== paymentRegistryStatus) return false;
+      if (paymentRegistryOverdue === "yes" && payment.status !== "overdue") return false;
+      if (paymentRegistryOverdue === "no" && payment.status === "overdue") return false;
+      if (!query) return true;
+      const student = leads.find((lead) => lead.id === payment.studentId);
+      const plan = plans.find((item) => item.id === payment.planId);
+      return [payment.studentName, payment.contactName, payment.studentPhone, payment.contactPhone,
+        student?.child, student?.parent, student?.phone, student?.childPhone, plan?.name, payment.dueDate]
+        .some((value) => searchMatches(query, value));
+    });
+    rows = [...rows];
+    if (paymentRegistrySort === "due") rows.sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+    if (paymentRegistrySort === "student") rows.sort((a, b) =>
+      (a.studentName ?? leads.find((lead) => lead.id === a.studentId)?.child ?? "")
+        .localeCompare(b.studentName ?? leads.find((lead) => lead.id === b.studentId)?.child ?? "", "uk-UA")
+    );
+    return rows;
+  }, [payments, leads, plans, paymentRegistryQuery, paymentRegistryStatus, paymentRegistryOverdue, paymentRegistrySort]);
+  const visiblePaymentRows = apiEnabled
+    ? paymentRegistryRows
+    : demoPaymentFilteredRows.slice(paymentRegistryOffset, paymentRegistryOffset + PAYMENT_PAGE_SIZE);
+  const visiblePaymentTotal = apiEnabled ? paymentRegistryTotal : demoPaymentFilteredRows.length;
+  const paymentCounts = overviewReport ? {
+    paid: overviewReport.payments.paid_count,
+    pending: overviewReport.payments.pending_count + overviewReport.payments.overdue_count,
+    overdue: overviewReport.payments.overdue_count,
+  } : {
+    paid: payments.filter((payment) => payment.status === "paid").length,
+    pending: payments.filter((payment) => payment.balanceAmount > 0 && payment.status !== "cancelled").length,
+    overdue: payments.filter((payment) => payment.status === "overdue").length,
+  };
+  const paymentTotals = overviewReport ? {
+    paid: overviewReport.payments.paid_minor / 100,
+    pending: (overviewReport.payments.pending_minor + overviewReport.payments.overdue_minor) / 100,
+    overdue: overviewReport.payments.overdue_minor / 100,
+  } : {
+    paid: payments.reduce((sum, payment) => sum + Math.max(0, payment.paidAmount - payment.refundedAmount), 0),
+    pending: payments.filter((payment) => payment.status === "pending" || payment.status === "overdue").reduce((sum, payment) => sum + payment.balanceAmount, 0),
+    overdue: payments.filter((payment) => payment.status === "overdue").reduce((sum, payment) => sum + payment.balanceAmount, 0),
   };
 
   const attendanceValues = Object.values(attendance).flatMap((lesson) => Object.values(lesson));
@@ -2883,14 +3114,23 @@ function App() {
         </section>}
 
         {active === "Учні" && <StudentsView
-          students={visibleStudents}
+          students={registryStudents}
           totalStudents={activeStudents.length}
           groupedStudents={activeStudents.filter((student) => studentGroup(student.id)).length}
           pausedStudents={Object.values(studentStates).filter((state) => state === "Пауза").length}
           groupCount={groups.length}
           studentFilter={studentFilter}
           onFilterChange={setStudentFilter}
-          studentStates={studentStates}
+          query={studentRegistryQuery}
+          onQueryChange={setStudentRegistryQuery}
+          pageTotal={apiEnabled ? studentRegistryTotal : registryStudents.length}
+          pageLimit={REGISTRY_PAGE_SIZE}
+          pageOffset={apiEnabled ? studentRegistryOffset : 0}
+          loading={apiEnabled && studentRegistryLoading}
+          error={studentRegistryError}
+          onPreviousPage={() => setStudentRegistryOffset((value) => Math.max(0, value - REGISTRY_PAGE_SIZE))}
+          onNextPage={() => setStudentRegistryOffset((value) => value + REGISTRY_PAGE_SIZE)}
+          studentStates={registryStudentStates}
           groupForStudent={studentGroup}
           onOpenStudent={(studentId, currentGroupId) => {
             setSelectedStudentId(studentId);
@@ -2990,11 +3230,27 @@ function App() {
         />}
 
         {active === "Оплати" && <PaymentsView
-          payments={payments}
+          payments={visiblePaymentRows}
           plans={plans}
           subscriptions={subscriptions}
           leads={leads}
           paymentTotals={paymentTotals}
+          paymentCounts={paymentCounts}
+          query={paymentRegistryQuery}
+          statusFilter={paymentRegistryStatus}
+          overdueFilter={paymentRegistryOverdue}
+          sort={paymentRegistrySort}
+          pageTotal={visiblePaymentTotal}
+          pageLimit={PAYMENT_PAGE_SIZE}
+          pageOffset={paymentRegistryOffset}
+          loading={apiEnabled && paymentRegistryLoading}
+          error={paymentRegistryError}
+          onQueryChange={setPaymentRegistryQuery}
+          onStatusFilterChange={setPaymentRegistryStatus}
+          onOverdueFilterChange={setPaymentRegistryOverdue}
+          onSortChange={setPaymentRegistrySort}
+          onPreviousPage={() => setPaymentRegistryOffset((value) => Math.max(0, value - PAYMENT_PAGE_SIZE))}
+          onNextPage={() => setPaymentRegistryOffset((value) => value + PAYMENT_PAGE_SIZE)}
           paymentReminders={paymentReminders}
           reminderSavingId={reminderSavingId}
           focusedPaymentId={focusedPaymentId}
@@ -3084,7 +3340,7 @@ function App() {
           activeStudents={overviewReport?.active_students ?? activeStudents.length}
         />}
         {active === "Групи" && <GroupsView
-          groups={groups}
+          groups={registryGroups}
           waiting={waiting}
           visibleWaiting={visibleWaiting}
           candidateLevels={candidateLevels}
@@ -3097,6 +3353,17 @@ function App() {
           candidateSort={candidateSort}
           groupSchedule={groupSchedule}
           groupLocationId={groupLocationId}
+          groupQuery={groupRegistryQuery}
+          groupSort={groupRegistrySort}
+          groupPageTotal={apiEnabled ? groupRegistryTotal : registryGroups.length}
+          groupPageLimit={REGISTRY_PAGE_SIZE}
+          groupPageOffset={apiEnabled ? groupRegistryOffset : 0}
+          groupPageLoading={apiEnabled && groupRegistryLoading}
+          groupPageError={groupRegistryError}
+          onGroupQueryChange={setGroupRegistryQuery}
+          onGroupSortChange={setGroupRegistrySort}
+          onPreviousGroupPage={() => setGroupRegistryOffset((value) => Math.max(0, value - REGISTRY_PAGE_SIZE))}
+          onNextGroupPage={() => setGroupRegistryOffset((value) => value + REGISTRY_PAGE_SIZE)}
           teacherNameForGroup={(groupId) => groupTeacher(groupId)?.fullName}
           onOpenGroup={(groupId) => { void openGroup(groupId); }}
           onOpenCreation={openGroupCreation}

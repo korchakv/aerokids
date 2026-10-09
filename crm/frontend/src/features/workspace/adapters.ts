@@ -1,7 +1,43 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { WorkspaceBundle } from "../../api";
+import type { WorkspaceBundle, WorkspaceGroup, WorkspaceStudent } from "../../api";
 import type { GroupItem } from "../groups/types";
 import type { EntityId, Lead, LeadStatus } from "../leads/model";
+
+
+export function workspaceStudentToLead(item: WorkspaceStudent): Lead {
+  return {
+    id: item.student_id,
+    firstName: item.first_name,
+    lastName: item.last_name ?? undefined,
+    child: [item.first_name, item.last_name].filter(Boolean).join(" "),
+    age: item.age ?? 0,
+    parent: item.contact_name ?? "Контакт не вказано",
+    phone: item.contact_phone ?? "",
+    childPhone: item.student_phone ?? undefined,
+    source: item.source ?? "CRM",
+    status: "Зарахований",
+    groupId: item.group_id ?? undefined,
+    groupName: item.group_name ?? undefined,
+  };
+}
+
+export function workspaceStudentLifecycle(item: WorkspaceStudent): "Активний" | "Пауза" | "Архів" {
+  return item.student_status === "paused" ? "Пауза" : item.student_status === "archived" ? "Архів" : "Активний";
+}
+
+export function workspaceGroupToGroupItem(group: WorkspaceGroup, members: EntityId[] = []): GroupItem {
+  return {
+    id: group.group_id,
+    name: group.name,
+    ages: ageLabel(group.min_age, group.max_age),
+    schedule: "Розклад не задано",
+    location: group.location_name ?? "Локацію не вказано",
+    capacity: group.capacity ?? Math.max(group.enrolled_count, 1),
+    members,
+    memberCount: group.enrolled_count,
+    teacherName: group.primary_teacher_name ?? undefined,
+  };
+}
 
 export function applyWorkspace(
   bundle: WorkspaceBundle,
@@ -46,34 +82,19 @@ export function applyWorkspace(
     closeNote: item.close_note ?? undefined,
   }));
 
-  const students: Lead[] = bundle.students.map((item) => ({
-    id: item.student_id,
-    firstName: item.first_name,
-    lastName: item.last_name ?? undefined,
-    child: [item.first_name, item.last_name].filter(Boolean).join(" "),
-    age: item.age ?? 0,
-    parent: item.contact_name ?? "Контакт не вказано",
-    phone: item.contact_phone ?? "",
-    childPhone: item.student_phone ?? undefined,
-    source: item.source ?? "CRM",
-    status: "Зарахований",
-  }));
+  const students: Lead[] = bundle.students.map(workspaceStudentToLead);
 
   const states: Record<EntityId, "Активний" | "Пауза" | "Архів"> = {};
   bundle.students.forEach((item) => {
-    states[item.student_id] = item.student_status === "paused" ? "Пауза" : item.student_status === "archived" ? "Архів" : "Активний";
+    states[item.student_id] = workspaceStudentLifecycle(item);
   });
 
-  const groups: GroupItem[] = bundle.groups.map((group) => ({
-    id: group.group_id,
-    name: group.name,
-    ages: ageLabel(group.min_age, group.max_age),
-    schedule: "Розклад не задано",
-    location: group.location_name ?? "Локацію не вказано",
-    capacity: group.capacity ?? Math.max(group.enrolled_count, 1),
-    members: bundle.students.filter((student) => student.group_id === group.group_id).map((student) => student.student_id),
-    teacherName: group.primary_teacher_name ?? undefined,
-  }));
+  const groups: GroupItem[] = bundle.groups.map((group) =>
+    workspaceGroupToGroupItem(
+      group,
+      bundle.students.filter((student) => student.group_id === group.group_id).map((student) => student.student_id),
+    )
+  );
 
   setLeads([...prospects, ...students]);
   setGroups(groups);

@@ -9,12 +9,32 @@ type PaymentTotals = {
   overdue: number;
 };
 
+type PaymentCounts = { paid: number; pending: number; overdue: number };
+type PaymentStatusFilter = "all" | "pending" | "paid" | "refunded" | "cancelled";
+type PaymentOverdueFilter = "all" | "yes" | "no";
+
 type PaymentsViewProps = {
   payments: PaymentDemo[];
   plans: PlanDemo[];
   subscriptions: ApiStudentSubscription[];
   leads: Lead[];
   paymentTotals: PaymentTotals;
+  paymentCounts: PaymentCounts;
+  query: string;
+  statusFilter: PaymentStatusFilter;
+  overdueFilter: PaymentOverdueFilter;
+  sort: "newest" | "due" | "student";
+  pageTotal: number;
+  pageLimit: number;
+  pageOffset: number;
+  loading: boolean;
+  error: string;
+  onQueryChange: (value: string) => void;
+  onStatusFilterChange: (value: PaymentStatusFilter) => void;
+  onOverdueFilterChange: (value: PaymentOverdueFilter) => void;
+  onSortChange: (value: "newest" | "due" | "student") => void;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
   paymentReminders: ApiPaymentReminder[];
   reminderSavingId: EntityId | null;
   focusedPaymentId: EntityId | null;
@@ -41,6 +61,22 @@ export function PaymentsView({
   subscriptions,
   leads,
   paymentTotals,
+  paymentCounts,
+  query,
+  statusFilter,
+  overdueFilter,
+  sort,
+  pageTotal,
+  pageLimit,
+  pageOffset,
+  loading,
+  error,
+  onQueryChange,
+  onStatusFilterChange,
+  onOverdueFilterChange,
+  onSortChange,
+  onPreviousPage,
+  onNextPage,
   paymentReminders,
   reminderSavingId,
   focusedPaymentId,
@@ -66,9 +102,9 @@ export function PaymentsView({
   return <section className="paymentsLayout" data-testid="payments-workspace">
     <div className="paymentsMain">
       <section className="paymentStats">
-        <article><span>Сплачено</span><strong>{money(paymentTotals.paid)}</strong><small>{payments.filter((payment) => payment.status === "paid").length} платежів</small></article>
-        <article><span>Очікується</span><strong>{money(paymentTotals.pending)}</strong><small>{payments.filter((payment) => payment.balanceAmount > 0 && payment.status !== "cancelled").length} рахунків</small></article>
-        <article><span>Прострочено</span><strong>{money(paymentTotals.overdue)}</strong><small>{payments.filter((payment) => payment.status === "overdue").length} боргів</small></article>
+        <article><span>Сплачено</span><strong>{money(paymentTotals.paid)}</strong><small>{paymentCounts.paid} платежів</small></article>
+        <article><span>Очікується</span><strong>{money(paymentTotals.pending)}</strong><small>{paymentCounts.pending} рахунків</small></article>
+        <article><span>Прострочено</span><strong>{money(paymentTotals.overdue)}</strong><small>{paymentCounts.overdue} боргів</small></article>
       </section>
 
       {paymentReminders.length > 0 && <article className="panel reminderPanel">
@@ -84,16 +120,35 @@ export function PaymentsView({
 
       <article className="panel paymentsPanel">
         <div className="panelHead"><div><p className="eyebrow">Фінанси</p><h2>Оплати учнів</h2></div><button className="primary" onClick={onOpenPaymentForm}>+ Нарахування</button></div>
-        <div className="paymentTable">
+        <div className="paymentRegistryControls">
+          <label className="registrySearch"><span>Пошук</span><input data-testid="payments-search" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Учень, контакт або примітка" /></label>
+          <label className="candidateSelect">Статус<select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value as PaymentStatusFilter)}>
+            <option value="all">Усі</option><option value="pending">Очікується</option><option value="paid">Сплачено</option><option value="refunded">Повернено</option><option value="cancelled">Скасовано</option>
+          </select></label>
+          <label className="candidateSelect">Прострочення<select value={overdueFilter} onChange={(event) => onOverdueFilterChange(event.target.value as PaymentOverdueFilter)}>
+            <option value="all">Усі</option><option value="yes">Прострочені</option><option value="no">Без прострочення</option>
+          </select></label>
+          <label className="candidateSelect">Сортування<select value={sort} onChange={(event) => onSortChange(event.target.value as "newest" | "due" | "student")}>
+            <option value="newest">Найновіші</option><option value="due">За датою оплати</option><option value="student">За учнем</option>
+          </select></label>
+        </div>
+        {error && <div className="registryError" role="alert">{error}</div>}
+        <div className={"paymentTable " + (loading ? "registryLoading" : "")}>
           <div className="paymentRow paymentHead"><span>Дитина / відповідальний</span><span>Абонемент</span><span>Нараховано / залишок</span><span>До дати</span><span>Статус</span><span>Дії</span></div>
+          {!loading && payments.length === 0 && <div className="emptyState">{query.trim() || statusFilter !== "all" || overdueFilter !== "all" ? "За цим фільтром оплат не знайдено." : "Оплат поки немає."}</div>}
+          {loading && payments.length === 0 && <div className="emptyState">Завантаження оплат…</div>}
           {payments.map((payment) => {
             const student = leads.find((lead) => lead.id === payment.studentId);
             const plan = plans.find((item) => item.id === payment.planId);
             const subscription = payment.subscriptionId ? subscriptions.find((item) => item.id === payment.subscriptionId) : undefined;
             const statusLabel = payment.status === "paid" ? "Сплачено" : payment.status === "overdue" ? "Прострочено" : payment.status === "refunded" ? "Повернено" : payment.status === "cancelled" ? "Скасовано" : "Очікується";
+            const studentName = payment.studentName ?? student?.child ?? "Учень";
+            const studentPhone = payment.studentPhone ?? student?.childPhone;
+            const contactName = payment.contactName ?? student?.parent ?? "Не вказано";
+            const contactPhone = payment.contactPhone ?? student?.phone;
             return <div id={"payment-" + payment.id} className={"paymentRow " + (focusedPaymentId === payment.id ? "paymentFocused" : "")} key={payment.id}>
-              <span className="paymentIdentity"><b>{student?.child ?? "Учень"}</b><small>Дитина{student?.childPhone ? " · " + formatPhone(student.childPhone) : ""}</small><small><strong>Відповідальний:</strong> {student?.parent ?? "Не вказано"}{student?.phone ? " · " + formatPhone(student.phone) : ""}</small></span>
-              <span className="paymentPlanCell"><b>{plan?.name ?? "—"}{plan && !plan.isActive ? <em className="inactivePlanInline">Неактивний</em> : null}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}</span>
+              <span className="paymentIdentity"><b>{studentName}</b><small>Дитина{studentPhone ? " · " + formatPhone(studentPhone) : ""}</small><small><strong>Відповідальний:</strong> {contactName}{contactPhone ? " · " + formatPhone(contactPhone) : ""}</small></span>
+              <span className="paymentPlanCell"><b>{payment.planName ?? plan?.name ?? "—"}{plan && !plan.isActive ? <em className="inactivePlanInline">Неактивний</em> : null}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}</span>
               <span className="paymentAmountCell"><b>{money(payment.adjustedAmount)}</b><small>{payment.balanceAmount > 0 ? <>Залишок: {money(payment.balanceAmount)}</> : payment.creditAmount > 0 ? <>Кредит: {money(payment.creditAmount)}</> : <>Внесено: {money(Math.max(0, payment.paidAmount - payment.refundedAmount))}</>}{payment.refundedAmount > 0 ? " · повернено " + money(payment.refundedAmount) : ""}</small>{payment.creditAmount > 0 && <em className="paymentCreditHint">Буде враховано в наступному періоді</em>}</span>
               <span>{payment.dueDate ? new Date(payment.dueDate + "T00:00:00").toLocaleDateString("uk-UA") : "—"}</span>
               <span className={"paymentStatus " + payment.status}>{statusLabel}</span>
@@ -108,6 +163,10 @@ export function PaymentsView({
               </span>
             </div>;
           })}
+        </div>
+        <div className="registryPager" aria-label="Сторінки оплат">
+          <span>{pageTotal === 0 ? "0" : `${pageOffset + 1}–${Math.min(pageOffset + pageLimit, pageTotal)}`} з {pageTotal}</span>
+          <div><button disabled={loading || pageOffset === 0} onClick={onPreviousPage}>← Назад</button><button disabled={loading || pageOffset + pageLimit >= pageTotal} onClick={onNextPage}>Далі →</button></div>
         </div>
       </article>
     </div>

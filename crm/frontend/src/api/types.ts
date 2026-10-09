@@ -103,6 +103,13 @@ export type WorkspaceGroup = {
   primary_teacher_name: string | null;
 };
 
+export type PageResult<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type WorkspaceBundle = {
   leads: WorkspaceLead[];
   students: WorkspaceStudent[];
@@ -174,6 +181,21 @@ export type ApiPayment = {
   refunded_minor: number;
   balance_minor: number;
   credit_minor: number;
+};
+
+export type ApiPaymentWorkspaceItem = ApiPayment & {
+  plan_name: string | null;
+  student_name: string;
+  student_phone: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+};
+
+export type ApiPaymentPage = {
+  items: ApiPaymentWorkspaceItem[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 export type ApiStudentSubscription = {

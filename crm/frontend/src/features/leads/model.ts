@@ -47,6 +47,8 @@ export type Lead = {
   deferredNote?: string;
   closeReason?: string;
   closeNote?: string;
+  groupId?: EntityId;
+  groupName?: string;
 };
 
 export function leadIsDeferred(lead: Lead): boolean {
