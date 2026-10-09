@@ -133,6 +133,18 @@ def test_expired_exhausted_message_also_cleans_credential(smtp):
         assert row.status == "expired" and "link" not in row.payload
 
 
+def test_maintenance_scrubs_expiry_when_email_is_disabled(smtp, monkeypatch):
+    _, expired_id = queued(datetime.now(timezone.utc) - timedelta(seconds=1))
+    _, valid_id = queued()
+    monkeypatch.setattr(settings, "transactional_email_enabled", False)
+    with SessionLocal() as db:
+        result = notifications.deliver_pending(db)
+        assert result["enabled"] is False and result["expired"] == 1 and result["pending"] == 1
+        assert db.get(NotificationOutbox, expired_id).status == "expired"
+        assert db.get(NotificationOutbox, valid_id).status == "pending"
+    assert smtp[0] == []
+
+
 @pytest.mark.parametrize("flag", ["read_only_mode", "transactional_email_enabled"])
 def test_delivery_respects_disabled_or_read_only_mode(smtp, monkeypatch, flag):
     org_id, row_id = queued()

@@ -79,18 +79,15 @@ def _render(row: NotificationOutbox) -> tuple[str, str]:
 
 
 def deliver_pending(db: Session, limit: int = 50, *, organization_id: UUID | None = None, outbox_id: UUID | None = None) -> dict:
-    if not settings.transactional_email_enabled:
-        return {"enabled": False, "sent": 0, "failed": 0, "pending": 0}
-
-    eligible = [
-        NotificationOutbox.status.in_(["pending", "failed"]),
-        or_(NotificationOutbox.attempts < 5,
-            NotificationOutbox.payload["expires_at"].as_string() <= datetime.now(timezone.utc).isoformat()),
-    ]
+    enabled = settings.transactional_email_enabled
+    scope = [NotificationOutbox.status.in_(["pending", "failed"])]
     if organization_id is not None:
-        eligible.append(NotificationOutbox.organization_id == organization_id)
+        scope.append(NotificationOutbox.organization_id == organization_id)
     if outbox_id is not None:
-        eligible.append(NotificationOutbox.id == outbox_id)
+        scope.append(NotificationOutbox.id == outbox_id)
+    expired_filter = NotificationOutbox.payload["expires_at"].as_string() <= datetime.now(timezone.utc).isoformat()
+    # Expired credentials must be scrubbed even while SMTP is disabled.
+    eligible = [*scope, or_(NotificationOutbox.attempts < 5, expired_filter) if enabled else expired_filter]
     ids = list(db.scalars(select(NotificationOutbox.id).where(*eligible)
                           .order_by(NotificationOutbox.created_at).limit(limit)))
     sent = 0
@@ -116,6 +113,8 @@ def deliver_pending(db: Session, limit: int = 50, *, organization_id: UUID | Non
                 db.commit()
                 expired += 1
                 continue
+        if not enabled:
+            continue
         try:
             subject, body = _render(row)
             message = EmailMessage()
@@ -144,8 +143,10 @@ def deliver_pending(db: Session, limit: int = 50, *, organization_id: UUID | Non
         finally:
             row.attempts += 1
             db.commit()
-    pending = db.scalar(select(func.count()).select_from(NotificationOutbox).where(*eligible)) or 0
-    return {"enabled": True, "sent": sent, "failed": failed, "expired": expired, "pending": pending}
+    pending = db.scalar(select(func.count()).select_from(NotificationOutbox).where(
+        *scope, NotificationOutbox.attempts < 5,
+    )) or 0
+    return {"enabled": enabled, "sent": sent, "failed": failed, "expired": expired, "pending": pending}
 
 
 def deliver_one(organization_id: UUID, outbox_id: UUID) -> None:
