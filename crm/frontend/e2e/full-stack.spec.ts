@@ -27,7 +27,8 @@ test("moving a lead to waiting does not start enrollment", async ({ page }) => {
   await login(page);
   await page.getByText("Заявки", { exact: true }).first().click();
 
-  const childName = `Waitlist ${Date.now()}`;
+  const uniqueSuffix = Array.from({ length: 8 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
+  const childName = `Waitlist ${uniqueSuffix}`;
   const childPhone = `+38067${Date.now().toString().slice(-7)}`;
   await page.getByRole("button", { name: "Нова заявка" }).click();
   const createDialog = page.getByTestId("lead-create-dialog");
