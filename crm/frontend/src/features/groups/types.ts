@@ -8,5 +8,6 @@ export type GroupItem = {
   location: string;
   capacity: number;
   members: EntityId[];
+  memberCount?: number;
   teacherName?: string;
 };
