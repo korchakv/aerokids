@@ -34,15 +34,16 @@ import { SettingsView } from "./features/settings/SettingsView";
 import { ReportsView } from "./features/reports/ReportsView";
 import { StudentDrawer, StudentsView, type StudentFilter, type StudentLifecycleLabel } from "./features/students/StudentsView";
 import { applyOperations } from "./features/operations/adapters";
-import { applyWorkspace, crmStatusLabel, crmStatusValue } from "./features/workspace/adapters";
+import { applyWorkspace, crmStatusLabel, crmStatusValue, workspaceGroupToGroupItem, workspaceStudentLifecycle, workspaceStudentToLead } from "./features/workspace/adapters";
 import { cleanSpaces, emailError, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
-import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
+import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
 
 
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
 const UI_SCALE_LEVELS: UiScale[] = [1, 1.1, 1.25, 1.4];
+const REGISTRY_PAGE_SIZE = 25;
 
 
 
@@ -134,6 +135,21 @@ function App() {
   const [leadStatusMenuOpen, setLeadStatusMenuOpen] = useState(false);
   const [leadDeleteSaving, setLeadDeleteSaving] = useState(false);
   const [studentFilter, setStudentFilter] = useState<StudentFilter>("all");
+  const [studentRegistryQuery, setStudentRegistryQuery] = useState("");
+  const [studentRegistryRows, setStudentRegistryRows] = useState<Lead[]>([]);
+  const [studentRegistryStates, setStudentRegistryStates] = useState<Record<EntityId, StudentLifecycleLabel>>({});
+  const [studentRegistryTotal, setStudentRegistryTotal] = useState(0);
+  const [studentRegistryOffset, setStudentRegistryOffset] = useState(0);
+  const [studentRegistryLoading, setStudentRegistryLoading] = useState(false);
+  const [studentRegistryError, setStudentRegistryError] = useState("");
+  const [groupRegistryQuery, setGroupRegistryQuery] = useState("");
+  const [groupRegistrySort, setGroupRegistrySort] = useState<"name" | "size_desc" | "size_asc">("name");
+  const [groupRegistryRows, setGroupRegistryRows] = useState<GroupItem[]>([]);
+  const [groupRegistryTotal, setGroupRegistryTotal] = useState(0);
+  const [groupRegistryOffset, setGroupRegistryOffset] = useState(0);
+  const [groupRegistryLoading, setGroupRegistryLoading] = useState(false);
+  const [groupRegistryError, setGroupRegistryError] = useState("");
+  const [registryRefreshTick, setRegistryRefreshTick] = useState(0);
   const [candidateAgeFilter, setCandidateAgeFilter] = useState<"all" | "8-10" | "11-13">("all");
   const [candidateLevelFilter, setCandidateLevelFilter] = useState("all");
   const [candidateLocationFilter, setCandidateLocationFilter] = useState("all");
@@ -416,6 +432,7 @@ function App() {
         return nearest?.id ?? "";
       });
       setWorkspaceLoaded(true);
+      setRegistryRefreshTick((value) => value + 1);
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося завантажити дані CRM");
       throw error;
@@ -445,6 +462,7 @@ function App() {
         ]);
         applyWorkspace(bundle, setLeads, setGroups, setStudentStates);
         applyTeaching(teaching, setLessons, setGroups);
+        setRegistryRefreshTick((value) => value + 1);
       } catch {
         // Keep the current UI stable on a transient background refresh failure.
       } finally {
@@ -468,6 +486,78 @@ function App() {
       workspaceAutoRefreshBusy.current = false;
     };
   }, [session?.accessToken, session?.organizationId]);
+
+  useEffect(() => {
+    setStudentRegistryOffset(0);
+  }, [studentFilter, studentRegistryQuery]);
+
+  useEffect(() => {
+    setGroupRegistryOffset(0);
+  }, [groupRegistryQuery, groupRegistrySort]);
+
+  useEffect(() => {
+    if (!apiEnabled || !session || active !== "Учні") return;
+    let cancelled = false;
+    setStudentRegistryLoading(true);
+    setStudentRegistryError("");
+    const timer = window.setTimeout(() => {
+      loadWorkspaceStudentsPage(session, {
+        q: studentRegistryQuery,
+        status: studentFilter === "all" ? undefined : studentFilter,
+        sort: "name",
+        limit: REGISTRY_PAGE_SIZE,
+        offset: studentRegistryOffset,
+      }).then((page) => {
+        if (cancelled) return;
+        if (page.total > 0 && studentRegistryOffset >= page.total) {
+          setStudentRegistryOffset(Math.floor((page.total - 1) / REGISTRY_PAGE_SIZE) * REGISTRY_PAGE_SIZE);
+          return;
+        }
+        setStudentRegistryRows(page.items.map(workspaceStudentToLead));
+        setStudentRegistryStates(Object.fromEntries(page.items.map((item) => [item.student_id, workspaceStudentLifecycle(item)])));
+        setStudentRegistryTotal(page.total);
+      }).catch((error) => {
+        if (!cancelled) setStudentRegistryError(error instanceof Error ? error.message : "Не вдалося завантажити сторінку учнів");
+      }).finally(() => {
+        if (!cancelled) setStudentRegistryLoading(false);
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [active, session?.accessToken, session?.organizationId, studentFilter, studentRegistryQuery, studentRegistryOffset, registryRefreshTick]);
+
+  useEffect(() => {
+    if (!apiEnabled || !session || active !== "Групи") return;
+    let cancelled = false;
+    setGroupRegistryLoading(true);
+    setGroupRegistryError("");
+    const timer = window.setTimeout(() => {
+      loadWorkspaceGroupsPage(session, {
+        q: groupRegistryQuery,
+        sort: groupRegistrySort,
+        limit: REGISTRY_PAGE_SIZE,
+        offset: groupRegistryOffset,
+      }).then((page) => {
+        if (cancelled) return;
+        if (page.total > 0 && groupRegistryOffset >= page.total) {
+          setGroupRegistryOffset(Math.floor((page.total - 1) / REGISTRY_PAGE_SIZE) * REGISTRY_PAGE_SIZE);
+          return;
+        }
+        setGroupRegistryRows(page.items.map((item) => workspaceGroupToGroupItem(item)));
+        setGroupRegistryTotal(page.total);
+      }).catch((error) => {
+        if (!cancelled) setGroupRegistryError(error instanceof Error ? error.message : "Не вдалося завантажити сторінку груп");
+      }).finally(() => {
+        if (!cancelled) setGroupRegistryLoading(false);
+      });
+    }, 180);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [active, session?.accessToken, session?.organizationId, groupRegistryQuery, groupRegistrySort, groupRegistryOffset, registryRefreshTick]);
 
     const selected = leads.find((lead) => lead.id === selectedId) ?? null;
   const selectedMissingDetails = selected ? leadMissingDetails(selected) : [];
@@ -571,6 +661,13 @@ function App() {
     if (studentFilter === "archived") return state === "Архів";
     return true;
   }), [activeStudents, studentStates, studentFilter]);
+
+  const registryStudents = apiEnabled ? studentRegistryRows : visibleStudents;
+  const registryGroups = apiEnabled ? groupRegistryRows : groups;
+  const registryStudentStates = useMemo(
+    () => ({ ...studentStates, ...studentRegistryStates }),
+    [studentStates, studentRegistryStates],
+  );
 
   const candidateLevels = useMemo(() => Array.from(new Set(waiting.map((item) => item.recommendedLevel).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "uk-UA")), [waiting]);
 
@@ -1370,16 +1467,30 @@ function App() {
           student_ids: selectedCandidates,
           schedule_slots: groupSchedule,
         }, session);
-        if (newGroupTeacherId && canManageStaff) {
-          await apiPost(`/staff/${newGroupTeacherId}/groups`, {
-            group_id: created.group.id,
-            is_primary: true,
-          }, session);
-        }
-        await syncWorkspace(session);
+
+        // The primary mutation has succeeded at this point. Close the creation
+        // dialog immediately so a secondary refresh/assignment failure cannot
+        // make the user submit the same group twice.
         if (groupCreateContext === "lead") setLeadEnrollmentGroupId(created.group.id);
         setSelectedCandidates([]);
         setShowGroupForm(false);
+        setRegistryRefreshTick((value) => value + 1);
+
+        try {
+          if (newGroupTeacherId && canManageStaff) {
+            await apiPost(`/staff/${newGroupTeacherId}/groups`, {
+              group_id: created.group.id,
+              is_primary: true,
+            }, session);
+          }
+          await syncWorkspace(session);
+        } catch (secondaryError) {
+          setWorkspaceError(
+            secondaryError instanceof Error
+              ? `Групу створено, але не вдалося повністю оновити пов’язані дані: ${secondaryError.message}`
+              : "Групу створено, але не вдалося повністю оновити пов’язані дані.",
+          );
+        }
         return;
       } catch (error) {
         setGroupCreateError(error instanceof Error ? error.message : "Не вдалося створити групу.");
@@ -2883,14 +2994,23 @@ function App() {
         </section>}
 
         {active === "Учні" && <StudentsView
-          students={visibleStudents}
+          students={registryStudents}
           totalStudents={activeStudents.length}
           groupedStudents={activeStudents.filter((student) => studentGroup(student.id)).length}
           pausedStudents={Object.values(studentStates).filter((state) => state === "Пауза").length}
           groupCount={groups.length}
           studentFilter={studentFilter}
           onFilterChange={setStudentFilter}
-          studentStates={studentStates}
+          query={studentRegistryQuery}
+          onQueryChange={setStudentRegistryQuery}
+          pageTotal={apiEnabled ? studentRegistryTotal : visibleStudents.length}
+          pageLimit={REGISTRY_PAGE_SIZE}
+          pageOffset={apiEnabled ? studentRegistryOffset : 0}
+          loading={apiEnabled && studentRegistryLoading}
+          error={studentRegistryError}
+          onPreviousPage={() => setStudentRegistryOffset((value) => Math.max(0, value - REGISTRY_PAGE_SIZE))}
+          onNextPage={() => setStudentRegistryOffset((value) => value + REGISTRY_PAGE_SIZE)}
+          studentStates={registryStudentStates}
           groupForStudent={studentGroup}
           onOpenStudent={(studentId, currentGroupId) => {
             setSelectedStudentId(studentId);
@@ -3084,7 +3204,7 @@ function App() {
           activeStudents={overviewReport?.active_students ?? activeStudents.length}
         />}
         {active === "Групи" && <GroupsView
-          groups={groups}
+          groups={registryGroups}
           waiting={waiting}
           visibleWaiting={visibleWaiting}
           candidateLevels={candidateLevels}
@@ -3097,6 +3217,17 @@ function App() {
           candidateSort={candidateSort}
           groupSchedule={groupSchedule}
           groupLocationId={groupLocationId}
+          groupQuery={groupRegistryQuery}
+          groupSort={groupRegistrySort}
+          groupPageTotal={apiEnabled ? groupRegistryTotal : groups.length}
+          groupPageLimit={REGISTRY_PAGE_SIZE}
+          groupPageOffset={apiEnabled ? groupRegistryOffset : 0}
+          groupPageLoading={apiEnabled && groupRegistryLoading}
+          groupPageError={groupRegistryError}
+          onGroupQueryChange={setGroupRegistryQuery}
+          onGroupSortChange={setGroupRegistrySort}
+          onPreviousGroupPage={() => setGroupRegistryOffset((value) => Math.max(0, value - REGISTRY_PAGE_SIZE))}
+          onNextGroupPage={() => setGroupRegistryOffset((value) => value + REGISTRY_PAGE_SIZE)}
           teacherNameForGroup={(groupId) => groupTeacher(groupId)?.fullName}
           onOpenGroup={(groupId) => { void openGroup(groupId); }}
           onOpenCreation={openGroupCreation}

@@ -80,11 +80,13 @@ test("owner can open modular groups workspace", async ({ page }) => {
   await expect(page.getByTestId("groups-workspace")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Активні групи" })).toBeVisible();
   const groupCards = page.locator(".groupCardButton");
+  await expect(page.getByText("Завантаження груп…", { exact: true })).toHaveCount(0);
   if (await groupCards.count() === 0) {
-    await page.getByRole("button", { name: "+ Створити групу" }).click();
+    await page.getByRole("button", { name: "+ Нова група" }).click();
     await expect(page.getByRole("heading", { name: "Створити групу" })).toBeVisible();
     await page.getByLabel("Назва групи").fill(`Smoke Group ${Date.now()}`);
     await page.getByRole("button", { name: "Створити групу", exact: true }).click();
+    await expect(page.getByTestId("group-create-dialog")).toHaveCount(0);
     await expect(groupCards.first()).toBeVisible();
   }
   await groupCards.first().click();
@@ -144,4 +146,27 @@ test("owner can open modular staff locations and settings workspaces", async ({ 
   await page.getByText("Звіти", { exact: true }).first().click();
   await expect(page.getByRole("heading", { name: "Заявка → учень" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Оплати" })).toBeVisible();
+});
+
+
+test("student and group registries use database-backed page search", async ({ page }) => {
+  await login(page);
+
+  await page.getByText("Учні", { exact: true }).first().click();
+  await expect(page.getByTestId("students-workspace")).toBeVisible();
+  const studentRequest = page.waitForResponse((response) =>
+    response.url().includes("/workspace/students/page") && response.request().method() === "GET"
+  );
+  await page.getByTestId("students-workspace").locator(".registrySearch input").fill("definitely-no-student");
+  expect((await studentRequest).ok()).toBeTruthy();
+  await expect(page.getByTestId("students-workspace").getByText("За цим фільтром учнів немає.")).toBeVisible();
+
+  await page.getByText("Групи", { exact: true }).first().click();
+  await expect(page.getByTestId("groups-workspace")).toBeVisible();
+  const groupRequest = page.waitForResponse((response) =>
+    response.url().includes("/workspace/groups/page") && response.request().method() === "GET"
+  );
+  await page.getByTestId("groups-workspace").locator(".registrySearch input").fill("definitely-no-group");
+  expect((await groupRequest).ok()).toBeTruthy();
+  await expect(page.getByTestId("groups-workspace").getByText("За пошуком груп не знайдено")).toBeVisible();
 });
