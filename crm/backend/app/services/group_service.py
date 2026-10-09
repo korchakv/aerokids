@@ -341,8 +341,8 @@ def group_detail(db: Session, org_id: UUID, group_id: UUID, user_id: UUID | None
         .order_by(
             StudentContact.student_id,
             StudentContact.is_primary.desc(),
-            Contact.full_name,
-            Contact.id,
+            Contact.created_at.asc(),
+            Contact.id.asc(),
         )
     ).all()
     for student_id, contact in contact_rows:
