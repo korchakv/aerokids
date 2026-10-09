@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import date, datetime, time, timezone
 
-from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Integer, String, Text, Time, UniqueConstraint
+from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, Time, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -131,6 +131,11 @@ class Contact(Base):
 
 class Student(Base):
     __tablename__ = "students"
+    __table_args__ = (
+        Index("ix_students_org_status_created", "organization_id", "student_status", "created_at"),
+        Index("ix_students_org_status_source", "organization_id", "student_status", "source"),
+        Index("ix_students_org_status_next_contact", "organization_id", "student_status", "next_contact_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
@@ -173,7 +178,10 @@ class StudentAvailability(Base):
 
 class StudentContact(Base):
     __tablename__ = "student_contacts"
-    __table_args__ = (UniqueConstraint("student_id", "contact_id", name="uq_student_contact"),)
+    __table_args__ = (
+        UniqueConstraint("student_id", "contact_id", name="uq_student_contact"),
+        Index("ix_student_contacts_org_student_primary", "organization_id", "student_id", "is_primary"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
@@ -185,6 +193,9 @@ class StudentContact(Base):
 
 class TrialLesson(Base):
     __tablename__ = "trial_lessons"
+    __table_args__ = (
+        Index("ix_trial_lessons_org_student_start", "organization_id", "student_id", "starts_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
@@ -352,6 +363,9 @@ class MakeupCredit(Base):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = (
+        Index("ix_payments_org_status_due_created", "organization_id", "status", "due_date", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
@@ -474,6 +488,7 @@ class GroupStaff(Base):
     __tablename__ = "group_staff"
     __table_args__ = (
         UniqueConstraint("group_id", "staff_id", name="uq_group_staff"),
+        Index("ix_group_staff_org_group_primary", "organization_id", "group_id", "is_primary"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -544,6 +559,10 @@ class PublicIntakeThrottle(Base):
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
+    __table_args__ = (
+        Index("ix_audit_events_org_created", "organization_id", "created_at"),
+        Index("ix_audit_events_org_entity_created", "organization_id", "entity_type", "entity_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
