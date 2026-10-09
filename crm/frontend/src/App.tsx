@@ -3034,7 +3034,7 @@ function App() {
           onFilterChange={setStudentFilter}
           query={studentRegistryQuery}
           onQueryChange={setStudentRegistryQuery}
-          pageTotal={apiEnabled ? studentRegistryTotal : visibleStudents.length}
+          pageTotal={apiEnabled ? studentRegistryTotal : registryStudents.length}
           pageLimit={REGISTRY_PAGE_SIZE}
           pageOffset={apiEnabled ? studentRegistryOffset : 0}
           loading={apiEnabled && studentRegistryLoading}
@@ -3250,7 +3250,7 @@ function App() {
           groupLocationId={groupLocationId}
           groupQuery={groupRegistryQuery}
           groupSort={groupRegistrySort}
-          groupPageTotal={apiEnabled ? groupRegistryTotal : groups.length}
+          groupPageTotal={apiEnabled ? groupRegistryTotal : registryGroups.length}
           groupPageLimit={REGISTRY_PAGE_SIZE}
           groupPageOffset={apiEnabled ? groupRegistryOffset : 0}
           groupPageLoading={apiEnabled && groupRegistryLoading}
