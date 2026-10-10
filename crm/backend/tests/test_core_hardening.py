@@ -405,3 +405,31 @@ def test_location_with_room_cannot_be_deleted(client):
     deleted = client.delete(f"/locations/{location['id']}", headers=headers(org))
     assert deleted.status_code == 409, deleted.text
     assert "кімнат" in deleted.json()["detail"].lower()
+
+
+def test_trial_conflict_explains_occupied_location_interval(client):
+    org = create_org(client, slug="trial-conflict-explanation")
+    location = client.post("/locations", headers=headers(org), json={"name": "One Location"}).json()
+    group = create_group(client, org, "Scheduled Group", location_id=location["id"])
+    student = create_student(client, org, "Trial Conflict Child")
+    lesson_date = date.today() + timedelta(days=2)
+
+    lesson = client.post("/lesson-sessions", headers=headers(org), json={
+        "group_id": group["id"],
+        "location_id": location["id"],
+        "starts_at": f"{lesson_date.isoformat()}T11:00:00+03:00",
+        "duration_minutes": 60,
+    })
+    assert lesson.status_code == 201, lesson.text
+
+    trial = client.post("/trial-lessons", headers=headers(org), json={
+        "student_id": student["id"],
+        "location_id": location["id"],
+        "starts_at": f"{lesson_date.isoformat()}T11:15:00+03:00",
+    })
+    assert trial.status_code == 409, trial.text
+    detail = trial.json()["detail"]
+    assert "локація зайнята" in detail.lower()
+    assert lesson_date.strftime("%d.%m.%Y") in detail
+    assert "11:00–12:00" in detail
+
