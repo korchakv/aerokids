@@ -441,6 +441,17 @@ def create_enrollment_hardened(
     return hardening.create_enrollment_hardened(db, access.organization_id, data, access.user_id)
 
 
+@router.post("/students/{student_id}/return-to-waiting")
+def return_student_to_waiting(
+    student_id: UUID,
+    access: OrgAccess = Depends(_require_capability("students.manage")),
+    db: Session = Depends(get_db),
+):
+    return hardening.return_student_to_waiting(
+        db, access.organization_id, student_id, access.user_id,
+    )
+
+
 @router.post("/students/{student_id}/transfer", response_model=EnrollmentRead)
 def transfer_student_hardened(
     student_id: UUID,
