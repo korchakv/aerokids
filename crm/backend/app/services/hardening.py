@@ -813,7 +813,7 @@ def create_enrollment_hardened(db: Session, org_id: UUID, data, actor_user_id: U
         )
         db.add(enrollment)
     student.crm_status = CrmStatus.ENROLLED
-    student.student_status = StudentStatus.ACTIVE
+    student.student_status = StudentStatus.PROSPECT
     student.next_contact_at = None
     student.deferred_until = None
     student.deferred_reason = None
