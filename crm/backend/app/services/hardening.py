@@ -343,6 +343,18 @@ def _overlaps(start_a: datetime, duration_a: int, start_b: datetime, duration_b:
     return start_a < start_b + timedelta(minutes=duration_b) and start_a + timedelta(minutes=duration_a) > start_b
 
 
+def _conflict_window_label(db: Session, org_id: UUID, starts_at: datetime, duration_minutes: int) -> str:
+    start_utc = _utc_naive(db, org_id, starts_at).replace(tzinfo=timezone.utc)
+    end_utc = start_utc + timedelta(minutes=duration_minutes)
+    tz = organization_timezone(db, org_id)
+    local_start = start_utc.astimezone(tz)
+    local_end = end_utc.astimezone(tz)
+    end_label = local_end.strftime("%H:%M")
+    if local_end.date() != local_start.date():
+        end_label = local_end.strftime("%d.%m.%Y %H:%M")
+    return f"{local_start:%d.%m.%Y} {local_start:%H:%M}–{end_label}"
+
+
 def resource_conflict_reason(
     db: Session,
     org_id: UUID,
@@ -391,7 +403,8 @@ def resource_conflict_reason(
                 reasons.append("кімната зайнята")
             elif same_location_without_room:
                 reasons.append("локація зайнята")
-            return f"Конфлікт розкладу ({', '.join(reasons)})"
+            interval = _conflict_window_label(db, org_id, session.starts_at, session.duration_minutes)
+            return f"Конфлікт розкладу ({', '.join(reasons)}: {interval})"
 
     trials = list(db.scalars(select(TrialLesson).where(
         TrialLesson.organization_id == org_id,
@@ -417,7 +430,8 @@ def resource_conflict_reason(
             and (room_id is None or trial_room is None)
         )
         if same_staff or same_room or same_location_without_room:
-            return "Конфлікт із пробним заняттям"
+            interval = _conflict_window_label(db, org_id, trial.starts_at, trial_duration)
+            return f"Конфлікт із пробним заняттям: {interval}"
 
     individuals = list(db.scalars(select(IndividualLessonSession).where(
         IndividualLessonSession.organization_id == org_id,
@@ -436,7 +450,8 @@ def resource_conflict_reason(
             and (room_id is None or lesson.room_id is None)
         )
         if same_staff or same_room or same_location_without_room:
-            return "Конфлікт з індивідуальним заняттям"
+            interval = _conflict_window_label(db, org_id, lesson.starts_at, lesson.duration_minutes)
+            return f"Конфлікт з індивідуальним заняттям: {interval}"
     return None
 
 
