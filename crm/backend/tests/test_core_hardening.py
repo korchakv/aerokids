@@ -416,6 +416,7 @@ def test_trial_conflict_explains_occupied_location_interval(client):
 
     lesson = client.post("/lesson-sessions", headers=headers(org), json={
         "group_id": group["id"],
+        "location_id": location["id"],
         "starts_at": f"{lesson_date.isoformat()}T11:00:00",
         "duration_minutes": 60,
     })
