@@ -89,7 +89,7 @@ test("moving a lead to waiting does not start enrollment", async ({ page }) => {
 test("a scheduled trial date and time can be edited from the lead card", async ({ page }) => {
   await login(page);
 
-  const suffix = String(Date.now()) + String(Math.floor(Math.random() * 1000));
+  const suffix = Array.from({ length: 8 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
   const childName = "Editable Trial " + suffix;
   const childPhone = "+38067" + String(Math.floor(1_000_000 + Math.random() * 9_000_000));
   const setup = await page.evaluate(async ({ childName, childPhone }) => {
