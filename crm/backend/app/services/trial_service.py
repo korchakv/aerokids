@@ -61,10 +61,12 @@ def update_trial(
     starts_at: datetime | None,
     location_id: UUID | None,
     actor_user_id: UUID | None = None,
+    location_id_provided: bool = False,
 ) -> TrialLesson:
     trial = _scoped_get(db, TrialLesson, org_id, trial_id)
     if location_id is not None:
         _scoped_get(db, Location, org_id, location_id)
+    if location_id is not None or location_id_provided:
         trial.location_id = location_id
     if starts_at is not None:
         trial.starts_at = starts_at
