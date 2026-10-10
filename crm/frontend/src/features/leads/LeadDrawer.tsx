@@ -363,7 +363,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
                 <button className="search dangerSoft" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Не хочуть продовжувати</button>
               </div>
             </>}
-            {selected.status === "Очікує групу" && <small>Готові навчатися · можна зарахувати в групу або без групи.</small>}
+            {selected.status === "Очікує групу" && <><small>Готові навчатися · можна зарахувати в групу або без групи.</small>{canManageLeads && <button type="button" className="primary full" onClick={beginLeadEnrollment}>Зарахувати учня</button>}</>}
           </div>}
 
           {leadEnrollmentOpen && <div id="lead-enrollment-workflow" data-testid="lead-enrollment-workflow" className="workflowBox leadWorkflowBox leadDirectEnrollmentStep">
@@ -383,6 +383,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             </button>
           </div>}
 
+          {selected.status === "Очікує групу" && selected.trialResult !== "completed" && canManageLeads && <div className="resultCard waitingEnrollmentCard"><span>Очікує групу</span><b>Готові навчатися</b><small>Оберіть групу або зарахуйте без групи.</small><button type="button" className="primary full" onClick={beginLeadEnrollment}>Зарахувати учня</button></div>}
           {selected.trialResult === "no_show" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="resultCard noShowCard">
             <span>Не прийшли на пробне</span>
             <b>Потрібен повторний контакт</b>
