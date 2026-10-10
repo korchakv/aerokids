@@ -109,13 +109,18 @@ def list_trials(db: Session, org_id: UUID) -> list[TrialLesson]:
 
 def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommended_level: str | None, teacher_notes: str | None, actor_user_id: UUID | None = None) -> TrialLesson:
     trial = _scoped_get(db, TrialLesson, org_id, trial_id)
+    was_completed = trial.status == TrialStatus.COMPLETED
     trial.status = status
     trial.recommended_level = recommended_level
     trial.teacher_notes = teacher_notes
     student = _scoped_get(db, Student, org_id, trial.student_id)
-    student.lead_close_reason = None
-    student.lead_close_note = None
-    if status.value == "completed":
+    if not was_completed:
+        student.lead_close_reason = None
+        student.lead_close_note = None
+    if was_completed:
+        # Editing a saved result must not change the student's current CRM stage.
+        pass
+    elif status.value == "completed":
         # A completed trial still needs an explicit business decision:
         # ready for a group, thinking/follow-up, or declined.
         student.crm_status = CrmStatus.TRIAL_COMPLETED
