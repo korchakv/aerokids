@@ -845,12 +845,10 @@ def return_student_to_waiting(
         .where(
             Enrollment.organization_id == org_id,
             Enrollment.student_id == student.id,
-            Enrollment.status == EnrollmentStatus.ACTIVE,
+            Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
         )
         .with_for_update()
     ))
-    if not active_enrollments and student.crm_status != CrmStatus.ENROLLED:
-        raise HTTPException(status_code=409, detail="Учень не зарахований до групи")
 
     today = organization_today(db, org_id)
     for enrollment in active_enrollments:
@@ -867,6 +865,7 @@ def return_student_to_waiting(
         "ended_enrollments": len(active_enrollments),
         "group_ids": [str(row.group_id) for row in active_enrollments],
         "ended_at": today.isoformat(),
+        "crm_status": CrmStatus.WAITING_FOR_GROUP.value,
     }, actor_user_id)
     db.commit()
     db.refresh(student)
