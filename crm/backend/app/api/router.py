@@ -234,14 +234,15 @@ def update_trial(
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
+    provided_fields = data.model_dump(exclude_unset=True)
     return trial_service.update_trial(
         db,
         access.organization_id,
         trial_id,
         data.starts_at,
         data.location_id,
-        access.user_id,
-        location_id_provided="location_id" in data.model_fields_set,
+        actor_user_id=access.user_id,
+        location_id_provided="location_id" in provided_fields,
     )
 
 
