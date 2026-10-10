@@ -133,7 +133,7 @@ test("a scheduled trial date and time can be edited from the lead card", async (
 
   const drawer = page.getByTestId("lead-drawer");
   await drawer.getByRole("button", { name: "Змінити дату, час і локацію пробного" }).click();
-  const time = drawer.getByLabel("Час");
+  const time = drawer.locator("#lead-trial-workflow .dateTimeEditor select");
   await expect(time).toBeVisible();
   await time.selectOption("18:00");
 
