@@ -1033,12 +1033,14 @@ function App() {
         if (selected.trialId) {
           await apiPatch(`/trial-lessons/${selected.trialId}`, {
             location_id: trialLocationId || null,
+            clear_location_id: !trialLocationId,
             starts_at: new Date(trialAt).toISOString(),
           }, session);
         } else {
           await apiPost("/trial-lessons", {
             student_id: selected.id,
             location_id: trialLocationId || null,
+            clear_location_id: !trialLocationId,
             starts_at: new Date(trialAt).toISOString(),
           }, session);
         }
