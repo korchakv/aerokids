@@ -3903,6 +3903,7 @@ function auditEventLabel(type: string) {
     "lead.deferred_cleared": "Повернуто в роботу",
     "student.enrolled": "Зараховано до групи",
     "student.enrolled_without_group": "Зараховано без групи",
+    "student.returned_to_waiting": "Повернуто в роботу",
     "student.transferred": "Переведено в іншу групу",
     "student.status_changed": "Статус учня змінено",
     "payment.created": "Створено нарахування",
