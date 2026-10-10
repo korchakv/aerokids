@@ -111,6 +111,8 @@ type StudentDrawerProps = {
   onLifecycleChange: (state: StudentLifecycleLabel) => void;
   onTransferGroupChange: (groupId: EntityId | null) => void;
   onTransfer: () => void;
+  onReturnToWaiting: () => void;
+  returningToWaiting: boolean;
   onDelete: () => void;
   auditEventLabel: (type: string) => string;
   auditEventDetail: (event: ApiAuditEvent) => string;
@@ -132,6 +134,8 @@ export function StudentDrawer({
   onLifecycleChange,
   onTransferGroupChange,
   onTransfer,
+  onReturnToWaiting,
+  returningToWaiting,
   onDelete,
   auditEventLabel,
   auditEventDetail,
@@ -161,6 +165,14 @@ export function StudentDrawer({
             )}
           </div>
         </div>
+
+        {(currentGroup || student.status === "Зарахований") && <div className="studentSection">
+          <h3>Статус у воронці</h3>
+          <p>Учень залишиться активним у базі, але його зарахування до групи завершиться.</p>
+          <button className="secondary full" type="button" disabled={returningToWaiting} onClick={onReturnToWaiting}>
+            {returningToWaiting ? "Повертаємо…" : "Повернути в «Очікує групу»"}
+          </button>
+        </div>}
 
         <div className="studentSection">
           <h3>{currentGroup ? "Перевести в іншу групу" : "Додати до групи"}</h3>
