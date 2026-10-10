@@ -389,6 +389,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <b>Потрібен повторний контакт</b>
             {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
             <small>Заявка залишається активною. Можна перезаписати пробне або закрити її після контакту.</small>
+            {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Редагувати результат пробного</button>}
             <div className="postTrialActions">
               <button className="primary" onClick={() => setTrialMode("schedule")}>Перезаписати пробне</button>
               <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
@@ -401,6 +402,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <b>Потрібно узгодити нову дату</b>
             {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
             <small>Заявка залишається в роботі. Можна перезаписати пробне, поставити наступний контакт або закрити заявку.</small>
+            {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Редагувати результат пробного</button>}
             <div className="postTrialActions">
               <button className="primary" onClick={() => setTrialMode("schedule")}>Перезаписати пробне</button>
               <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
