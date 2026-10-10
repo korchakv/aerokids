@@ -335,7 +335,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <div className="workflowHead"><h3>Запис на пробне</h3><button onClick={() => setTrialMode(null)}>×</button></div>
             <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
             <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
-              <option value="">Без локації</option>
+              <option value="" disabled={Boolean(selected.trialLocationId)}>Без локації</option>
               {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
             </select></label>
             <button className="primary full" onClick={scheduleTrial}>Підтвердити пробне</button>
