@@ -58,11 +58,11 @@ export function leadIsDeferred(lead: Lead): boolean {
 
 export function leadKanbanColumn(lead: Lead): LeadKanbanColumnId {
   if (["Відмовились", "Не відповідає", "Неактуально"].includes(lead.status)) return "closed";
+  if (lead.status === "Очікує групу") return "waiting";
   if (leadIsDeferred(lead)) return "deferred";
   if (lead.trialResult === "no_show" && lead.status === "Зв'язались") return "no_show";
   if (lead.status === "Після пробного") return "after_trial";
   if (lead.status === "Пробне заплановано") return "trial";
-  if (lead.status === "Очікує групу") return "waiting";
   if (lead.status === "Нова") return "new";
   return "contacted";
 }
