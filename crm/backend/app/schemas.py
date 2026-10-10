@@ -463,6 +463,7 @@ class LeadDeferUpdate(BaseModel):
 class TrialLessonUpdate(BaseModel):
     starts_at: datetime | None = None
     location_id: UUID | None = None
+    clear_location_id: bool = False
 
     @field_validator("starts_at")
     @classmethod
