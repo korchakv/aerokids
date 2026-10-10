@@ -285,6 +285,22 @@ def test_enrolled_student_can_return_to_waiting_without_being_archived(client):
     )
     assert foreign_attempt.status_code == 404
 
+    # Active standalone students must be able to return to CRM work too.
+    standalone = create_student(client, org, "Standalone Child")
+    activated = client.patch(
+        f"/students/{standalone['id']}/status",
+        headers=headers(org),
+        json={"student_status": "active"},
+    )
+    assert activated.status_code == 200, activated.text
+    returned_standalone = client.post(
+        f"/students/{standalone['id']}/return-to-waiting",
+        headers=headers(org),
+    )
+    assert returned_standalone.status_code == 200, returned_standalone.text
+    assert returned_standalone.json()["crm_status"] == "waiting_for_group"
+    assert returned_standalone.json()["student_status"] == "active"
+
 
 def test_absent_choice_is_persisted_across_finalize_and_correction(client):
     org = create_org(client, "Attendance School", "attendance-hardening")
