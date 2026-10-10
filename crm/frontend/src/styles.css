@@ -1949,6 +1949,12 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 .inlineEditLink:hover{
   color:var(--ak-accent-text);
 }
+.trialSummary .inlineEditLink{
+  position:static;
+  justify-self:start;
+  margin-top:4px;
+  padding:0;
+}
 
 @media(max-width:720px){
   .leadDrawerIdentity{align-items:flex-start}
