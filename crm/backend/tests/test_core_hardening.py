@@ -248,7 +248,7 @@ def test_historical_roster_allows_attendance_after_transfer(client):
     assert attendance.status_code == 200, attendance.text
 
 
-def test_enrolled_student_can_return_to_waiting_without_being_archived(client):
+def test_enrolled_student_returns_to_waiting_prospect_state(client):
     org = create_org(client, "Waiting School", "return-to-waiting")
     other_org = create_org(client, "Other School", "return-to-waiting-other")
     group = create_group(client, org, "Current Group")
@@ -265,7 +265,7 @@ def test_enrolled_student_can_return_to_waiting_without_being_archived(client):
     )
     assert returned.status_code == 200, returned.text
     assert returned.json()["crm_status"] == "waiting_for_group"
-    assert returned.json()["student_status"] == "active"
+    assert returned.json()["student_status"] == "prospect"
 
     with SessionLocal() as db:
         enrollment = db.scalar(select(Enrollment).where(Enrollment.student_id == UUID(student["id"])))
@@ -273,7 +273,7 @@ def test_enrolled_student_can_return_to_waiting_without_being_archived(client):
         assert enrollment.status == EnrollmentStatus.FINISHED
         assert enrollment.ended_at is not None
         assert updated_student.crm_status == CrmStatus.WAITING_FOR_GROUP
-        assert updated_student.student_status == StudentStatus.ACTIVE
+        assert updated_student.student_status == StudentStatus.PROSPECT
 
     waiting = client.get("/waiting-list", headers=headers(org))
     assert waiting.status_code == 200, waiting.text
@@ -299,7 +299,7 @@ def test_enrolled_student_can_return_to_waiting_without_being_archived(client):
     )
     assert returned_standalone.status_code == 200, returned_standalone.text
     assert returned_standalone.json()["crm_status"] == "waiting_for_group"
-    assert returned_standalone.json()["student_status"] == "active"
+    assert returned_standalone.json()["student_status"] == "prospect"
 
 
 def test_absent_choice_is_persisted_across_finalize_and_correction(client):
