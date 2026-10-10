@@ -159,20 +159,27 @@ export function StudentDrawer({
       {canManageStudents && <>
         <div className="studentSection">
           <h3>Статус учня</h3>
-          <div className="segmented">
-            {(["Активний", "Пауза", "Архів"] as const).map((state) =>
-              <button className={studentState === state ? "active" : ""} onClick={() => onLifecycleChange(state)} key={state}>{state}</button>
-            )}
-          </div>
+          <select
+            className="transferSelect"
+            aria-label="Статус учня"
+            value={studentState}
+            disabled={returningToWaiting}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "return_to_work") {
+                onReturnToWaiting();
+                return;
+              }
+              onLifecycleChange(value as StudentLifecycleLabel);
+            }}
+          >
+            <option value="Активний">Активний</option>
+            <option value="Пауза">Пауза</option>
+            <option value="Архів">Архів</option>
+            <option value="return_to_work">Повернути в роботу</option>
+          </select>
+          <small>«Повернути в роботу» переведе учня в «Очікує групу».</small>
         </div>
-
-        {(currentGroup || student.status === "Зарахований") && <div className="studentSection">
-          <h3>Статус у воронці</h3>
-          <p>Учень залишиться активним у базі, але його зарахування до групи завершиться.</p>
-          <button className="secondary full" type="button" disabled={returningToWaiting} onClick={onReturnToWaiting}>
-            {returningToWaiting ? "Повертаємо…" : "Повернути в «Очікує групу»"}
-          </button>
-        </div>}
 
         <div className="studentSection">
           <h3>{currentGroup ? "Перевести в іншу групу" : "Додати до групи"}</h3>
