@@ -417,7 +417,7 @@ def test_trial_conflict_explains_occupied_location_interval(client):
     lesson = client.post("/lesson-sessions", headers=headers(org), json={
         "group_id": group["id"],
         "location_id": location["id"],
-        "starts_at": f"{lesson_date.isoformat()}T11:00:00",
+        "starts_at": f"{lesson_date.isoformat()}T11:00:00+03:00",
         "duration_minutes": 60,
     })
     assert lesson.status_code == 201, lesson.text
@@ -425,7 +425,7 @@ def test_trial_conflict_explains_occupied_location_interval(client):
     trial = client.post("/trial-lessons", headers=headers(org), json={
         "student_id": student["id"],
         "location_id": location["id"],
-        "starts_at": f"{lesson_date.isoformat()}T11:15:00",
+        "starts_at": f"{lesson_date.isoformat()}T11:15:00+03:00",
     })
     assert trial.status_code == 409, trial.text
     detail = trial.json()["detail"]
