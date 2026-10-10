@@ -228,14 +228,12 @@ def trials(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.A
 
 
 @router.patch("/trial-lessons/{trial_id}", response_model=TrialLessonRead)
-async def update_trial(
+def update_trial(
     trial_id: UUID,
     data: TrialLessonUpdate,
-    request: Request,
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    provided_fields = await request.json()
     return trial_service.update_trial(
         db,
         access.organization_id,
@@ -243,7 +241,7 @@ async def update_trial(
         data.starts_at,
         data.location_id,
         actor_user_id=access.user_id,
-        location_id_provided="location_id" in provided_fields,
+        clear_location_id=data.clear_location_id,
     )
 
 
