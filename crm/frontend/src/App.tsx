@@ -45,6 +45,12 @@ type UiScale = 1 | 1.1 | 1.25 | 1.4;
 const UI_SCALE_LEVELS: UiScale[] = [1, 1.1, 1.25, 1.4];
 const REGISTRY_PAGE_SIZE = 25;
 const PAYMENT_PAGE_SIZE = 50;
+function nextQuarterHourLocalInput() {
+  const date = new Date();
+  date.setSeconds(0, 0);
+  date.setMinutes(Math.floor(date.getMinutes() / 15 + 1) * 15);
+  return toLocalDateTimeInput(date.toISOString());
+}
 type PaymentStatusFilter = "all" | "pending" | "paid" | "refunded" | "cancelled";
 type PaymentOverdueFilter = "all" | "yes" | "no";
 
@@ -936,21 +942,21 @@ function App() {
     if (target === "trial") {
       openLead(lead.id);
       setLeadProcedureTarget("trial");
-      if (!lead.trialAt) setTrialAt(toLocalDateTimeInput(new Date().toISOString()));
+      if (!lead.trialAt) setTrialAt(nextQuarterHourLocalInput());
       window.setTimeout(() => setTrialMode("schedule"), 0);
       return;
     }
     if (target === "after_trial") {
       openLead(lead.id);
       setLeadProcedureTarget("after_trial");
-      if (!lead.trialAt) setTrialAt(toLocalDateTimeInput(new Date().toISOString()));
+      if (!lead.trialAt) setTrialAt(nextQuarterHourLocalInput());
       window.setTimeout(() => setTrialMode("complete"), 0);
       return;
     }
     if (target === "no_show") {
       openLead(lead.id);
       setLeadProcedureTarget("no_show");
-      if (!lead.trialAt) setTrialAt(toLocalDateTimeInput(new Date().toISOString()));
+      if (!lead.trialAt) setTrialAt(nextQuarterHourLocalInput());
       window.setTimeout(() => setTrialMode("complete"), 0);
       return;
     }
@@ -1028,6 +1034,7 @@ function App() {
 
   const scheduleTrial = async () => {
     if (!selected) return;
+    setWorkspaceError("");
     if (apiEnabled && session) {
       try {
         if (selected.trialId) {
@@ -1050,7 +1057,8 @@ function App() {
           setLeadProcedureTarget(null);
         }
         return;
-      } catch {
+      } catch (error) {
+        setWorkspaceError(error instanceof Error && error.message ? error.message : "Не вдалося записати на пробне.");
         return;
       }
     }
@@ -1114,7 +1122,7 @@ function App() {
     setLeadActionsOpen(false);
     setLeadStatusMenuOpen(false);
     const lead = leads.find((item) => item.id === id);
-    setTrialAt(lead?.trialAt ? toLocalDateTimeInput(lead.trialAt) : toLocalDateTimeInput(new Date().toISOString()));
+    setTrialAt(lead?.trialAt ? toLocalDateTimeInput(lead.trialAt) : nextQuarterHourLocalInput());
     if (lead?.trialLocation) setTrialLocation(lead.trialLocation);
     if (lead?.trialLocationId) setTrialLocationId(lead.trialLocationId);
     if (lead?.recommendedLevel) setRecommendedLevel(lead.recommendedLevel);
@@ -1345,7 +1353,7 @@ function App() {
     setLeadStatusMenuOpen(false);
     setPostTrialMode(null);
     setLeadProcedureTarget("trial");
-    setTrialAt(selected.trialAt ? toLocalDateTimeInput(selected.trialAt) : toLocalDateTimeInput(new Date().toISOString()));
+    setTrialAt(selected.trialAt ? toLocalDateTimeInput(selected.trialAt) : nextQuarterHourLocalInput());
     setTrialLocationId(selected.trialLocationId ?? "");
     setTrialMode("schedule");
     revealLeadWorkflow("lead-trial-workflow");
