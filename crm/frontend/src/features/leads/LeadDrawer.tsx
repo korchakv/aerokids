@@ -301,6 +301,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
                   </select>
                 </label>}
           </div>
+          {canManageLeads && (selected.status === "Зв'язались" || ["no_show","cancelled"].includes(selected.trialResult ?? "")) && <button type="button" className="primary full" onClick={beginTrialScheduling}>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</button>}
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selectedMissingDetails.length > 0 && <div className="leadCompletenessNotice">
             <div><span className="leadCompletenessIcon">!</span><p><b>Картку варто доповнити</b><small>Не заповнено: {selectedMissingDetails.join(", ")}.</small></p></div>
