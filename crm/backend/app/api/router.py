@@ -228,13 +228,14 @@ def trials(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.A
 
 
 @router.patch("/trial-lessons/{trial_id}", response_model=TrialLessonRead)
-def update_trial(
+async def update_trial(
     trial_id: UUID,
     data: TrialLessonUpdate,
+    request: Request,
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    provided_fields = data.model_dump(exclude_unset=True)
+    provided_fields = await request.json()
     return trial_service.update_trial(
         db,
         access.organization_id,
