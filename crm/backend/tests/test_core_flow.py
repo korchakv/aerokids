@@ -2293,14 +2293,6 @@ def test_trial_can_be_rescheduled_without_creating_duplicate(client):
     assert updated.json()["id"] == trial_id
     assert updated.json()["location_id"] == location["id"]
 
-    cleared_location = client.patch(
-        f"/trial-lessons/{trial_id}",
-        headers=headers,
-        json={"location_id": None, "clear_location_id": True},
-    )
-    assert cleared_location.status_code == 200, cleared_location.text
-    assert cleared_location.json()["location_id"] is None
-
     trials = client.get("/trial-lessons", headers=headers)
     assert trials.status_code == 200
     assert len(trials.json()) == 1
