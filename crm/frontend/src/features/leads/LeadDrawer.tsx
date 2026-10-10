@@ -469,13 +469,13 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <button className="search dangerSoft" onClick={beginLeadClose}>Скасувати заявку</button>
           </div>}
 
-          <div className="mobileLeadActionBar" aria-label="Дії із заявкою">
+          {!(leadEditing || preferenceMode || trialMode || postTrialMode || leadEnrollmentOpen) && <div className="mobileLeadActionBar" aria-label="Дії із заявкою">
             <button className="primary mobileLeadPrimaryAction" onClick={handleLeadPrimaryAction}>
               <small>Наступна дія</small>
               <strong>{leadPrimaryActionLabel(selected)}</strong>
             </button>
             <button className="mobileLeadMoreAction" aria-label="Інші дії" onClick={() => { setLeadStatusMenuOpen(false); setLeadActionsOpen(true); }}>•••</button>
-          </div>
+          </div>}
 
           {leadActionsOpen && <div className="mobileLeadSheetLayer">
             <section className="mobileLeadSheet" role="dialog" aria-modal="true" aria-label="Дії із заявкою">
