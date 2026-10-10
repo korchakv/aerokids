@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
-from app.models.core import Enrollment, EnrollmentStatus, StudentSubscription, SubscriptionStatus, SubscriptionUsage
+from app.models.core import CrmStatus, Enrollment, EnrollmentStatus, Student, StudentStatus, StudentSubscription, SubscriptionStatus, SubscriptionUsage
 
 
 def create_org(client, name="Hardening School", slug="hardening-school"):
@@ -246,6 +246,44 @@ def test_historical_roster_allows_attendance_after_transfer(client):
         "items": [{"student_id": student["id"], "status": "present"}],
     })
     assert attendance.status_code == 200, attendance.text
+
+
+def test_enrolled_student_can_return_to_waiting_without_being_archived(client):
+    org = create_org(client, "Waiting School", "return-to-waiting")
+    other_org = create_org(client, "Other School", "return-to-waiting-other")
+    group = create_group(client, org, "Current Group")
+    student = create_student(client, org, "Waiting Child")
+    enrolled = client.post("/enrollments", headers=headers(org), json={
+        "student_id": student["id"],
+        "group_id": group["id"],
+    })
+    assert enrolled.status_code == 201, enrolled.text
+
+    returned = client.post(
+        f"/students/{student['id']}/return-to-waiting",
+        headers=headers(org),
+    )
+    assert returned.status_code == 200, returned.text
+    assert returned.json()["crm_status"] == "waiting_for_group"
+    assert returned.json()["student_status"] == "active"
+
+    with SessionLocal() as db:
+        enrollment = db.scalar(select(Enrollment).where(Enrollment.student_id == UUID(student["id"])))
+        updated_student = db.get(Student, UUID(student["id"]))
+        assert enrollment.status == EnrollmentStatus.FINISHED
+        assert enrollment.ended_at is not None
+        assert updated_student.crm_status == CrmStatus.WAITING_FOR_GROUP
+        assert updated_student.student_status == StudentStatus.ACTIVE
+
+    waiting = client.get("/waiting-list", headers=headers(org))
+    assert waiting.status_code == 200, waiting.text
+    assert any(row["student_id"] == student["id"] for row in waiting.json())
+
+    foreign_attempt = client.post(
+        f"/students/{student['id']}/return-to-waiting",
+        headers=headers(other_org),
+    )
+    assert foreign_attempt.status_code == 404
 
 
 def test_absent_choice_is_persisted_across_finalize_and_correction(client):

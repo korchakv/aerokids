@@ -826,6 +826,53 @@ def create_enrollment_hardened(db: Session, org_id: UUID, data, actor_user_id: U
     return enrollment
 
 
+def return_student_to_waiting(
+    db: Session,
+    org_id: UUID,
+    student_id: UUID,
+    actor_user_id: UUID | None,
+) -> Student:
+    student = db.scalar(
+        select(Student)
+        .where(Student.organization_id == org_id, Student.id == student_id)
+        .with_for_update()
+    )
+    if student is None:
+        raise HTTPException(status_code=404, detail="Учня не знайдено")
+
+    active_enrollments = list(db.scalars(
+        select(Enrollment)
+        .where(
+            Enrollment.organization_id == org_id,
+            Enrollment.student_id == student.id,
+            Enrollment.status == EnrollmentStatus.ACTIVE,
+        )
+        .with_for_update()
+    ))
+    if not active_enrollments and student.crm_status != CrmStatus.ENROLLED:
+        raise HTTPException(status_code=409, detail="Учень не зарахований до групи")
+
+    today = organization_today(db, org_id)
+    for enrollment in active_enrollments:
+        enrollment.status = EnrollmentStatus.FINISHED
+        enrollment.ended_at = today
+
+    student.crm_status = CrmStatus.WAITING_FOR_GROUP
+    student.student_status = StudentStatus.ACTIVE
+    student.next_contact_at = None
+    student.deferred_until = None
+    student.deferred_reason = None
+    student.deferred_note = None
+    crm.record_audit(db, org_id, "student", student.id, "student.returned_to_waiting", {
+        "ended_enrollments": len(active_enrollments),
+        "group_ids": [str(row.group_id) for row in active_enrollments],
+        "ended_at": today.isoformat(),
+    }, actor_user_id)
+    db.commit()
+    db.refresh(student)
+    return student
+
+
 def transfer_student_hardened(
     db: Session,
     org_id: UUID,

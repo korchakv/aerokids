@@ -148,6 +148,7 @@ function App() {
   const [studentRegistryQuery, setStudentRegistryQuery] = useState("");
   const [studentRegistryRows, setStudentRegistryRows] = useState<Lead[]>([]);
   const [studentRegistryStates, setStudentRegistryStates] = useState<Record<EntityId, StudentLifecycleLabel>>({});
+  const [returningStudentToWaitingId, setReturningStudentToWaitingId] = useState<EntityId | null>(null);
   const [studentRegistryTotal, setStudentRegistryTotal] = useState(0);
   const [studentRegistryOffset, setStudentRegistryOffset] = useState(0);
   const [studentRegistryLoading, setStudentRegistryLoading] = useState(false);
@@ -1671,6 +1672,31 @@ function App() {
         : group.members.filter((id) => id !== selectedStudent.id),
     })));
     setTransferGroupId(null);
+  };
+
+  const returnStudentToWaiting = async () => {
+    if (!selectedStudent || returningStudentToWaitingId === selectedStudent.id) return;
+    const studentId = selectedStudent.id;
+    setReturningStudentToWaitingId(studentId);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiPost(`/students/${studentId}/return-to-waiting`, {}, session);
+        await syncWorkspace(session);
+      } else {
+        setLeads((items) => items.map((item) => item.id === studentId
+          ? { ...item, status: "Очікує групу" }
+          : item));
+        setGroups((items) => items.map((group) => ({
+          ...group,
+          members: group.members.filter((memberId) => memberId !== studentId),
+        })));
+      }
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося повернути учня в очікування групи.");
+    } finally {
+      setReturningStudentToWaitingId(null);
+    }
   };
 
   const setStudentLifecycle = async (id: EntityId, state: "Активний" | "Пауза" | "Архів") => {
@@ -3690,6 +3716,8 @@ function App() {
         onLifecycleChange={(state) => { if (selectedStudent) void setStudentLifecycle(selectedStudent.id, state); }}
         onTransferGroupChange={setTransferGroupId}
         onTransfer={() => { void transferStudent(); }}
+        onReturnToWaiting={() => { void returnStudentToWaiting(); }}
+        returningToWaiting={selectedStudent ? returningStudentToWaitingId === selectedStudent.id : false}
         onDelete={() => { void deleteSelectedStudent(); }}
         auditEventLabel={auditEventLabel}
         auditEventDetail={auditEventDetail}
