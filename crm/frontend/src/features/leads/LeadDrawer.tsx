@@ -306,10 +306,10 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <div><span className="leadCompletenessIcon">!</span><p><b>Картку варто доповнити</b><small>Не заповнено: {selectedMissingDetails.join(", ")}.</small></p></div>
             {canManageLeads && <button type="button" onClick={beginLeadEdit}>Доповнити</button>}
           </div>}
-          {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : action.label}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>; })()}
-          {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
+          {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : action.label}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>{canManageLeads && <button type="button" className="inlineEditLink" onClick={beginLeadFollowUp}>Змінити нагадування</button>}</div>; })()}
+          {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}{canManageLeads && <button type="button" className="inlineEditLink" onClick={beginLeadClose}>Редагувати причину та коментар</button>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
           <div className={"noteBox leadCommentBox" + (!selected.comment ? " empty" : "")}><span>Коментар</span><p>{selected.comment || "Коментар ще не додано."}</p>{canManageLeads && !leadEditing && <button type="button" className="inlineEditLink" onClick={beginLeadEdit}>{selected.comment ? "Редагувати" : "+ Додати"}</button>}</div>
-          {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small></div>}
+          {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small>{canManageLeads && selected.trialResult === "scheduled" && <button type="button" className="inlineEditLink" aria-label="Змінити дату, час і локацію пробного" onClick={beginTrialScheduling}>Змінити дату й час</button>}</div>}
           <div className="preferenceSummary">
             <div><span>Бажана локація</span><b>{selected.preferredLocationName ?? "Не вказано"}</b></div>
             <div><span>Бажаний час</span><b>{availabilityLabel(selected.availability ?? [])}</b></div>
@@ -334,12 +334,10 @@ export function LeadDrawer(props: LeadDrawerProps) {
           {trialMode === "schedule" && <div id="lead-trial-workflow" className="workflowBox leadWorkflowBox">
             <div className="workflowHead"><h3>Запис на пробне</h3><button onClick={() => setTrialMode(null)}>×</button></div>
             <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
-            {activeLocations.length === 1
-              ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label>
-              : <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
-                  <option value="">Без локації</option>
-                  {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
-                </select></label>}
+            <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
+              <option value="" disabled={Boolean(selected.trialLocationId)}>Без локації</option>
+              {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+            </select></label>
             <button className="primary full" onClick={scheduleTrial}>Підтвердити пробне</button>
           </div>}
 
@@ -355,6 +353,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <span>Пробне пройдено</span>
             <b>{selected.recommendedLevel ?? "Рівень не вказано"}</b>
             {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
+            {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Редагувати результат пробного</button>}
             {selected.status === "Після пробного" && <>
               <small>Зафіксуйте рішення сім’ї. До «Очікує групу» дитина переходить тільки після підтвердження.</small>
               <div className="postTrialActions">
@@ -388,6 +387,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <b>Потрібен повторний контакт</b>
             {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
             <small>Заявка залишається активною. Можна перезаписати пробне або закрити її після контакту.</small>
+            {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Редагувати результат пробного</button>}
             <div className="postTrialActions">
               <button className="primary" onClick={() => setTrialMode("schedule")}>Перезаписати пробне</button>
               <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
@@ -400,6 +400,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <b>Потрібно узгодити нову дату</b>
             {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
             <small>Заявка залишається в роботі. Можна перезаписати пробне, поставити наступний контакт або закрити заявку.</small>
+            {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Редагувати результат пробного</button>}
             <div className="postTrialActions">
               <button className="primary" onClick={() => setTrialMode("schedule")}>Перезаписати пробне</button>
               <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
@@ -433,14 +434,14 @@ export function LeadDrawer(props: LeadDrawerProps) {
               <option value="other">Інше</option>
             </select></label>
             <label>Коментар<textarea value={deferNote} onChange={(e) => setDeferNote(e.target.value)} placeholder="Наприклад: написати після зимових канікул" /></label>
-            <button className="primary full" disabled={!deferAt || !deferReason} onClick={saveDeferredLead}>Відкласти заявку</button>
+            <button className="primary full" disabled={!deferAt || !deferReason} onClick={saveDeferredLead}>{leadIsDeferred(selected) ? "Зберегти зміни" : "Відкласти заявку"}</button>
           </div>}
 
           {leadIsDeferred(selected) && <div className="deferredLeadNotice">
             <span>Повернутись пізніше</span>
             <b>{selected.deferredUntil ? new Date(selected.deferredUntil).toLocaleString("uk-UA", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}</b>
             <small>{deferReasonLabel(selected.deferredReason)}{selected.deferredNote ? " · " + selected.deferredNote : ""}</small>
-            <button className="search" type="button" onClick={resumeDeferredLead}>Повернути в роботу зараз</button>
+            {canManageLeads && <button className="inlineEditLink" type="button" onClick={beginLeadDefer}>Змінити дату й причину</button>}<button className="search" type="button" onClick={resumeDeferredLead}>Повернути в роботу зараз</button>
           </div>}
 
           {postTrialMode === "close" && <div id="lead-close-workflow" className="workflowBox leadWorkflowBox">
@@ -460,7 +461,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
               <option value="other">Інше</option>
             </select></label>}
             <label>Коментар<textarea value={closeNote} onChange={(e) => setCloseNote(e.target.value)} placeholder="За потреби додайте коротке пояснення" /></label>
-            <button className="primary full" onClick={closeLead}>Закрити заявку</button>
+            <button className="primary full" onClick={closeLead}>{["Відмовились","Не відповідає","Неактуально"].includes(selected.status) ? "Зберегти зміни" : "Закрити заявку"}</button>
           </div>}
 
           {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && postTrialMode !== "close" && <div className="leadCancelBeforeHistory">
@@ -468,13 +469,13 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <button className="search dangerSoft" onClick={beginLeadClose}>Скасувати заявку</button>
           </div>}
 
-          <div className="mobileLeadActionBar" aria-label="Дії із заявкою">
+          {!(leadEditing || preferenceMode || trialMode || postTrialMode || leadEnrollmentOpen) && <div className="mobileLeadActionBar" aria-label="Дії із заявкою">
             <button className="primary mobileLeadPrimaryAction" onClick={handleLeadPrimaryAction}>
               <small>Наступна дія</small>
               <strong>{leadPrimaryActionLabel(selected)}</strong>
             </button>
             <button className="mobileLeadMoreAction" aria-label="Інші дії" onClick={() => { setLeadStatusMenuOpen(false); setLeadActionsOpen(true); }}>•••</button>
-          </div>
+          </div>}
 
           {leadActionsOpen && <div className="mobileLeadSheetLayer">
             <section className="mobileLeadSheet" role="dialog" aria-modal="true" aria-label="Дії із заявкою">

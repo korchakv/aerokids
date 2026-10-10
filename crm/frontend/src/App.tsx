@@ -1346,6 +1346,7 @@ function App() {
     setPostTrialMode(null);
     setLeadProcedureTarget("trial");
     setTrialAt(selected.trialAt ? toLocalDateTimeInput(selected.trialAt) : toLocalDateTimeInput(new Date().toISOString()));
+    setTrialLocationId(selected.trialLocationId ?? "");
     setTrialMode("schedule");
     revealLeadWorkflow("lead-trial-workflow");
   };
@@ -1356,6 +1357,8 @@ function App() {
     setLeadStatusMenuOpen(false);
     setPostTrialMode(null);
     setLeadProcedureTarget("after_trial");
+    setRecommendedLevel(selected.recommendedLevel ?? "Початковий");
+    setTeacherNotes(selected.teacherNotes ?? "");
     setTrialMode("complete");
     revealLeadWorkflow("lead-trial-result-workflow");
   };
@@ -1372,12 +1375,14 @@ function App() {
     setLeadActionsOpen(false);
     setLeadStatusMenuOpen(false);
     setTrialMode(null);
-    const date = new Date();
-    date.setMonth(date.getMonth() + 6);
-    date.setHours(10, 0, 0, 0);
+    const date = selected?.deferredUntil ? new Date(selected.deferredUntil) : new Date();
+    if (!selected?.deferredUntil) {
+      date.setMonth(date.getMonth() + 6);
+      date.setHours(10, 0, 0, 0);
+    }
     setDeferAt(toLocalDateTimeInput(date.toISOString()));
-    setDeferReason("later");
-    setDeferNote("");
+    setDeferReason(selected?.deferredReason ?? "later");
+    setDeferNote(selected?.deferredNote ?? "");
     setPostTrialMode("defer");
     revealLeadWorkflow("lead-defer-workflow");
   };
@@ -1403,7 +1408,9 @@ function App() {
   const beginLeadClose = () => {
     setLeadActionsOpen(false);
     setLeadStatusMenuOpen(false);
-    setCloseKind("declined");
+    setCloseKind(selected?.status === "Не відповідає" ? "no_response" : selected?.status === "Неактуально" ? "not_relevant" : "declined");
+    setCloseReason(selected?.closeReason ?? "schedule");
+    setCloseNote(selected?.closeNote ?? "");
     setPostTrialMode("close");
     revealLeadWorkflow("lead-close-workflow");
   };

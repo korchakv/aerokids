@@ -1040,6 +1040,7 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 .leadWorkflowBox{scroll-margin-top:18px}
 
 @media(max-width:720px){
+  .trialSummary .inlineEditLink{display:none}
   .leadDrawerBackdrop{z-index:150!important;background:var(--ak-overlay-strong)}
   .leadDrawer{padding:18px 14px calc(112px + env(safe-area-inset-bottom))!important}
   .leadDrawer>.eyebrow{padding-right:48px}
@@ -1948,6 +1949,12 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 }
 .inlineEditLink:hover{
   color:var(--ak-accent-text);
+}
+.trialSummary .inlineEditLink{
+  position:static;
+  justify-self:start;
+  margin-top:4px;
+  padding:0;
 }
 
 @media(max-width:720px){

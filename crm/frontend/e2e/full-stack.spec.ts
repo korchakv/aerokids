@@ -86,6 +86,73 @@ test("moving a lead to waiting does not start enrollment", async ({ page }) => {
   await expect(page.getByTestId("lead-enrollment-workflow")).toBeVisible();
 });
 
+test("a scheduled trial date and time can be edited from the lead card", async ({ page }) => {
+  await login(page);
+
+  const suffix = Array.from({ length: 8 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
+  const childName = "Editable Trial " + suffix;
+  const childPhone = "+38067" + String(Math.floor(1_000_000 + Math.random() * 9_000_000));
+  const setup = await page.evaluate(async ({ childName, childPhone }) => {
+    const session = JSON.parse(sessionStorage.getItem("school-crm-session") ?? "null");
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + session.accessToken,
+      "X-Organization-Id": session.organizationId,
+    };
+    const intakeResponse = await fetch("/api/intake", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        child_first_name: childName,
+        child_age: 9,
+        contact_name: "Тестова мама",
+        phone: childPhone,
+        source: "phone",
+      }),
+    });
+    const intake = await intakeResponse.json();
+    if (!intakeResponse.ok) return { status: intakeResponse.status };
+    const starts = new Date();
+    starts.setDate(starts.getDate() + 3);
+    starts.setHours(17, 0, 0, 0);
+    const trialResponse = await fetch("/api/trial-lessons", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ student_id: intake.student_id, location_id: null, starts_at: starts.toISOString() }),
+    });
+    return { status: trialResponse.status };
+  }, { childName, childPhone });
+  expect(setup.status).toBe(201);
+
+  await page.reload();
+  await expect(page.getByText("Дашборд", { exact: true }).first()).toBeVisible();
+  await page.getByText("Заявки", { exact: true }).first().click();
+  const trialCard = page.locator(".kanbanColumn.column-trial .leadKanbanCard").filter({ hasText: childName });
+  await expect(trialCard).toBeVisible();
+  await trialCard.click();
+
+  const drawer = page.getByTestId("lead-drawer");
+  const isMobile = (page.viewportSize()?.width ?? 1280) <= 500;
+  if (isMobile) {
+    await drawer.locator(".mobileLeadMoreAction").click();
+    await page.getByRole("button", { name: /Перенести пробне/ }).click();
+  } else {
+    await drawer.getByRole("button", { name: "Змінити дату, час і локацію пробного" }).click();
+  }
+  const time = drawer.locator("#lead-trial-workflow .dateTimeEditor select");
+  await expect(time).toBeVisible();
+  await time.selectOption("18:00");
+
+  const update = page.waitForResponse((response) =>
+    response.url().includes("/trial-lessons/")
+      && !response.url().includes("/complete")
+      && response.request().method() === "PATCH"
+  );
+  await drawer.getByRole("button", { name: "Підтвердити пробне" }).click();
+  expect((await update).ok()).toBeTruthy();
+  await expect(drawer.locator(".trialSummary")).toContainText("18:00");
+});
+
 test("mobile shell does not overflow horizontally", async ({ page }) => {
   await login(page);
   const dimensions = await page.evaluate(() => ({

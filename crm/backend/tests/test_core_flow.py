@@ -105,6 +105,16 @@ def test_completed_trial_waits_for_explicit_post_trial_decision(client):
     assert ready.status_code == 200, ready.text
     assert ready.json()["crm_status"] == "waiting_for_group"
 
+    edited_result = client.patch(
+        f"/trial-lessons/{trial.json()['id']}/complete",
+        headers=headers,
+        json={"status": "completed", "recommended_level": "starter", "teacher_notes": "Уточнений результат"},
+    )
+    assert edited_result.status_code == 200, edited_result.text
+    updated_student = client.get(f"/students/{student['id']}", headers=headers).json()
+    assert updated_student["crm_status"] == "waiting_for_group"
+    assert edited_result.json()["teacher_notes"] == "Уточнений результат"
+
 
 def test_no_show_stays_active_and_can_be_rescheduled(client):
     org = create_org(client, "AeroKiDS", "aerokids-no-show")

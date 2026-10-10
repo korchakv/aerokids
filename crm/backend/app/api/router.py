@@ -234,7 +234,14 @@ def update_trial(
     access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    return trial_service.update_trial(db, access.organization_id, trial_id, data.starts_at, data.location_id, access.user_id)
+    return trial_service.update_trial(
+        db,
+        access.organization_id,
+        trial_id,
+        data.starts_at,
+        data.location_id,
+        actor_user_id=access.user_id,
+    )
 
 
 @router.post("/groups", response_model=GroupRead, status_code=201)
