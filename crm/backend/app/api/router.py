@@ -241,7 +241,6 @@ def update_trial(
         data.starts_at,
         data.location_id,
         actor_user_id=access.user_id,
-        clear_location_id=data.clear_location_id,
     )
 
 
