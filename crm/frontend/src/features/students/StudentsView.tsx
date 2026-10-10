@@ -148,7 +148,7 @@ export function StudentDrawer({
       <p className="eyebrow">Картка учня</p>
       <div className="studentHero">
         <span>{student.child[0]}</span>
-        <div><h2>{student.child}</h2><p>{student.age} років · {studentState}</p></div>
+        <div><h2>{student.child}</h2><p>{student.age} років · {student.status === "Очікує групу" ? "Очікує групу" : studentState}</p></div>
       </div>
       <div className="studentInfoGrid">
         <div><span>Група</span><b>{currentGroup?.name ?? "Без групи"}</b><small>{currentGroup?.schedule ?? "Розклад не задано"}</small></div>
@@ -162,7 +162,7 @@ export function StudentDrawer({
           <select
             className="transferSelect"
             aria-label="Статус учня"
-            value={studentState}
+            value={student.status === "Очікує групу" ? "waiting_for_group" : studentState}
             disabled={returningToWaiting}
             onChange={(event) => {
               const value = event.target.value;
@@ -170,15 +170,17 @@ export function StudentDrawer({
                 onReturnToWaiting();
                 return;
               }
+              if (value === "waiting_for_group") return;
               onLifecycleChange(value as StudentLifecycleLabel);
             }}
           >
             <option value="Активний">Активний</option>
             <option value="Пауза">Пауза</option>
             <option value="Архів">Архів</option>
+            {student.status === "Очікує групу" && <option value="waiting_for_group">Очікує групу</option>}
             <option value="return_to_work">Повернути в роботу</option>
           </select>
-          <small>«Повернути в роботу» переведе учня в «Очікує групу».</small>
+          <small>«Повернути в роботу» переводить учня в очікування групи та прибирає з бази зарахованих.</small>
         </div>
 
         <div className="studentSection">

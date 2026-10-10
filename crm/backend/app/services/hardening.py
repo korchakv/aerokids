@@ -856,7 +856,7 @@ def return_student_to_waiting(
         enrollment.ended_at = today
 
     student.crm_status = CrmStatus.WAITING_FOR_GROUP
-    student.student_status = StudentStatus.ACTIVE
+    student.student_status = StudentStatus.PROSPECT
     student.next_contact_at = None
     student.deferred_until = None
     student.deferred_reason = None
