@@ -354,8 +354,8 @@ def test_empty_group_can_be_created_with_schedule(client):
             "capacity": 8,
             "student_ids": [],
             "schedule_slots": [
-                {"weekday": 1, "start_time": "10:00", "duration_minutes": 60},
-                {"weekday": 3, "start_time": "10:00", "duration_minutes": 60},
+                {"weekday": 1, "start_time": "10:00", "duration_minutes": 45},
+                {"weekday": 3, "start_time": "11:30", "duration_minutes": 75},
             ],
         },
     )
@@ -367,7 +367,10 @@ def test_empty_group_can_be_created_with_schedule(client):
     schedules = client.get(f"/group-schedules?group_id={group_id}", headers=headers)
     assert schedules.status_code == 200, schedules.text
     assert len(schedules.json()) == 2
-    assert {item["weekday"] for item in schedules.json()} == {1, 3}
+    assert {(item["weekday"], item["start_time"][:5], item["duration_minutes"]) for item in schedules.json()} == {
+        (1, "10:00", 45),
+        (3, "11:30", 75),
+    }
 
 
 def test_group_can_be_edited_with_location_capacity_and_schedule(client):
