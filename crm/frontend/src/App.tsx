@@ -1926,29 +1926,28 @@ function App() {
     });
   };
 
-  const createGroupSchedule = async () => {
-    if (!scheduleGroupId) return;
+  const createGroupSchedule = async (slots: DraftScheduleSlot[]): Promise<boolean> => {
+    if (!scheduleGroupId || slots.length === 0) return false;
     if (apiEnabled && session) {
       try {
-        await apiPost("/group-schedules", {
+        await apiPost("/group-schedules/batch", {
           group_id: scheduleGroupId,
-          weekday: scheduleWeekday,
-          start_time: scheduleTime,
-          duration_minutes: scheduleDuration,
+          slots: slots.map(({ weekday, start_time, duration_minutes }) => ({ weekday, start_time, duration_minutes })),
         }, session);
         await syncWorkspace(session);
-        return;
-      } catch {
-        return;
+        return true;
+      } catch (error) {
+        setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти розклад. Перевірте дані й повторіть спробу.");
+        return false;
       }
     }
 
+    const scheduleText = slots.map((slot) => `${SCHEDULE_DAY_NAMES[slot.weekday]} · ${slot.start_time} · ${slot.duration_minutes} хв`).join("; ");
     setGroups((items) => items.map((group) => group.id === scheduleGroupId ? {
       ...group,
-      schedule: group.schedule === "Розклад не задано"
-        ? `${SCHEDULE_DAY_NAMES[scheduleWeekday]} · ${scheduleTime}`
-        : `${group.schedule}; ${SCHEDULE_DAY_NAMES[scheduleWeekday]} · ${scheduleTime}`,
+      schedule: group.schedule === "Розклад не задано" ? scheduleText : `${group.schedule}; ${scheduleText}`,
     } : group));
+    return true;
   };
 
   const createLesson = async () => {
@@ -3255,9 +3254,6 @@ function App() {
           scheduleTime={scheduleTime}
           scheduleDuration={scheduleDuration}
           onScheduleGroupChange={setScheduleGroupId}
-          onScheduleWeekdayChange={setScheduleWeekday}
-          onScheduleTimeChange={setScheduleTime}
-          onScheduleDurationChange={setScheduleDuration}
           onCreateGroupSchedule={createGroupSchedule}
         />}
 

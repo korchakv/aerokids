@@ -568,8 +568,7 @@ class StudentTransfer(BaseModel):
     started_at: date | None = None
 
 
-class GroupScheduleCreate(BaseModel):
-    group_id: UUID
+class GroupScheduleSlotCreate(BaseModel):
     weekday: int = Field(ge=0, le=6)
     start_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     duration_minutes: int = Field(default=60, ge=15, le=360)
@@ -579,6 +578,15 @@ class GroupScheduleCreate(BaseModel):
     def quarter_hour(cls, value: str) -> str:
         validate_quarter_hour(time.fromisoformat(value))
         return value
+
+
+class GroupScheduleCreate(GroupScheduleSlotCreate):
+    group_id: UUID
+
+
+class GroupScheduleBatchCreate(BaseModel):
+    group_id: UUID
+    slots: list[GroupScheduleSlotCreate] = Field(min_length=1, max_length=28)
 
 
 class GroupScheduleRead(ORMModel):

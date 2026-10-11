@@ -240,6 +240,17 @@ test("owner can open modular schedule workspace", async ({ page }) => {
     return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
   });
   await expect(page.getByLabel("Дата і час: дата", { exact: true })).toHaveValue(currentDate);
+  await page.getByLabel("Тип створення").selectOption("recurring");
+  const scheduleRows = page.locator(".slotRow");
+  await expect(scheduleRows).toHaveCount(1);
+  await page.getByRole("button", { name: "+ Додати день" }).click();
+  await expect(scheduleRows).toHaveCount(2);
+  await scheduleRows.nth(0).locator("select").nth(0).selectOption("1");
+  await scheduleRows.nth(0).locator("select").nth(1).selectOption("17:30");
+  await scheduleRows.nth(1).locator("select").nth(0).selectOption("4");
+  await scheduleRows.nth(1).locator("select").nth(1).selectOption("18:45");
+  await expect(scheduleRows.nth(0).locator("select").nth(1)).toHaveValue("17:30");
+  await expect(scheduleRows.nth(1).locator("select").nth(1)).toHaveValue("18:45");
 });
 
 test("owner can open modular attendance workspace", async ({ page }) => {

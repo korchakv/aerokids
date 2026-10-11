@@ -250,6 +250,10 @@ def create_group_schedule(db: Session, org_id: UUID, data) -> GroupSchedule:
     from app.services import scheduling_service
     return scheduling_service.create_group_schedule(db, org_id, data)
 
+def create_group_schedules(db: Session, org_id: UUID, data) -> list[GroupSchedule]:
+    from app.services import scheduling_service
+    return scheduling_service.create_group_schedules(db, org_id, data)
+
 def list_group_schedules(db: Session, org_id: UUID, group_id: UUID | None = None, user_id: UUID | None = None, role: StaffRole = StaffRole.OWNER) -> list[GroupSchedule]:
     from app.services import scheduling_service
     return scheduling_service.list_group_schedules(db, org_id, group_id, user_id, role)
