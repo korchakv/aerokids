@@ -2916,3 +2916,32 @@ html[data-theme="light"] .mobileScheduleDay.past{
     min-height:40px;
   }
 }
+
+/* Glass search button adapted from the supplied Webflow component. */
+@property --ak-glass-outline-angle{syntax:"<angle>";inherits:false;initial-value:-75deg}
+@property --ak-glass-shine-angle{syntax:"<angle>";inherits:false;initial-value:-45deg}
+.crmGlassButtonWrap{position:relative;z-index:2;width:100%;border-radius:999px;background:transparent;pointer-events:none;isolation:isolate;transition:transform 400ms cubic-bezier(.25,1,.5,1)}
+.crmGlassButtonShadow{position:absolute;inset:-8px;z-index:0;overflow:visible;border-radius:999px;filter:blur(5px);pointer-events:none}
+.crmGlassButtonShadow::after{content:"";position:absolute;inset:8px;border:1px solid rgba(0,0,0,.18);border-radius:999px;box-sizing:border-box;transition:all 400ms cubic-bezier(.25,1,.5,1);opacity:.85}
+.crmGlassButtonWrap .crmGlassButton{--ak-glass-border:1px;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:40px;padding:8px 13px;border:0;border-radius:999px;overflow:visible;background:linear-gradient(-75deg,rgba(255,255,255,.08),rgba(255,255,255,.2),rgba(255,255,255,.08));color:var(--ak-text);font:inherit;font-size:13.5px;line-height:1.2;font-weight:650;cursor:pointer;pointer-events:auto;-webkit-tap-highlight-color:transparent;box-shadow:inset 0 2px 2px rgba(0,0,0,.08),inset 0 -2px 2px rgba(255,255,255,.42),0 4px 2px -2px rgba(0,0,0,.22),0 0 2px 4px inset rgba(255,255,255,.16);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);transition:all 400ms cubic-bezier(.25,1,.5,1)}
+.crmGlassButtonContent{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:7px;min-width:0;color:inherit;letter-spacing:-.025em;text-shadow:0 2px 1px rgba(0,0,0,.12);user-select:none;-webkit-user-select:none;transition:all 400ms cubic-bezier(.25,1,.5,1)}
+.crmGlassButtonContent::after{content:"";position:absolute;z-index:2;inset:0;border-radius:999px;overflow:clip;background:linear-gradient(var(--ak-glass-shine-angle),transparent 0%,rgba(255,255,255,.45) 40% 50%,transparent 55%);mix-blend-mode:screen;pointer-events:none;background-size:200% 200%;background-position:0% 50%;background-repeat:no-repeat;transition:background-position 500ms cubic-bezier(.25,1,.5,1),--ak-glass-shine-angle 500ms cubic-bezier(.25,1,.5,1)}
+.crmGlassButtonContent svg{flex:0 0 auto;color:currentColor}
+.crmGlassButtonText{white-space:nowrap}
+.crmGlassButtonWrap .crmGlassButton::after{content:"";position:absolute;z-index:0;inset:calc(0px - var(--ak-glass-border)/2);box-sizing:border-box;padding:var(--ak-glass-border);border-radius:inherit;background:conic-gradient(from var(--ak-glass-outline-angle),rgba(255,255,255,.55),rgba(255,255,255,.08) 12% 42%,rgba(0,0,0,.28) 52%,rgba(255,255,255,.08) 62% 92%,rgba(255,255,255,.55)),linear-gradient(180deg,rgba(255,255,255,.48),rgba(255,255,255,.2));mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;pointer-events:none;transition:all 400ms cubic-bezier(.25,1,.5,1),--ak-glass-outline-angle 500ms ease;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.42)}
+.crmGlassButtonWrap .crmGlassButton:hover{transform:scale(.975);backdrop-filter:blur(.1px);-webkit-backdrop-filter:blur(.1px);box-shadow:inset 0 2px 2px rgba(0,0,0,.08),inset 0 -2px 2px rgba(255,255,255,.48),0 2px 1px -1px rgba(0,0,0,.26),0 0 2px 2px inset rgba(255,255,255,.32)}
+.crmGlassButtonWrap .crmGlassButton:hover .crmGlassButtonContent::after{background-position:25% 50%}
+.crmGlassButtonWrap .crmGlassButton:hover::after{--ak-glass-outline-angle:-125deg}
+.crmGlassButtonWrap:has(.crmGlassButton:hover) .crmGlassButtonShadow{filter:blur(3px);transition:filter 400ms cubic-bezier(.25,1,.5,1)}
+.crmGlassButtonWrap:has(.crmGlassButton:hover) .crmGlassButtonShadow::after{inset:9px;opacity:1}
+.crmGlassButtonWrap:has(.crmGlassButton:active){transform:rotate3d(1,0,0,8deg)}
+.crmGlassButtonWrap .crmGlassButton:active .crmGlassButtonContent::after{background-position:50% 15%;--ak-glass-shine-angle:-15deg}
+.crmGlassButtonWrap .crmGlassButton:active::after{--ak-glass-outline-angle:-75deg}
+.crmGlassButtonWrap .crmGlassButton:focus-visible{outline:2px solid var(--ak-accent);outline-offset:3px}
+html[data-theme="light"] .crmGlassButtonShadow::after{border-color:rgba(24,35,34,.2)}
+html[data-theme="light"] .crmGlassButtonWrap .crmGlassButton{box-shadow:inset 0 2px 2px rgba(24,35,34,.06),inset 0 -2px 2px rgba(255,255,255,.8),0 4px 2px -2px rgba(24,35,34,.2),0 0 2px 4px inset rgba(255,255,255,.25)}
+html[data-theme="light"] .crmGlassButtonWrap .crmGlassButton::after{background:conic-gradient(from var(--ak-glass-outline-angle),rgba(24,35,34,.32),rgba(24,35,34,.04) 12% 42%,rgba(24,35,34,.3) 52%,rgba(24,35,34,.04) 62% 92%,rgba(24,35,34,.32)),linear-gradient(180deg,rgba(255,255,255,.8),rgba(24,35,34,.12))}
+html[data-theme="light"] .crmGlassButtonWrap .crmGlassButton:hover{box-shadow:inset 0 2px 2px rgba(24,35,34,.06),inset 0 -2px 2px rgba(255,255,255,.9),0 2px 1px -1px rgba(24,35,34,.24),0 0 2px 2px inset rgba(255,255,255,.5)}
+@media(max-width:800px){.crmGlassButtonWrap .crmGlassButton{padding:8px}.crmGlassButtonWrap .crmGlassButtonContent{display:flex!important}.crmGlassButtonWrap .crmGlassButtonText{display:none!important}}
+@media(hover:none) and (pointer:coarse){.crmGlassButtonWrap .crmGlassButton:hover{transform:none}.crmGlassButtonWrap .crmGlassButton:hover::after{--ak-glass-outline-angle:-75deg}.crmGlassButtonWrap .crmGlassButton:active::after{--ak-glass-outline-angle:-75deg}.crmGlassButtonWrap .crmGlassButton:active .crmGlassButtonContent::after{--ak-glass-shine-angle:-45deg}}
+@media(prefers-reduced-motion:reduce){.crmGlassButtonWrap,.crmGlassButtonWrap *{transition:none!important;animation:none!important}}

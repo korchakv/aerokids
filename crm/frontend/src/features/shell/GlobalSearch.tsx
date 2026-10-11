@@ -105,6 +105,14 @@ export function GlobalSearch({
           </button>)}
         </div>}
       </div>
-    </> : <button className="search globalSearchTrigger" aria-label="Пошук" title="Пошук" onClick={() => { onQueryChange(""); onOpenChange(true); }}><UiIcon name="search" size={17} /><span>Пошук</span></button>}
+    </> : <div className="crmGlassButtonWrap">
+      <div className="crmGlassButtonShadow" aria-hidden="true" />
+      <button type="button" className="search globalSearchTrigger crmGlassButton" aria-label="Пошук" title="Пошук" onClick={() => { onQueryChange(""); onOpenChange(true); }}>
+        <span className="crmGlassButtonContent">
+          <UiIcon name="search" size={17} />
+          <span className="crmGlassButtonText">Пошук</span>
+        </span>
+      </button>
+    </div>}
   </div>;
 }
