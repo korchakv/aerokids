@@ -231,6 +231,17 @@ test("owner can open modular schedule workspace", async ({ page }) => {
   await login(page);
   await page.getByText("Розклад", { exact: true }).first().click();
   await expect(page.getByTestId("schedule-workspace")).toBeVisible();
+  const calendarDays = page.locator(".scheduleWeekClear .scheduleDay");
+  await expect(calendarDays).toHaveCount(7);
+  const dayFlags = await calendarDays.evaluateAll((elements) => elements.map((element) => ({
+    today: element.classList.contains("today"),
+    past: element.classList.contains("past"),
+  })));
+  const todayIndex = dayFlags.findIndex((day) => day.today);
+  expect(todayIndex).toBeGreaterThanOrEqual(0);
+  expect(dayFlags.filter((day) => day.today)).toHaveLength(1);
+  dayFlags.forEach((day, index) => expect(day.past).toBe(index < todayIndex));
+  await expect(page.locator(".scheduleDay.today .scheduleDayHead em")).toHaveText("Сьогодні");
   const openCreationMenu = page.getByRole("button", { name: "Додати заняття / розклад" });
   await expect(openCreationMenu).toBeVisible();
   await openCreationMenu.click();
@@ -262,8 +273,8 @@ test("group creation can omit schedule or set several different slots", async ({
   const dialog = page.getByTestId("group-create-dialog");
   await expect(dialog.getByRole("heading", { name: "Створити групу" })).toBeVisible();
   await dialog.getByLabel(/Локація/).selectOption("");
-  const scheduleToggle = dialog.getByRole("checkbox", { name: /Одразу задати регулярний розклад/ });
-  await expect(scheduleToggle).not.toBeChecked();
+  const scheduleButton = dialog.getByRole("button", { name: "+ Додати розклад", exact: true });
+  await expect(scheduleButton).toBeVisible();
   await expect(dialog.locator(".slotEditor")).toHaveCount(0);
 
   await dialog.getByLabel("Назва групи").fill(`No Schedule ${randomUUID()}`);
@@ -279,8 +290,12 @@ test("group creation can omit schedule or set several different slots", async ({
   await page.getByRole("button", { name: "+ Нова група" }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByLabel(/Локація/).selectOption("");
-  await scheduleToggle.check();
+  await scheduleButton.click();
   const rows = dialog.locator(".slotRow");
+  await expect(rows).toHaveCount(1);
+  await dialog.getByRole("button", { name: "Прибрати", exact: true }).click();
+  await expect(dialog.locator(".slotEditor")).toHaveCount(0);
+  await scheduleButton.click();
   await expect(rows).toHaveCount(1);
   await dialog.getByRole("button", { name: "+ Додати день" }).click();
   await expect(rows).toHaveCount(2);
