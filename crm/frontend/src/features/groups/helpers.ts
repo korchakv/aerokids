@@ -3,7 +3,7 @@ import type { Lead } from "../leads/model";
 import type { GroupItem } from "./types";
 import { SCHEDULE_DAY_NAMES } from "../teaching/model";
 
-export function scheduleDraftLabel(slots: DraftScheduleSlot[]) { return slots.map((slot) => `${SCHEDULE_DAY_NAMES[slot.weekday] ?? "Невідомий день"} · ${slot.start_time.slice(0, 5)}`).join("; "); }
+export function scheduleDraftLabel(slots: DraftScheduleSlot[]) { return slots.length ? slots.map((slot) => `${SCHEDULE_DAY_NAMES[slot.weekday] ?? "Невідомий день"} · ${slot.start_time.slice(0, 5)}`).join("; ") : "Розклад не задано"; }
 
 export function hasDuplicateSlots(slots: DraftScheduleSlot[]) { return new Set(slots.map((slot) => `${slot.weekday}:${slot.start_time}`)).size !== slots.length; }
 

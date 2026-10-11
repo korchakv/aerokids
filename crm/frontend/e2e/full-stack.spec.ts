@@ -253,6 +253,41 @@ test("owner can open modular schedule workspace", async ({ page }) => {
   await expect(scheduleRows.nth(1).locator("select").nth(1)).toHaveValue("18:45");
 });
 
+test("group creation can omit schedule or set several different slots", async ({ page }) => {
+  await login(page);
+  await page.getByText("Групи", { exact: true }).first().click();
+  await expect(page.getByTestId("groups-workspace")).toBeVisible();
+  await page.getByRole("button", { name: "+ Нова група" }).click();
+  const dialog = page.getByTestId("group-create-dialog");
+  await expect(dialog.getByRole("heading", { name: "Створити групу" })).toBeVisible();
+  const scheduleToggle = dialog.getByRole("checkbox", { name: /Одразу задати регулярний розклад/ });
+  await expect(scheduleToggle).not.toBeChecked();
+  await expect(dialog.locator(".slotEditor")).toHaveCount(0);
+  await scheduleToggle.check();
+  const rows = dialog.locator(".slotRow");
+  await expect(rows).toHaveCount(1);
+  await dialog.getByRole("button", { name: "+ Додати день" }).click();
+  await expect(rows).toHaveCount(2);
+  await rows.nth(0).locator("select").nth(0).selectOption("1");
+  await rows.nth(0).locator("select").nth(1).selectOption("17:30");
+  await rows.nth(0).locator("select").nth(2).selectOption("45");
+  await rows.nth(1).locator("select").nth(0).selectOption("4");
+  await rows.nth(1).locator("select").nth(1).selectOption("18:45");
+  await rows.nth(1).locator("select").nth(2).selectOption("75");
+  await dialog.getByLabel("Назва групи").fill(`Optional Schedule ${Date.now()}`);
+  const created = page.waitForResponse((response) =>
+    response.url().includes("/groups/form") && response.request().method() === "POST"
+  );
+  await dialog.getByRole("button", { name: "Створити групу", exact: true }).click();
+  const response = await created;
+  expect(response.ok()).toBeTruthy();
+  expect(response.request().postDataJSON().schedule_slots).toEqual([
+    { weekday: 1, start_time: "17:30", duration_minutes: 45 },
+    { weekday: 4, start_time: "18:45", duration_minutes: 75 },
+  ]);
+  await expect(dialog).toHaveCount(0);
+});
+
 test("owner can open modular attendance workspace", async ({ page }) => {
   await login(page);
   await page.getByText("Відвідування", { exact: true }).first().click();

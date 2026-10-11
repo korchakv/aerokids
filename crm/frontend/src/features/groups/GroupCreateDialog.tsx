@@ -16,6 +16,7 @@ export type GroupCreateDialogProps = {
   groupLocationId: EntityId | "";
   newGroupTeacherId: EntityId | "";
   groupSchedule: DraftScheduleSlot[];
+  groupScheduleEnabled: boolean;
   groupCreateError: string;
   selectedCandidates: EntityId[];
   leads: Lead[];
@@ -28,6 +29,7 @@ export type GroupCreateDialogProps = {
   setGroupLocationId: Setter<EntityId | "">;
   setNewGroupTeacherId: Setter<EntityId | "">;
   setGroupSchedule: Setter<DraftScheduleSlot[]>;
+  setGroupScheduleEnabled: Setter<boolean>;
   setGroupCreateError: Setter<string>;
   onCreateLocation: () => void;
   onCreateGroup: () => MaybePromise;
@@ -40,6 +42,7 @@ export function GroupCreateDialog({
   groupLocationId,
   newGroupTeacherId,
   groupSchedule,
+  groupScheduleEnabled,
   groupCreateError,
   selectedCandidates,
   leads,
@@ -52,6 +55,7 @@ export function GroupCreateDialog({
   setGroupLocationId,
   setNewGroupTeacherId,
   setGroupSchedule,
+  setGroupScheduleEnabled,
   setGroupCreateError,
   onCreateLocation,
   onCreateGroup,
@@ -89,17 +93,20 @@ export function GroupCreateDialog({
         <option value="">Призначити пізніше</option>
         {activeTeachers.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.fullName}</option>)}
       </select></label>}
-      <div className="groupCreateScheduleHead"><div><b>Регулярний розклад</b><small>Це шаблон: конкретні заняття з’являтимуться в календарі автоматично.</small></div></div>
-      <ScheduleSlotEditor value={groupSchedule} onChange={setGroupSchedule} />
+      <label className="groupCreateScheduleToggle"><input type="checkbox" checked={groupScheduleEnabled} onChange={(event) => setGroupScheduleEnabled(event.target.checked)} /><span><b>Одразу задати регулярний розклад</b><small>Необов’язково. Якщо пропустити, додасте його пізніше в розділі «Розклад».</small></span></label>
+      {groupScheduleEnabled && <div className="groupCreateScheduleSection">
+        <div className="groupCreateScheduleHead"><div><b>Дні й час занять</b><small>Обраний розклад автоматично з’явиться в календарі.</small></div></div>
+        <ScheduleSlotEditor value={groupSchedule} onChange={setGroupSchedule} />
+      </div>}
       {selectedCandidates.length > 0 && <div className="selectedNames">{leads.filter((lead) => selectedCandidates.includes(lead.id)).map((lead) => {
-        const compatibility = candidateCompatibility(lead, groupSchedule, groupLocationId || null);
+        const compatibility = candidateCompatibility(lead, groupScheduleEnabled ? groupSchedule : [], groupLocationId || null);
         return <span className={"candidateCompatibility " + compatibility.state} key={lead.id}>
           <b>{lead.child} · {lead.age}</b><small>{compatibility.icon} {compatibility.label}</small><small>{compatibility.detail}</small>
         </span>;
       })}</div>}
       {groupCreateError && <div className="groupCreateError">{groupCreateError}</div>}
-      <button className="primary full" disabled={!groupName.trim() || selectedCandidates.length > groupCapacity || hasDuplicateSlots(groupSchedule)} onClick={() => void onCreateGroup()}>
-        {!groupName.trim() ? "Вкажіть назву групи" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
+      <button className="primary full" disabled={!groupName.trim() || selectedCandidates.length > groupCapacity || (groupScheduleEnabled && hasDuplicateSlots(groupSchedule))} onClick={() => void onCreateGroup()}>
+        {!groupName.trim() ? "Вкажіть назву групи" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : groupScheduleEnabled && hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
       </button>
     </div>
   </div>;

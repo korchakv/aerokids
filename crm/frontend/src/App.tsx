@@ -349,6 +349,7 @@ function App() {
     { weekday: 0, start_time: "17:00", duration_minutes: 60 },
     { weekday: 2, start_time: "17:00", duration_minutes: 60 },
   ]);
+  const [groupScheduleEnabled, setGroupScheduleEnabled] = useState(false);
   const [groupCapacity, setGroupCapacity] = useState(8);
   const [groupLocationId, setGroupLocationId] = useState<EntityId | "">("");
   const [showGroupForm, setShowGroupForm] = useState(false);
@@ -765,7 +766,7 @@ function App() {
     const matchOrder = ["match", "partial", "unknown", "conflict"] as const;
     const rows = waiting.map((item) => ({
       item,
-      match: candidateCompatibility(item, groupSchedule, groupLocationId || null),
+      match: candidateCompatibility(item, groupScheduleEnabled ? groupSchedule : [], groupLocationId || null),
     })).filter(({ item, match }) => {
       if (candidateAgeFilter === "8-10" && !(item.age >= 8 && item.age <= 10)) return false;
       if (candidateAgeFilter === "11-13" && !(item.age >= 11 && item.age <= 13)) return false;
@@ -793,7 +794,7 @@ function App() {
     });
 
     return rows.map(({ item }) => item);
-  }, [waiting, candidateAgeFilter, candidateLevelFilter, candidateLocationFilter, candidateMatchFilter, candidateSort, groupSchedule, groupLocationId]);
+  }, [waiting, candidateAgeFilter, candidateLevelFilter, candidateLocationFilter, candidateMatchFilter, candidateSort, groupSchedule, groupScheduleEnabled, groupLocationId]);
 
   const saveOrganizationSettings = async () => {
     if (!session || !organizationName.trim()) return;
@@ -1565,6 +1566,7 @@ function App() {
     setGroupCapacity(8);
     setNewGroupTeacherId("");
     setGroupSchedule([{ weekday: 0, start_time: "17:00", duration_minutes: 60 }]);
+    setGroupScheduleEnabled(false);
     setGroupCreateError("");
     setWorkspaceError("");
     if (activeLocations.length === 1) {
@@ -1587,7 +1589,8 @@ function App() {
 
   const createGroupFromCandidates = async () => {
     const normalizedGroupName = groupName.trim();
-    if (!normalizedGroupName || hasDuplicateSlots(groupSchedule) || selectedCandidates.length > groupCapacity) return;
+    const scheduleSlots = groupScheduleEnabled ? groupSchedule : [];
+    if (!normalizedGroupName || (groupScheduleEnabled && hasDuplicateSlots(scheduleSlots)) || selectedCandidates.length > groupCapacity) return;
     const duplicateName = groups.find((group) => group.name.trim().toLocaleLowerCase("uk-UA") === normalizedGroupName.toLocaleLowerCase("uk-UA"));
     if (duplicateName) {
       setGroupCreateError("Група з такою назвою вже існує. Відкрийте її або виберіть іншу назву.");
@@ -1604,7 +1607,7 @@ function App() {
           min_age: null,
           max_age: null,
           student_ids: selectedCandidates,
-          schedule_slots: groupSchedule,
+          schedule_slots: scheduleSlots,
         }, session);
 
         // The primary mutation has succeeded at this point. Close the creation
@@ -1612,6 +1615,7 @@ function App() {
         // make the user submit the same group twice.
         if (groupCreateContext === "lead") setLeadEnrollmentGroupId(created.group.id);
         setSelectedCandidates([]);
+        setGroupScheduleEnabled(false);
         setShowGroupForm(false);
         setRegistryRefreshTick((value) => value + 1);
 
@@ -1641,7 +1645,7 @@ function App() {
       id: nextId,
       name: normalizedGroupName,
       ages: "—",
-      schedule: scheduleDraftLabel(groupSchedule),
+      schedule: scheduleDraftLabel(scheduleSlots),
       location: locations.find((location) => location.id === groupLocationId)?.name ?? "Локацію не вказано",
       capacity: groupCapacity,
       members: selectedCandidates,
@@ -1650,6 +1654,7 @@ function App() {
     setLeads((items) => items.map((item) => selectedCandidates.includes(item.id) ? { ...item, status: "Зарахований" } : item));
     if (groupCreateContext === "lead") setLeadEnrollmentGroupId(nextId);
     setSelectedCandidates([]);
+    setGroupScheduleEnabled(false);
     setShowGroupForm(false);
   };
 
@@ -3429,7 +3434,7 @@ function App() {
           candidateLocationFilter={candidateLocationFilter}
           candidateMatchFilter={candidateMatchFilter}
           candidateSort={candidateSort}
-          groupSchedule={groupSchedule}
+          groupSchedule={groupScheduleEnabled ? groupSchedule : []}
           groupLocationId={groupLocationId}
           groupQuery={groupRegistryQuery}
           groupSort={groupRegistrySort}
@@ -3726,6 +3731,7 @@ function App() {
         groupLocationId={groupLocationId}
         newGroupTeacherId={newGroupTeacherId}
         groupSchedule={groupSchedule}
+        groupScheduleEnabled={groupScheduleEnabled}
         groupCreateError={groupCreateError}
         selectedCandidates={selectedCandidates}
         leads={leads}
@@ -3738,6 +3744,7 @@ function App() {
         setGroupLocationId={setGroupLocationId}
         setNewGroupTeacherId={setNewGroupTeacherId}
         setGroupSchedule={setGroupSchedule}
+        setGroupScheduleEnabled={setGroupScheduleEnabled}
         setGroupCreateError={setGroupCreateError}
         onCreateLocation={createLocationFromGroup}
         onCreateGroup={createGroupFromCandidates}
