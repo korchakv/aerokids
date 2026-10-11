@@ -261,6 +261,7 @@ test("group creation can omit schedule or set several different slots", async ({
   await page.getByRole("button", { name: "+ Нова група" }).click();
   const dialog = page.getByTestId("group-create-dialog");
   await expect(dialog.getByRole("heading", { name: "Створити групу" })).toBeVisible();
+  await dialog.getByLabel(/Локація/).selectOption("");
   const scheduleToggle = dialog.getByRole("checkbox", { name: /Одразу задати регулярний розклад/ });
   await expect(scheduleToggle).not.toBeChecked();
   await expect(dialog.locator(".slotEditor")).toHaveCount(0);
@@ -277,6 +278,7 @@ test("group creation can omit schedule or set several different slots", async ({
 
   await page.getByRole("button", { name: "+ Нова група" }).click();
   await expect(dialog).toBeVisible();
+  await dialog.getByLabel(/Локація/).selectOption("");
   await scheduleToggle.check();
   const rows = dialog.locator(".slotRow");
   await expect(rows).toHaveCount(1);
