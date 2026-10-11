@@ -1,4 +1,5 @@
 // Stage 3 regression: paginated registries must remain stable on desktop and mobile.
+import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 
 async function login(page: Page) {
@@ -263,6 +264,19 @@ test("group creation can omit schedule or set several different slots", async ({
   const scheduleToggle = dialog.getByRole("checkbox", { name: /Одразу задати регулярний розклад/ });
   await expect(scheduleToggle).not.toBeChecked();
   await expect(dialog.locator(".slotEditor")).toHaveCount(0);
+
+  await dialog.getByLabel("Назва групи").fill(`No Schedule ${randomUUID()}`);
+  const withoutSchedule = page.waitForResponse((response) =>
+    response.url().includes("/groups/form") && response.request().method() === "POST"
+  );
+  await dialog.getByRole("button", { name: "Створити групу", exact: true }).click();
+  const emptyScheduleResponse = await withoutSchedule;
+  expect(emptyScheduleResponse.ok()).toBeTruthy();
+  expect(emptyScheduleResponse.request().postDataJSON().schedule_slots).toEqual([]);
+  await expect(dialog).toHaveCount(0);
+
+  await page.getByRole("button", { name: "+ Нова група" }).click();
+  await expect(dialog).toBeVisible();
   await scheduleToggle.check();
   const rows = dialog.locator(".slotRow");
   await expect(rows).toHaveCount(1);
@@ -274,14 +288,14 @@ test("group creation can omit schedule or set several different slots", async ({
   await rows.nth(1).locator("select").nth(0).selectOption("4");
   await rows.nth(1).locator("select").nth(1).selectOption("18:45");
   await rows.nth(1).locator("select").nth(2).selectOption("75");
-  await dialog.getByLabel("Назва групи").fill(`Optional Schedule ${Date.now()}`);
-  const created = page.waitForResponse((response) =>
+  await dialog.getByLabel("Назва групи").fill(`Optional Schedule ${randomUUID()}`);
+  const withSchedule = page.waitForResponse((response) =>
     response.url().includes("/groups/form") && response.request().method() === "POST"
   );
   await dialog.getByRole("button", { name: "Створити групу", exact: true }).click();
-  const response = await created;
-  expect(response.ok()).toBeTruthy();
-  expect(response.request().postDataJSON().schedule_slots).toEqual([
+  const scheduleResponse = await withSchedule;
+  expect(scheduleResponse.ok()).toBeTruthy();
+  expect(scheduleResponse.request().postDataJSON().schedule_slots).toEqual([
     { weekday: 1, start_time: "17:30", duration_minutes: 45 },
     { weekday: 4, start_time: "18:45", duration_minutes: 75 },
   ]);
