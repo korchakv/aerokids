@@ -2705,3 +2705,214 @@ body{
 .scheduleWeekClear .scheduleDay.today .scheduleDayHead>span{display:inline-flex;width:auto;min-width:0;height:auto;padding:0;border-radius:0;background:transparent;color:var(--ak-accent-text);font-size:10px;font-weight:800}
 .mobileScheduleDay.today{background:color-mix(in srgb,var(--ak-accent) 5%,var(--ak-surface-2))}
 .mobileScheduleDay.past{background:color-mix(in srgb,var(--ak-border) 12%,var(--ak-surface-2))}
+
+/* Soft UI / neumorphic skin for the light theme */
+html[data-theme="light"]{
+  --ak-bg:#e9edf3;
+  --ak-bg-glass:rgba(233,237,243,.94);
+  --ak-surface:#e9edf3;
+  --ak-surface-2:#e9edf3;
+  --ak-border:#d6dce6;
+  --ak-text:#25303e;
+  --ak-text-soft:#435163;
+  --ak-muted:#5d6a7b;
+  --ak-muted-2:#7d8998;
+  --ak-accent:#bde8e3;
+  --ak-accent-soft:#8378bd;
+  --ak-accent-strong:#287c82;
+  --ak-accent-text:#285e68;
+  --ak-primary-ink:#20363a;
+  --ak-overlay:#53617466;
+  --ak-overlay-strong:#53617488;
+  --ak-soft-raised:7px 7px 16px rgba(163,174,190,.48),-7px -7px 16px rgba(255,255,255,.94);
+  --ak-soft-raised-small:4px 4px 9px rgba(163,174,190,.42),-4px -4px 9px rgba(255,255,255,.9);
+  --ak-soft-inset:inset 4px 4px 8px rgba(163,174,190,.42),inset -4px -4px 8px rgba(255,255,255,.92);
+}
+html[data-theme="light"] body{
+  background:var(--ak-bg);
+  color:var(--ak-text);
+}
+html[data-theme="light"] .shell>.appSidebar{
+  background:var(--ak-bg);
+  border-color:transparent;
+  box-shadow:6px 0 16px rgba(163,174,190,.22),-6px 0 16px rgba(255,255,255,.72);
+}
+html[data-theme="light"] .panel,
+html[data-theme="light"] .stats article,
+html[data-theme="light"] .paymentStats article,
+html[data-theme="light"] .groupCard,
+html[data-theme="light"] .contactCard,
+html[data-theme="light"] .noteBox,
+html[data-theme="light"] .workflowBox,
+html[data-theme="light"] .groupModal,
+html[data-theme="light"] .drawer,
+html[data-theme="light"] .dayColumn,
+html[data-theme="light"] .kanbanColumn,
+html[data-theme="light"] .leadKanbanCard,
+html[data-theme="light"] .selectionBar,
+html[data-theme="light"] .scheduleDay,
+html[data-theme="light"] .scheduleCard,
+html[data-theme="light"] .lessonDetailsEditor,
+html[data-theme="light"] .attendanceDailyRow,
+html[data-theme="light"] .paymentTable,
+html[data-theme="light"] .planCard,
+html[data-theme="light"] .settingsPanel,
+html[data-theme="light"] .locationCard,
+html[data-theme="light"] .staffCard,
+html[data-theme="light"] .searchModal{
+  background:var(--ak-bg);
+  border-color:rgba(255,255,255,.72);
+  box-shadow:var(--ak-soft-raised-small);
+}
+html[data-theme="light"] .groupModal,
+html[data-theme="light"] .drawer{
+  border-radius:22px;
+  box-shadow:10px 10px 24px rgba(163,174,190,.5),-10px -10px 24px rgba(255,255,255,.96);
+}
+html[data-theme="light"] .dayColumn,
+html[data-theme="light"] .scheduleDay,
+html[data-theme="light"] .kanbanColumn{
+  border-radius:17px;
+}
+html[data-theme="light"] .scheduleDay.today{
+  background:#e2f3f1;
+  border-color:#84c9c4;
+  box-shadow:inset 0 0 0 1px rgba(40,124,130,.16),var(--ak-soft-raised-small);
+}
+html[data-theme="light"] .scheduleDay.today .scheduleDayHead{
+  background:#d8efec;
+}
+html[data-theme="light"] .scheduleDay.past{
+  background:#e5e9ef;
+}
+html[data-theme="light"] .scheduleDay.today .scheduleDayHead>span{
+  background:transparent;
+  color:var(--ak-accent-strong);
+}
+html[data-theme="light"] .scheduleDayHead,
+html[data-theme="light"] .kanbanColumnHead,
+html[data-theme="light"] .tableHead,
+html[data-theme="light"] .paymentHead,
+html[data-theme="light"] .staffHead,
+html[data-theme="light"] .studentHead{
+  background:transparent;
+}
+html[data-theme="light"] .primary,
+html[data-theme="light"] .search,
+html[data-theme="light"] .chip,
+html[data-theme="light"] .registryPager button,
+html[data-theme="light"] .groupCreateScheduleButton,
+html[data-theme="light"] .groupCreateScheduleRemove,
+html[data-theme="light"] .scheduleNav .search,
+html[data-theme="light"] .attendanceWeekNav .search,
+html[data-theme="light"] .attendanceQuickActions .search,
+html[data-theme="light"] .appearanceThemeSwitch,
+html[data-theme="light"] .uiScaleControl,
+html[data-theme="light"] .uiScaleControl>button{
+  border:1px solid rgba(255,255,255,.82);
+  border-radius:999px;
+  background:var(--ak-bg);
+  color:var(--ak-text-soft);
+  box-shadow:var(--ak-soft-raised-small);
+}
+html[data-theme="light"] .primary{
+  border-color:#d4f2ed;
+  background:linear-gradient(145deg,#d9f6f1,#b9e7e1);
+  color:#24454a;
+  font-weight:800;
+}
+html[data-theme="light"] .search:hover,
+html[data-theme="light"] .chip:hover,
+html[data-theme="light"] .registryPager button:hover,
+html[data-theme="light"] .groupCreateScheduleButton:hover,
+html[data-theme="light"] .groupCreateScheduleRemove:hover,
+html[data-theme="light"] .scheduleNav .search:hover,
+html[data-theme="light"] .attendanceWeekNav .search:hover{
+  color:var(--ak-accent-strong);
+  box-shadow:var(--ak-soft-inset);
+}
+html[data-theme="light"] .chip.active,
+html[data-theme="light"] .segmented button.active,
+html[data-theme="light"] .appearanceThemeSwitch button.active{
+  border-color:#d6d0f0;
+  background:#e9e6f7;
+  color:#514b86;
+  box-shadow:var(--ak-soft-inset);
+}
+html[data-theme="light"] nav button{
+  border-radius:13px;
+  color:var(--ak-muted);
+}
+html[data-theme="light"] nav button:hover,
+html[data-theme="light"] nav button.active{
+  background:var(--ak-bg);
+  color:var(--ak-accent-strong);
+  box-shadow:var(--ak-soft-inset);
+}
+html[data-theme="light"] .appNav button.active{
+  background:var(--ak-bg);
+  color:var(--ak-accent-strong);
+  box-shadow:var(--ak-soft-inset);
+}
+html[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme="light"] select,
+html[data-theme="light"] textarea,
+html[data-theme="light"] .globalSearchInput,
+html[data-theme="light"] .registrySearch input{
+  border-color:#d8dee8;
+  border-radius:14px;
+  background:var(--ak-bg);
+  color:var(--ak-text);
+  box-shadow:var(--ak-soft-inset);
+}
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder{
+  color:#748092;
+}
+html[data-theme="light"] input:focus-visible,
+html[data-theme="light"] select:focus-visible,
+html[data-theme="light"] textarea:focus-visible,
+html[data-theme="light"] button:focus-visible,
+html[data-theme="light"] a:focus-visible{
+  outline:2px solid var(--ak-accent-strong);
+  outline-offset:2px;
+}
+html[data-theme="light"] .globalSearchShell,
+html[data-theme="light"] .globalSearchTrigger,
+html[data-theme="light"] .searchResults button{
+  background:var(--ak-bg);
+  border-color:rgba(255,255,255,.8);
+  box-shadow:var(--ak-soft-raised-small);
+}
+html[data-theme="light"] .leadKanbanCard,
+html[data-theme="light"] .scheduleCard,
+html[data-theme="light"] .candidate,
+html[data-theme="light"] .attendanceDailyRow{
+  border-radius:14px;
+}
+html[data-theme="light"] .leadKanbanCard:hover,
+html[data-theme="light"] .scheduleCard:hover,
+html[data-theme="light"] .rowButton:hover,
+html[data-theme="light"] .searchResults button:hover{
+  background:#e3f2f0;
+  border-color:#c4e5e1;
+}
+html[data-theme="light"] .mobileScheduleDay.today{
+  background:#e2f3f1;
+  border-color:#84c9c4;
+}
+html[data-theme="light"] .mobileScheduleDay.past{
+  background:#e5e9ef;
+}
+@media(max-width:700px){
+  html[data-theme="light"]{
+    --ak-soft-raised:4px 4px 10px rgba(163,174,190,.42),-4px -4px 10px rgba(255,255,255,.9);
+    --ak-soft-raised-small:3px 3px 7px rgba(163,174,190,.38),-3px -3px 7px rgba(255,255,255,.86);
+    --ak-soft-inset:inset 3px 3px 6px rgba(163,174,190,.38),inset -3px -3px 6px rgba(255,255,255,.86);
+  }
+  html[data-theme="light"] .primary,
+  html[data-theme="light"] .search,
+  html[data-theme="light"] .chip{
+    min-height:40px;
+  }
+}
