@@ -93,11 +93,18 @@ export function GroupCreateDialog({
         <option value="">Призначити пізніше</option>
         {activeTeachers.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.fullName}</option>)}
       </select></label>}
-      <label className="groupCreateScheduleToggle"><input type="checkbox" checked={groupScheduleEnabled} onChange={(event) => setGroupScheduleEnabled(event.target.checked)} /><span><b>Одразу задати регулярний розклад</b><small>Необов’язково. Якщо пропустити, додасте його пізніше в розділі «Розклад».</small></span></label>
-      {groupScheduleEnabled && <div className="groupCreateScheduleSection">
-        <div className="groupCreateScheduleHead"><div><b>Дні й час занять</b><small>Обраний розклад автоматично з’явиться в календарі.</small></div></div>
-        <ScheduleSlotEditor value={groupSchedule} onChange={setGroupSchedule} />
-      </div>}
+      {!groupScheduleEnabled
+        ? <div className="groupCreateSchedulePrompt">
+            <div><b>Розклад</b><small>Можна додати зараз або пізніше в розділі «Розклад».</small></div>
+            <button className="groupCreateScheduleButton" type="button" aria-expanded={false} onClick={() => setGroupScheduleEnabled(true)}>+ Додати розклад</button>
+          </div>
+        : <div className="groupCreateScheduleSection">
+            <div className="groupCreateScheduleHead">
+              <div><b>Розклад групи</b><small>Обрані дні й час автоматично з’являться в календарі.</small></div>
+              <button className="groupCreateScheduleRemove" type="button" onClick={() => setGroupScheduleEnabled(false)}>Прибрати</button>
+            </div>
+            <ScheduleSlotEditor value={groupSchedule} onChange={setGroupSchedule} />
+          </div>}
       {selectedCandidates.length > 0 && <div className="selectedNames">{leads.filter((lead) => selectedCandidates.includes(lead.id)).map((lead) => {
         const compatibility = candidateCompatibility(lead, groupScheduleEnabled ? groupSchedule : [], groupLocationId || null);
         return <span className={"candidateCompatibility " + compatibility.state} key={lead.id}>
