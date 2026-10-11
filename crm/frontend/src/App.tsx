@@ -3087,6 +3087,12 @@ function App() {
           setActive(item);
         }} className={active === item ? "active" : ""} key={item}><UiIcon name={navigationIcon(item)} size={17} /><span className="navLabel">{item}</span></button>)}</nav>
         <div className="asideFooter">
+          {session && <div className="orgSwitcher sidebarOrgSwitcher">
+            <select aria-label="Організація" value={session.organizationId} onChange={(e) => { setSession(changeOrganization(session, e.target.value)); setActive("Дашборд"); }}>
+              {session.user.memberships.map((membership) => <option value={membership.organization_id} key={membership.organization_id}>{membership.organization_name}</option>)}
+            </select>
+            <span>{roleLabel(currentMembership?.role)}</span>
+          </div>}
           <small>crm.aerokids.space</small>
         </div>
       </aside>
@@ -3100,8 +3106,8 @@ function App() {
             </div>
           </div>
           <div className="headerActions">
-            {session && <div className={"orgSwitcher " + (session.user.memberships.length === 1 ? "singleOrg" : "multiOrg")}>
-              <select value={session.organizationId} onChange={(e) => { setSession(changeOrganization(session, e.target.value)); setActive("Дашборд"); }}>
+            {session && <div className={"orgSwitcher mobileOrgSwitcher " + (session.user.memberships.length === 1 ? "singleOrg" : "multiOrg")}>
+              <select aria-label="Організація" value={session.organizationId} onChange={(e) => { setSession(changeOrganization(session, e.target.value)); setActive("Дашборд"); }}>
                 {session.user.memberships.map((membership) => <option value={membership.organization_id} key={membership.organization_id}>{membership.organization_name}</option>)}
               </select>
               <span>{roleLabel(currentMembership?.role)}</span>
