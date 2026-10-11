@@ -748,12 +748,15 @@ def test_schedule_session_and_attendance_flow(client):
     assert roster.status_code == 200, roster.text
     assert roster.json()[0]["first_name"] == "Максим"
 
+    lesson_date = date.today() + timedelta(days=1)
+    while lesson_date.weekday() == 0:
+        lesson_date += timedelta(days=1)
     session = client.post(
         "/lesson-sessions",
         headers=headers,
         json={
             "group_id": group_id,
-            "starts_at": f"{(date.today() + timedelta(days=1)).isoformat()}T17:00:00+03:00",
+            "starts_at": f"{lesson_date.isoformat()}T17:00:00+03:00",
             "duration_minutes": 60,
             "topic": "FPV simulator",
         },

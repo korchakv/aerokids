@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { DateTimeEditor, DurationSelect, TimeSelect } from "../../components/ScheduleEditors";
 import type { EntityId, Lead } from "../leads/model";
 import type { GroupItem } from "../groups/types";
@@ -87,6 +88,15 @@ export function ScheduleView({
   onScheduleDurationChange,
   onCreateGroupSchedule,
 }: ScheduleViewProps) {
+  const [scheduleCreateOpen, setScheduleCreateOpen] = useState(false);
+  const [scheduleCreateMode, setScheduleCreateMode] = useState<"lesson" | "recurring">("lesson");
+
+  const submitScheduleCreation = async () => {
+    if (scheduleCreateMode === "lesson") await onCreateLesson();
+    else await onCreateGroupSchedule();
+    setScheduleCreateOpen(false);
+  };
+
   return <section className="scheduleWorkspace" data-testid="schedule-workspace">
     <article className="panel schedulePanel scheduleCalendar">
       <div className="scheduleToolbar scheduleToolbarClear">
@@ -105,6 +115,7 @@ export function ScheduleView({
             <option value="all">Усі групи + пробні</option>
             {groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
           </select></label>
+          <button type="button" className="primary scheduleCreateTrigger" onClick={() => setScheduleCreateOpen(true)}>Додати заняття / розклад</button>
           <div className="scheduleNav">
             <button className="search" aria-label="Попередній тиждень" onClick={onPreviousWeek}>←</button>
             <button className="search" onClick={onCurrentWeek} disabled={scheduleWeekOffset === 0}>Цей тиждень</button>
@@ -195,25 +206,40 @@ export function ScheduleView({
       </div>
     </article>
 
-    <section className="scheduleTools">
-      <article className="panel lessonCreate">
-        <div className="scheduleToolHead"><div><p className="eyebrow">Разове</p><h2>Додати заняття</h2></div><span>Для переносу, додаткового або індивідуального заняття</span></div>
-        <label>Група<select value={newLessonGroupId} onChange={(event) => onNewLessonGroupChange(event.target.value)}><option value="">Оберіть групу</option>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
-        <DateTimeEditor label="Дата і час" value={newLessonAt} onChange={onNewLessonAtChange} />
-        <DurationSelect value={newLessonDuration} onChange={onNewLessonDurationChange} />
-        <label>Тема<input value={newLessonTopic} onChange={(event) => onNewLessonTopicChange(event.target.value)} placeholder="Можна заповнити пізніше в журналі" /></label>
-        <button className="primary full" disabled={!newLessonGroupId} onClick={onCreateLesson}>Створити заняття</button>
-      </article>
-      {canManageRecurringSchedule && <article className="panel lessonCreate recurringSettings">
-        <div className="scheduleToolHead"><div><p className="eyebrow">Регулярний</p><h2>Додати час групи</h2></div><span>Постійний день і час для автоматичного календаря</span></div>
-        <label>Група<select value={scheduleGroupId} onChange={(event) => onScheduleGroupChange(event.target.value)}><option value="">Оберіть групу</option>{groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}</select></label>
-        <div className="formTwo">
-          <label>День<select value={scheduleWeekday} onChange={(event) => onScheduleWeekdayChange(Number(event.target.value))}>{["Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя"].map((day, index) => <option value={index} key={day}>{day}</option>)}</select></label>
-          <TimeSelect label="Час" value={scheduleTime} onChange={onScheduleTimeChange} />
+    {scheduleCreateOpen && <div className="modalBackdrop">
+      <div className="groupModal scheduleCreateModal" role="dialog" aria-modal="true" aria-labelledby="schedule-create-title">
+        <div className="workflowHead">
+          <div><p className="eyebrow">Календар</p><h2 id="schedule-create-title">Додати заняття або розклад</h2></div>
+          <button type="button" aria-label="Закрити" onClick={() => setScheduleCreateOpen(false)}>×</button>
         </div>
-        <DurationSelect value={scheduleDuration} onChange={onScheduleDurationChange} />
-        <button className="search full" disabled={!scheduleGroupId} onClick={onCreateGroupSchedule}>Додати регулярний час</button>
-      </article>}
-    </section>
+        <label>Тип створення<select value={scheduleCreateMode} onChange={(event) => setScheduleCreateMode(event.target.value as "lesson" | "recurring")}>
+          <option value="lesson">Разове заняття</option>
+          {canManageRecurringSchedule && <option value="recurring">Постійний розклад групи</option>}
+        </select></label>
+        <label>Група<select value={scheduleCreateMode === "lesson" ? newLessonGroupId : scheduleGroupId} onChange={(event) => {
+          if (scheduleCreateMode === "lesson") onNewLessonGroupChange(event.target.value);
+          else onScheduleGroupChange(event.target.value);
+        }}>
+          <option value="">Оберіть групу</option>
+          {groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
+        </select></label>
+        {scheduleCreateMode === "lesson" ? <>
+          <DateTimeEditor label="Дата і час" value={newLessonAt} onChange={onNewLessonAtChange} />
+          <DurationSelect value={newLessonDuration} onChange={onNewLessonDurationChange} />
+          <label>Тема<input value={newLessonTopic} onChange={(event) => onNewLessonTopicChange(event.target.value)} placeholder="Можна заповнити пізніше в журналі" /></label>
+        </> : <>
+          <div className="formTwo">
+            <label>День<select value={scheduleWeekday} onChange={(event) => onScheduleWeekdayChange(Number(event.target.value))}>{["Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя"].map((day, index) => <option value={index} key={day}>{day}</option>)}</select></label>
+            <TimeSelect label="Час" value={scheduleTime} onChange={onScheduleTimeChange} />
+          </div>
+          <DurationSelect value={scheduleDuration} onChange={onScheduleDurationChange} />
+        </>}
+        {groups.length === 0 && <div className="emptyState compactEmpty">Спочатку створіть групу, щоб додати заняття або розклад.</div>}
+        <button type="button" className="primary full" disabled={groups.length === 0 || (scheduleCreateMode === "lesson" ? !newLessonGroupId : !scheduleGroupId)} onClick={() => { void submitScheduleCreation(); }}>
+          {scheduleCreateMode === "lesson" ? "Створити заняття" : "Додати регулярний розклад"}
+        </button>
+      </div>
+    </div>}
+
   </section>;
 }
