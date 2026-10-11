@@ -138,7 +138,9 @@ export function ScheduleView({
           ].sort((a, b) => dateValue(a.at) - dateValue(b.at));
           if (items.length === 0) return null;
           const isToday = dayKey === todayKey;
-          return <section className={"mobileScheduleDay " + (isToday ? "today" : "")} key={"mobile-" + dayKey}>
+          const isPastDay = dayKey < todayKey;
+          const dayState = isToday ? "today" : isPastDay ? "past" : "";
+          return <section className={"mobileScheduleDay " + dayState} key={"mobile-" + dayKey}>
             <div className="mobileScheduleDayHead"><b>{date.toLocaleDateString("uk-UA", { weekday: "short", day: "2-digit", month: "2-digit" })}</b>{isToday && <span>Сьогодні</span>}</div>
             <div className="mobileScheduleRows">
               {items.map((item) => {
@@ -170,7 +172,9 @@ export function ScheduleView({
           const dayLessons = lessonsThisWeek.filter((lesson) => localDateInput(new Date(lesson.startsAt)) === dayKey);
           const dayTrials = trialsThisWeek.filter((lead) => lead.trialAt && localDateInput(new Date(lead.trialAt)) === dayKey);
           const isToday = dayKey === todayKey;
-          return <div className={"dayColumn scheduleDay " + (isToday ? "today" : "")} key={dayKey}>
+          const isPastDay = dayKey < todayKey;
+          const dayState = isToday ? "today" : isPastDay ? "past" : "";
+          return <div className={"dayColumn scheduleDay " + dayState} key={dayKey}>
             <div className="scheduleDayHead">
               <div><b>{date.toLocaleDateString("uk-UA", { weekday: "long" })}</b>{isToday && <em>Сьогодні</em>}</div>
               <span>{date.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })}</span>
