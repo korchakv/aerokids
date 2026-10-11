@@ -294,7 +294,8 @@ test("group creation can omit schedule or set several different slots", async ({
   );
   await dialog.getByRole("button", { name: "Створити групу", exact: true }).click();
   const scheduleResponse = await withSchedule;
-  expect(scheduleResponse.ok()).toBeTruthy();
+  const scheduleResponseBody = await scheduleResponse.text();
+  expect(scheduleResponse.status(), scheduleResponseBody).toBe(201);
   expect(scheduleResponse.request().postDataJSON().schedule_slots).toEqual([
     { weekday: 1, start_time: "17:30", duration_minutes: 45 },
     { weekday: 4, start_time: "18:45", duration_minutes: 75 },
