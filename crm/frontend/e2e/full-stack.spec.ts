@@ -230,7 +230,11 @@ test("owner can open modular schedule workspace", async ({ page }) => {
   await login(page);
   await page.getByText("Розклад", { exact: true }).first().click();
   await expect(page.getByTestId("schedule-workspace")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Додати заняття" })).toBeVisible();
+  const openCreationMenu = page.getByRole("button", { name: "Додати заняття / розклад" });
+  await expect(openCreationMenu).toBeVisible();
+  await openCreationMenu.click();
+  await expect(page.getByRole("dialog", { name: "Додати заняття або розклад" })).toBeVisible();
+  await expect(page.getByLabel("Тип створення")).toHaveValue("lesson");
   const currentDate = await page.evaluate(() => {
     const now = new Date();
     return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
