@@ -42,6 +42,29 @@ def create_group_schedule(db: Session, org_id: UUID, data) -> GroupSchedule:
     return item
 
 
+def create_group_schedules(db: Session, org_id: UUID, data) -> list[GroupSchedule]:
+    crm.scoped_get(db, Group, org_id, data.group_id)
+    items = [
+        GroupSchedule(
+            organization_id=org_id,
+            group_id=data.group_id,
+            weekday=slot.weekday,
+            start_time=time.fromisoformat(slot.start_time),
+            duration_minutes=slot.duration_minutes,
+        )
+        for slot in data.slots
+    ]
+    db.add_all(items)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="One or more schedule slots already exist for this group") from exc
+    for item in items:
+        db.refresh(item)
+    return items
+
+
 def list_group_schedules(
     db: Session,
     org_id: UUID,

@@ -744,6 +744,38 @@ def test_schedule_session_and_attendance_flow(client):
     assert schedule.status_code == 201, schedule.text
     assert schedule.json()["weekday"] == 0
 
+    batch = client.post(
+        "/group-schedules/batch",
+        headers=headers,
+        json={
+            "group_id": group_id,
+            "slots": [
+                {"weekday": 1, "start_time": "17:30", "duration_minutes": 60},
+                {"weekday": 3, "start_time": "18:45", "duration_minutes": 75},
+            ],
+        },
+    )
+    assert batch.status_code == 201, batch.text
+    assert [(item["weekday"], item["start_time"], item["duration_minutes"]) for item in batch.json()] == [
+        (1, "17:30:00", 60),
+        (3, "18:45:00", 75),
+    ]
+    duplicate_batch = client.post(
+        "/group-schedules/batch",
+        headers=headers,
+        json={
+            "group_id": group_id,
+            "slots": [
+                {"weekday": 0, "start_time": "17:00", "duration_minutes": 60},
+                {"weekday": 4, "start_time": "19:00", "duration_minutes": 60},
+            ],
+        },
+    )
+    assert duplicate_batch.status_code == 409
+    saved_slots = client.get(f"/group-schedules?group_id={group_id}", headers=headers)
+    assert saved_slots.status_code == 200
+    assert len(saved_slots.json()) == 3
+
     roster = client.get(f"/groups/{group_id}/roster", headers=headers)
     assert roster.status_code == 200, roster.text
     assert roster.json()[0]["first_name"] == "Максим"
