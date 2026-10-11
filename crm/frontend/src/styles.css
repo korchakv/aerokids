@@ -2687,4 +2687,21 @@ body{
 @media(max-width:650px){.registryToolbar{align-items:stretch;flex-direction:column}.registrySearch{width:100%;min-width:0}.registryPager{align-items:stretch;flex-direction:column}.registryPager>div{display:grid;grid-template-columns:1fr 1fr}.groupsHeadActions .candidateSelect,.groupsHeadActions .registrySearch{width:100%;flex-basis:100%}.paymentRegistryControls{grid-template-columns:1fr}.paymentRegistryControls .registrySearch{grid-column:auto}}
 
 
-.groupCreateScheduleToggle{display:flex!important;align-items:flex-start;gap:10px;margin:16px 0;padding:12px;border:1px solid var(--ak-surface-2);border-radius:12px;cursor:pointer}.groupCreateScheduleToggle input{width:18px;height:18px;flex:0 0 auto;margin:1px 0 0;accent-color:var(--ak-accent)}.groupCreateScheduleToggle span{display:grid;gap:4px}.groupCreateScheduleToggle b{font-size:13px}.groupCreateScheduleToggle small{font-size:11px;color:var(--ak-muted);line-height:1.4}.groupCreateScheduleSection .slotEditor{margin-top:10px}
+.groupCreateSchedulePrompt{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0;padding:12px;border:1px solid var(--ak-surface-2);border-radius:12px;background:var(--ak-surface-2)}
+.groupCreateSchedulePrompt>div{display:grid;gap:4px;min-width:0}
+.groupCreateSchedulePrompt b{font-size:13px}
+.groupCreateSchedulePrompt small{font-size:11px;color:var(--ak-muted);line-height:1.4}
+.groupCreateScheduleButton,.groupCreateScheduleRemove{border:1px solid var(--ak-border);border-radius:9px;background:var(--ak-bg);color:var(--ak-accent-text);font:inherit;font-size:11px;font-weight:800;padding:9px 12px;cursor:pointer;white-space:nowrap}
+.groupCreateScheduleButton:hover,.groupCreateScheduleRemove:hover{border-color:var(--ak-accent-strong);background:var(--ak-surface);color:var(--ak-text)}
+.groupCreateScheduleButton:focus-visible,.groupCreateScheduleRemove:focus-visible{outline:2px solid var(--ak-accent-strong);outline-offset:2px}
+.groupCreateScheduleRemove{font-size:10px;padding:6px 9px;color:var(--ak-muted)}
+.groupCreateScheduleSection .slotEditor{margin-top:10px}
+@media(max-width:560px){.groupCreateSchedulePrompt{align-items:flex-start;flex-direction:column}.groupCreateScheduleButton{width:100%}}
+
+/* Calendar day emphasis */
+.scheduleWeekClear .scheduleDay.today{background:color-mix(in srgb,var(--ak-accent) 5%,var(--ak-surface-2))}
+.scheduleWeekClear .scheduleDay.past{background:color-mix(in srgb,var(--ak-border) 12%,var(--ak-surface-2))}
+.scheduleWeekClear .scheduleDay.today .scheduleDayHead{background:color-mix(in srgb,var(--ak-accent) 8%,var(--ak-surface-2))}
+.scheduleWeekClear .scheduleDay.today .scheduleDayHead>span{display:inline-flex;width:auto;min-width:0;height:auto;padding:0;border-radius:0;background:transparent;color:var(--ak-accent-text);font-size:10px;font-weight:800}
+.mobileScheduleDay.today{background:color-mix(in srgb,var(--ak-accent) 5%,var(--ak-surface-2))}
+.mobileScheduleDay.past{background:color-mix(in srgb,var(--ak-border) 12%,var(--ak-surface-2))}
