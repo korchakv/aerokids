@@ -345,7 +345,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
           {canManageLeads && (selected.status === "Зв'язались" || ["no_show","cancelled"].includes(selected.trialResult ?? "")) && trialMode !== "schedule" && <button type="button" className="primary full" onClick={beginTrialScheduling}>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</button>}
           {selected.status === "Пробне заплановано" && selected.trialResult === "scheduled" && selected.trialAt && trialMode !== "schedule" && <div className="trialSummary">
             <div className="trialSummaryHeader"><span>Коли і де</span>{canManageLeads && <button type="button" className="leadEditIcon" aria-label="Змінити дату, час і локацію пробного" title="Редагувати запис на пробне" onClick={beginTrialScheduling}><UiIcon name="edit" size={14} /></button>}</div>
-            <b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b>
+            <b>{new Date(selected.trialAt).toLocaleString("uk-UA", { weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(/^./, (character) => character.toLocaleUpperCase("uk-UA"))}</b>
             <small>{selected.trialLocation ?? "Локацію не вказано"}</small>
           </div>}
           {trialMode === "schedule" && <div id="lead-trial-workflow" data-testid="lead-trial-workflow" className="workflowBox leadWorkflowBox">
