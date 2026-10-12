@@ -2300,9 +2300,9 @@ def test_call_summary_is_a_new_comment_history_entry(client):
         params={"entity_type": "student", "entity_id": student_id},
     )
     assert events.status_code == 200, events.text
-    edited = next(item for item in events.json() if item["event_type"] == "lead.details_updated")
-    assert "comment" in edited["payload"]["changed_fields"]
-    assert edited["payload"]["comment_changed"] is True
+    call_event = next(item for item in events.json() if item["event_type"] == "lead.comment_added")
+    assert call_event["payload"]["body"] == "Домовилися передзвонити у п’ятницю"
+    assert call_event["payload"]["context"] == "call"
 
 
 def test_group_capacity_blocks_extra_enrollment_and_transfer(client):
