@@ -63,7 +63,6 @@ def update_trial(
     actor_user_id: UUID | None = None,
 ) -> TrialLesson:
     trial = _scoped_get(db, TrialLesson, org_id, trial_id)
-    was_no_show = trial.status == TrialStatus.NO_SHOW
     if location_id is not None:
         _scoped_get(db, Location, org_id, location_id)
 
@@ -86,9 +85,8 @@ def update_trial(
 
     trial.status = TrialStatus.SCHEDULED
     trial.recommended_level = None
-    if was_no_show:
-        # The reason remains in lead comment history; do not carry it into the new trial result.
-        trial.teacher_notes = None
+    # Previous outcome notes remain in audit/comment history, not on the rescheduled trial.
+    trial.teacher_notes = None
     student = _scoped_get(db, Student, org_id, trial.student_id)
     student.crm_status = CrmStatus.TRIAL_SCHEDULED
     student.next_contact_at = None
