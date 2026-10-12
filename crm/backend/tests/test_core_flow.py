@@ -2365,6 +2365,72 @@ def test_group_capacity_blocks_extra_enrollment_and_transfer(client):
     assert enrollment.status_code == 409
 
 
+def test_trial_conflict_message_names_reserved_group_or_trial(client):
+    org = create_org(client, "Trial Conflict Details", "trial-conflict-details")
+    headers = {"X-Organization-Id": org["id"]}
+    location = client.post("/locations", headers=headers, json={"name": "Центр"}).json()
+    group = client.post(
+        "/groups",
+        headers=headers,
+        json={"name": "Група 1", "capacity": 8, "location_id": location["id"]},
+    ).json()
+    lesson = client.post(
+        "/lesson-sessions",
+        headers=headers,
+        json={
+            "group_id": group["id"],
+            "starts_at": "2026-10-15T16:00:00+03:00",
+            "duration_minutes": 60,
+            "topic": "Заняття групи",
+        },
+    )
+    assert lesson.status_code == 201, lesson.text
+
+    student = client.post("/students", headers=headers, json={"first_name": "Тест"}).json()
+    group_conflict = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "location_id": location["id"],
+            "starts_at": "2026-10-15T16:15:00+03:00",
+        },
+    )
+    assert group_conflict.status_code == 409, group_conflict.text
+    group_detail = group_conflict.json()["detail"]
+    assert "заняття «Група 1»" in group_detail
+    assert "15.10.2026 16:00–17:00" in group_detail
+    assert "локація зайнята" in group_detail
+
+    first_student = client.post("/students", headers=headers, json={"first_name": "Перший"}).json()
+    first_trial = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={
+            "student_id": first_student["id"],
+            "location_id": location["id"],
+            "starts_at": "2026-10-15T18:00:00+03:00",
+        },
+    )
+    assert first_trial.status_code == 201, first_trial.text
+
+    second_student = client.post("/students", headers=headers, json={"first_name": "Другий"}).json()
+    trial_conflict = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={
+            "student_id": second_student["id"],
+            "location_id": location["id"],
+            "starts_at": "2026-10-15T18:15:00+03:00",
+        },
+    )
+    assert trial_conflict.status_code == 409, trial_conflict.text
+    trial_detail = trial_conflict.json()["detail"]
+    assert "пробне заняття" in trial_detail
+    assert "15.10.2026 18:00–19:00" in trial_detail
+    assert "локація зайнята" in trial_detail
+
+
 def test_trial_can_be_rescheduled_without_creating_duplicate(client):
     org = create_org(client, "AeroKiDS", "trial-reschedule")
     headers = {"X-Organization-Id": org["id"]}
