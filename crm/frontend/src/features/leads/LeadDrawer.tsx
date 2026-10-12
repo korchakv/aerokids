@@ -280,7 +280,10 @@ export function LeadDrawer(props: LeadDrawerProps) {
           <p className="eyebrow">Картка заявки</p>
           <div className="leadDrawerTitleRow">
             <div className="leadDrawerIdentity">
-              <h2>{selected.child}, {selected.age} років</h2>
+              <div className="leadDrawerNameBlock">
+                <h2>{selected.child}</h2>
+                <p className="leadDrawerMeta"><span>{selected.age} років</span><i aria-hidden="true">·</i><span>{leadSourceLabel(selected.source)}</span></p>
+              </div>
               {canManageLeads && <button className="leadEditIcon" type="button" aria-label="Редагувати заявку" title="Редагувати заявку" onClick={beginLeadEdit}><UiIcon name="edit" size={14} /></button>}
             </div>
           </div>
@@ -332,7 +335,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
             </select></label>
             <button className="primary full" onClick={scheduleTrial}>Підтвердити пробне</button>
           </div>}
-          <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selectedMissingDetails.length > 0 && <div className="leadCompletenessNotice">
             <div><span className="leadCompletenessIcon">!</span><p><b>Картку варто доповнити</b><small>Не заповнено: {selectedMissingDetails.join(", ")}.</small></p></div>
             {canManageLeads && <button type="button" onClick={beginLeadEdit}>Доповнити</button>}
