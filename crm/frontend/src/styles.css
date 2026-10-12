@@ -3366,3 +3366,17 @@ html[data-theme="light"] .searchWindow{
 @media(prefers-reduced-motion:reduce){
   .shell button{transition:none!important}
 }
+
+:root{
+  --ak-ui-label:#d7e7e4;
+  --ak-ui-muted:#b5c7c4;
+  --ak-ui-muted-subtle:#9bb1ad;
+  --ak-ui-control-border:#45625e;
+  --ak-ui-control-bg:#0b1d1c;
+  --ak-ui-control-hover:#12302e;
+}
+.searchWindow .searchField{
+  display:flex!important;
+  margin:0!important;
+  color:var(--ak-ui-muted);
+}
