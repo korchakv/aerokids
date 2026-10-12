@@ -4043,6 +4043,7 @@ function auditEventLabel(type: string) {
 function auditEventDetail(event: ApiAuditEvent) {
   const payload = event.payload ?? {};
   if (event.event_type === "trial.rescheduled") return "Змінено дату, час або локацію";
+  if (event.event_type === "trial.no_show" && typeof payload["teacher_notes"] === "string") return String(payload["teacher_notes"]);
   if (typeof payload["after"] === "string") return String(payload["after"]);
   if (typeof payload["body"] === "string") return String(payload["body"]);
   if (typeof payload["group_name"] === "string") return payload["group_name"];
