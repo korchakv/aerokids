@@ -415,7 +415,7 @@ test("no-show follow-up and close actions open, save, and close correctly", asyn
   await login(page);
 
   const suffix = randomUUID().slice(0, 8);
-  const childName = "No-show Action " + suffix;
+  const childName = "No Show Action " + suffix.replaceAll("-", "").toUpperCase();
   const childPhone = "+38067" + String(Math.floor(1_000_000 + Math.random() * 9_000_000));
   const setup = await page.evaluate(async ({ childName, childPhone }) => {
     const session = JSON.parse(sessionStorage.getItem("school-crm-session") ?? "null");
