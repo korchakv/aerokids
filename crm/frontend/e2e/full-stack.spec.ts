@@ -66,12 +66,15 @@ test("moving a lead to waiting does not start enrollment", async ({ page }) => {
   );
   if (isMobile) {
     await card.click();
-    await page.locator(".mobileLeadMoreAction").click();
-    await page.getByRole("button", { name: "Перемістити заявку" }).click();
-    await page.locator(".mobileLeadStageList").getByRole("button", { name: /Очікує групу/ }).click();
-  } else {
-    await card.dragTo(waitingColumn);
+    const leadDrawer = page.getByTestId("lead-drawer");
+    await expect(leadDrawer).toBeVisible();
+    await expect(leadDrawer.getByLabel("Статус")).toHaveCount(0);
+    await leadDrawer.locator(".mobileLeadMoreAction").click();
+    await expect(leadDrawer.getByRole("button", { name: "Перемістити заявку" })).toHaveCount(0);
+    await leadDrawer.getByRole("button", { name: "Закрити меню дій" }).click();
+    await leadDrawer.getByRole("button", { name: "Закрити картку заявки" }).click();
   }
+  await card.dragTo(waitingColumn);
   expect((await transitionResponse).ok()).toBeTruthy();
   const waitingCard = waitingColumn.locator(".leadKanbanCard").filter({ hasText: childName });
   await expect(waitingCard).toBeVisible();
