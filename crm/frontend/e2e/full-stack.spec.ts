@@ -25,6 +25,9 @@ test("owner can sign in and see the real smoke lead", async ({ page }) => {
 });
 
 test("moving a lead to waiting does not start enrollment", async ({ page }) => {
+  const isMobile = (page.viewportSize()?.width ?? 1280) <= 500;
+  test.skip(isMobile, "Mobile cards do not expose a manual status menu.");
+
   await login(page);
 
   const uniqueSuffix = Array.from({ length: 8 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
@@ -59,35 +62,38 @@ test("moving a lead to waiting does not start enrollment", async ({ page }) => {
   const waitingColumn = page.locator(".kanbanColumn.column-waiting");
   const card = newColumn.locator(".leadKanbanCard").filter({ hasText: childName });
   await expect(card).toBeVisible();
-  const isMobile = (page.viewportSize()?.width ?? 1280) <= 500;
 
   const transitionResponse = page.waitForResponse((response) =>
     response.url().includes("/crm-status") && response.request().method() === "PATCH"
   );
-  if (isMobile) {
-    await card.click();
-    const leadDrawer = page.getByTestId("lead-drawer");
-    await expect(leadDrawer).toBeVisible();
-    await expect(leadDrawer.getByLabel("Статус")).toHaveCount(0);
-    await leadDrawer.locator(".mobileLeadMoreAction").click();
-    await expect(leadDrawer.getByRole("button", { name: "Перемістити заявку" })).toHaveCount(0);
-    await leadDrawer.getByRole("button", { name: "Закрити меню дій" }).click();
-    await leadDrawer.getByRole("button", { name: "Закрити картку заявки" }).click();
-  }
   await card.dragTo(waitingColumn);
   expect((await transitionResponse).ok()).toBeTruthy();
   const waitingCard = waitingColumn.locator(".leadKanbanCard").filter({ hasText: childName });
   await expect(waitingCard).toBeVisible();
   await expect(page.getByTestId("lead-enrollment-workflow")).toHaveCount(0);
 
-  if (!isMobile) {
-    await expect(page.getByTestId("lead-drawer")).toHaveCount(0);
-    await waitingCard.click();
-    await page.setViewportSize({ width: 390, height: 844 });
-  }
+  await expect(page.getByTestId("lead-drawer")).toHaveCount(0);
+  await waitingCard.click();
+  await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByTestId("lead-drawer")).toBeVisible();
   await page.locator(".mobileLeadPrimaryAction").click();
   await expect(page.getByTestId("lead-enrollment-workflow")).toBeVisible();
+});
+
+test("mobile lead card has no status menu", async ({ page }) => {
+  const isMobile = (page.viewportSize()?.width ?? 1280) <= 500;
+  test.skip(!isMobile, "Mobile-only status menu check.");
+
+  await login(page);
+  await page.getByText("Заявки", { exact: true }).first().click();
+  await page.getByText(/Test Child/).first().click();
+
+  const leadDrawer = page.getByTestId("lead-drawer");
+  await expect(leadDrawer).toBeVisible();
+  await expect(leadDrawer.getByLabel("Статус")).toHaveCount(0);
+  await expect(leadDrawer.locator(".mobileLeadStatusTrigger, .desktopLeadStatus")).toHaveCount(0);
+  await leadDrawer.locator(".mobileLeadMoreAction").click();
+  await expect(leadDrawer.getByRole("button", { name: "Перемістити заявку" })).toHaveCount(0);
 });
 
 test("a scheduled trial date and time can be edited from the lead card", async ({ page }) => {
