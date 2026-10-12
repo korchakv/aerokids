@@ -27,6 +27,7 @@ const leadCommentKinds = {
   registration: { label: "Реєстрація", icon: "student", className: "registration" },
   repeat_intake: { label: "Повторне звернення", icon: "plus", className: "repeat" },
   call: { label: "Після дзвінка", icon: "phone", className: "call" },
+  trial: { label: "Пробне", icon: "calendar", className: "trial" },
   note: { label: "Коментар", icon: "leads", className: "note" },
 } as const;
 

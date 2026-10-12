@@ -1233,7 +1233,7 @@ function App() {
         setLeadComments((items) => items.map((item) => item.id === commentId ? { ...item, body: body.trim(), updated_at: new Date().toISOString() } : item));
       } else {
         const now = new Date().toISOString();
-        setLeadComments((items) => [...items, { id: crypto.randomUUID(), student_id: selected.id, author_user_id: null, author_name: null, body: body.trim(), kind: "note", created_at: now, updated_at: now }]);
+        setLeadComments((items) => [...items, { id: crypto.randomUUID(), student_id: selected.id, author_user_id: null, author_name: null, body: body.trim(), kind: selected.trialResult === "scheduled" ? "trial" : "note", created_at: now, updated_at: now }]);
       }
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти коментар.");

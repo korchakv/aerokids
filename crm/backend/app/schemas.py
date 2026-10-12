@@ -447,7 +447,7 @@ class LeadCommentRead(ORMModel):
     author_user_id: UUID | None
     author_name: str | None = None
     body: str
-    kind: Literal["registration", "repeat_intake", "call", "note"]
+    kind: Literal["registration", "repeat_intake", "call", "trial", "note"]
     created_at: datetime
     updated_at: datetime
 

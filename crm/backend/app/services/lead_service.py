@@ -18,6 +18,8 @@ from app.models.core import (
     Student,
     StudentContact,
     StudentStatus,
+    TrialLesson,
+    TrialStatus,
     User,
 )
 from app.schemas import IntakeCreate, LeadDetailsUpdate
@@ -405,9 +407,20 @@ def list_lead_comments(db: Session, org_id: UUID, student_id: UUID) -> list[dict
 
 def create_lead_comment(db: Session, org_id: UUID, student_id: UUID, body: str, actor_user_id: UUID | None = None) -> LeadComment:
     scoped_get(db, Student, org_id, student_id)
-    comment = LeadComment(organization_id=org_id, student_id=student_id, author_user_id=actor_user_id, body=body.strip(), kind="note")
+    has_scheduled_trial = db.scalar(
+        select(TrialLesson.id)
+        .where(
+            TrialLesson.organization_id == org_id,
+            TrialLesson.student_id == student_id,
+            TrialLesson.status == TrialStatus.SCHEDULED,
+        )
+        .order_by(TrialLesson.starts_at.desc())
+        .limit(1)
+    ) is not None
+    kind = "trial" if has_scheduled_trial else "note"
+    comment = LeadComment(organization_id=org_id, student_id=student_id, author_user_id=actor_user_id, body=body.strip(), kind=kind)
     db.add(comment)
-    record_audit(db, org_id, "student", student_id, "lead.comment_added", {"body": body.strip()}, actor_user_id=actor_user_id)
+    record_audit(db, org_id, "student", student_id, "lead.comment_added", {"body": body.strip(), "context": kind}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(comment)
     return comment

@@ -2796,6 +2796,33 @@ def test_repeat_website_intake_keeps_student_and_appends_comment(client):
     assert [item["kind"] for item in history.json()] == ["registration", "repeat_intake"]
 
 
+def test_manual_comment_during_scheduled_trial_is_labeled_as_trial(client):
+    org = create_org(client, "Trial Comment", "trial-comment")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post(
+        "/students",
+        headers=headers,
+        json={"first_name": "Ірина", "age_at_inquiry": 10},
+    ).json()
+    trial = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={
+            "student_id": student["id"],
+            "starts_at": "2026-10-15T16:00:00+03:00",
+        },
+    )
+    assert trial.status_code == 201, trial.text
+
+    comment = client.post(
+        f"/students/{student['id']}/lead-comments",
+        headers=headers,
+        json={"body": "Домовились про наступний крок після пробного"},
+    )
+    assert comment.status_code == 201, comment.text
+    assert comment.json()["kind"] == "trial"
+
+
 def test_manual_intake_blocks_same_child_but_allows_sibling_same_parent_phone(client):
     org = create_org(client, "Duplicate Phone", "duplicate-phone")
     headers = {"X-Organization-Id": org["id"]}
