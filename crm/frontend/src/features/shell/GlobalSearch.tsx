@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react";
 import { UiIcon } from "../../components/UiIcon";
 import type { PaymentDemo, PlanDemo } from "../billing/model";
 import type { GroupItem } from "../groups/types";
@@ -49,7 +50,7 @@ export function GlobalSearch({
     onQueryChange("");
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") close();
   };
 
