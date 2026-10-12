@@ -2271,6 +2271,16 @@ def test_lead_details_keep_initial_comment_and_comments_have_independent_history
     assert row["contact_phone"] == "+380502223344"
     assert row["comment"] == "Початковий коментар"
 
+    events = client.get(
+        "/audit-events",
+        headers=headers,
+        params={"entity_type": "student", "entity_id": student_id},
+    )
+    assert events.status_code == 200, events.text
+    edited = next(item for item in events.json() if item["event_type"] == "lead.details_updated")
+    assert "comment" not in edited["payload"]["changed_fields"]
+    assert edited["payload"]["comment_changed"] is False
+
 
 def test_call_summary_is_a_new_comment_history_entry(client):
     org = create_org(client, "Call Notes", "call-notes")
