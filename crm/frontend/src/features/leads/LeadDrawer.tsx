@@ -316,7 +316,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             </div>
           </div>}
           <div className="contactCard"><span>Контакт</span><b>{selected.parent}</b><a href={"tel:" + selected.phone.replace(/\s/g, "")}>{selected.phone}</a></div>
-          {canManageLeads && (selected.status === "Зв'язались" || selected.trialResult === "cancelled") && trialMode !== "schedule" && <button type="button" className="primary full" onClick={beginTrialScheduling}>{selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</button>}
+          {canManageLeads && selected.trialResult !== "no_show" && (selected.status === "Зв'язались" || selected.trialResult === "cancelled") && trialMode !== "schedule" && <button type="button" className="primary full" onClick={beginTrialScheduling}>{selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</button>}
           {selected.status === "Пробне заплановано" && selected.trialResult === "scheduled" && selected.trialAt && trialMode !== "schedule" && <div className="trialSummary">
             <div className="trialSummaryHeader"><span>Коли і де</span>{canManageLeads && <button type="button" className="leadEditIcon" aria-label="Змінити дату, час і локацію пробного" title="Редагувати запис на пробне" onClick={beginTrialScheduling}><UiIcon name="edit" size={14} /></button>}</div>
             <b>{new Date(selected.trialAt).toLocaleString("uk-UA", { weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(/^./, (character) => character.toLocaleUpperCase("uk-UA"))}</b>
