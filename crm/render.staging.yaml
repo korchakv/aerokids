@@ -11,13 +11,9 @@ services:
     healthCheckPath: /ready
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: aerokids-crm-staging-db
-          property: connectionString
+        sync: false
       - key: MIGRATION_DATABASE_URL
-        fromDatabase:
-          name: aerokids-crm-staging-db
-          property: connectionString
+        sync: false
       - key: ENVIRONMENT
         value: production
       - key: AUTH_REQUIRED
@@ -84,10 +80,3 @@ services:
         name: Strict-Transport-Security
         value: "max-age=31536000"
 
-databases:
-  - name: aerokids-crm-staging-db
-    databaseName: aerokids_crm_staging_db
-    user: aerokids_crm_staging_db_user
-    plan: free
-    region: frankfurt
-    postgresMajorVersion: 16
