@@ -78,7 +78,7 @@ def test_lead_page_filters_columns_searches_and_counts(client):
     no_show = client.patch(
         f"/trial-lessons/{trial.json()['id']}/complete",
         headers=headers,
-        json={"status": "no_show"},
+        json={"status": "no_show", "teacher_notes": "Не прийшов, перенести пробне"},
     )
     assert no_show.status_code == 200, no_show.text
 
