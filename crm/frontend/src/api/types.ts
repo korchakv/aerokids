@@ -76,6 +76,16 @@ export type WorkspaceLead = {
   close_note: string | null;
 };
 
+export type ApiLeadComment = {
+  id: string;
+  student_id: string;
+  author_user_id: string | null;
+  author_name: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type WorkspaceStudent = {
   student_id: string;
   first_name: string;

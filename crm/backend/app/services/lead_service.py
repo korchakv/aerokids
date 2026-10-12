@@ -12,11 +12,13 @@ from sqlalchemy.orm import Session
 from app.models.core import (
     Contact,
     CrmStatus,
+    LeadComment,
     Organization,
     PublicIntakeThrottle,
     Student,
     StudentContact,
     StudentStatus,
+    User,
 )
 from app.schemas import IntakeCreate, LeadDetailsUpdate
 from app.services import crm
@@ -214,10 +216,6 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
             existing_student.last_name = data.child_last_name
         if data.child_phone and not existing_student.phone:
             existing_student.phone = data.child_phone
-        if record_repeat:
-            _append_repeat_intake_note(organization, existing_student, data)
-        elif data.comment and not existing_student.notes:
-            existing_student.notes = data.comment
         if data.source and not existing_student.source:
             existing_student.source = data.source
         record_audit(
@@ -229,6 +227,14 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
             {"source": data.source, "contact_id": str(contact.id), "repeat": record_repeat, "comment": data.comment},
             actor_user_id=actor_user_id,
         )
+        if record_repeat or (data.comment and data.comment.strip()):
+            body = data.comment.strip() if data.comment and data.comment.strip() else "Повторне звернення"
+            db.add(LeadComment(
+                organization_id=organization.id,
+                student_id=existing_student.id,
+                author_user_id=actor_user_id,
+                body=body,
+            ))
         db.commit()
         db.refresh(existing_student)
         db.refresh(contact)
@@ -245,6 +251,13 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
     )
     db.add(student)
     db.flush()
+    if data.comment and data.comment.strip():
+        db.add(LeadComment(
+            organization_id=organization.id,
+            student_id=student.id,
+            author_user_id=actor_user_id,
+            body=data.comment.strip(),
+        ))
     db.add(StudentContact(
         organization_id=organization.id,
         student_id=student.id,
@@ -293,7 +306,8 @@ def update_lead_details(
     student.phone = data.child_phone
     student.age_at_inquiry = data.child_age
     student.source = data.source
-    student.notes = data.comment
+    # `notes` is legacy lead text. New comments are appended through the
+    # lead-comments endpoints so editing contact details cannot replace history.
 
     if contact is None:
         contact = Contact(
@@ -344,16 +358,74 @@ def update_lead_details(
     return student
 
 
-def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, status, actor_user_id: UUID | None = None) -> Student:
+def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, status, actor_user_id: UUID | None = None, comment: str | None = None) -> Student:
     student = scoped_get(db, Student, org_id, student_id)
+    if student.crm_status == CrmStatus.NEW and status == CrmStatus.CONTACTED and not (comment and comment.strip()):
+        raise HTTPException(status_code=422, detail="Додайте підсумок дзвінка перед перенесенням заявки в статус «Зв’язались».")
     student.crm_status = status
     student.deferred_until = None
     student.deferred_reason = None
     student.deferred_note = None
+    if status == CrmStatus.CONTACTED and comment and comment.strip():
+        db.add(LeadComment(
+            organization_id=org_id,
+            student_id=student.id,
+            author_user_id=actor_user_id,
+            body=comment.strip(),
+        ))
+        record_audit(db, org_id, "student", student.id, "lead.comment_added", {"body": comment.strip(), "context": "call"}, actor_user_id=actor_user_id)
     record_audit(db, org_id, "student", student.id, "student.crm_status_changed", {"crm_status": status.value if hasattr(status, "value") else str(status)}, actor_user_id=actor_user_id)
     db.commit()
     db.refresh(student)
     return student
+
+
+def list_lead_comments(db: Session, org_id: UUID, student_id: UUID) -> list[dict]:
+    scoped_get(db, Student, org_id, student_id)
+    rows = db.execute(
+        select(LeadComment, User.full_name)
+        .outerjoin(User, User.id == LeadComment.author_user_id)
+        .where(LeadComment.organization_id == org_id, LeadComment.student_id == student_id)
+        .order_by(LeadComment.created_at.asc(), LeadComment.id.asc())
+    ).all()
+    return [{
+        "id": comment.id,
+        "student_id": comment.student_id,
+        "author_user_id": comment.author_user_id,
+        "author_name": author_name,
+        "body": comment.body,
+        "created_at": comment.created_at,
+        "updated_at": comment.updated_at,
+    } for comment, author_name in rows]
+
+
+def create_lead_comment(db: Session, org_id: UUID, student_id: UUID, body: str, actor_user_id: UUID | None = None) -> LeadComment:
+    scoped_get(db, Student, org_id, student_id)
+    comment = LeadComment(organization_id=org_id, student_id=student_id, author_user_id=actor_user_id, body=body.strip())
+    db.add(comment)
+    record_audit(db, org_id, "student", student_id, "lead.comment_added", {"body": body.strip()}, actor_user_id=actor_user_id)
+    db.commit()
+    db.refresh(comment)
+    return comment
+
+
+def update_lead_comment(db: Session, org_id: UUID, student_id: UUID, comment_id: UUID, body: str, actor_user_id: UUID | None = None) -> LeadComment:
+    scoped_get(db, Student, org_id, student_id)
+    comment = db.scalar(select(LeadComment).where(
+        LeadComment.id == comment_id,
+        LeadComment.organization_id == org_id,
+        LeadComment.student_id == student_id,
+    ))
+    if comment is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    before = comment.body
+    comment.body = body.strip()
+    record_audit(db, org_id, "student", student_id, "lead.comment_edited", {
+        "comment_id": str(comment.id), "before": before, "after": comment.body,
+    }, actor_user_id=actor_user_id)
+    db.commit()
+    db.refresh(comment)
+    return comment
 
 
 def defer_lead(

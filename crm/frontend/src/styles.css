@@ -3523,3 +3523,39 @@ html[data-theme="dark"] .shell .globalSearchBar input.globalSearchInput{
   background:transparent!important;
   box-shadow:none!important;
 }
+
+.callSummaryModal{width:min(500px,100%)}
+.callSummaryModal .leadEditActions{margin-top:18px}
+.callSummaryModal .leadEditActions button{min-width:0}
+.callSummaryModal textarea{min-height:110px}
+.leadCommentHistory{
+  display:grid;
+  gap:10px;
+  padding:13px;
+  border:1px solid var(--ak-border);
+  border-radius:12px;
+  background:var(--ak-surface);
+}
+.leadCommentHistory>header{display:grid;gap:2px}
+.leadCommentHistory>header b{color:var(--ak-text);font-size:13px}
+.leadCommentHistory>header small,.leadCommentMeta{color:var(--ak-muted);font-size:10px}
+.leadCommentHistory ol{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.leadCommentHistory li{padding:10px;border:1px solid var(--ak-border);border-radius:9px;background:var(--ak-bg)}
+.leadCommentMeta{display:flex;align-items:center;gap:5px;margin-bottom:5px}
+.leadCommentMeta span{font-weight:700;color:var(--ak-text)}
+.leadCommentBody{display:flex;align-items:flex-start;gap:8px}
+.leadCommentBody p{flex:1;margin:0;color:var(--ak-text);font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.leadCommentEditButton{display:grid;place-items:center;flex:0 0 26px;width:26px;height:26px;padding:0;border:1px solid var(--ak-border);border-radius:7px;background:var(--ak-surface);color:var(--ak-muted);cursor:pointer}
+.leadCommentEditButton:hover{color:var(--ak-accent-text);border-color:var(--ak-accent)}
+.leadCommentAdd,.leadCommentEdit{display:grid;gap:7px}
+.leadCommentAdd label{color:var(--ak-muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.leadCommentAdd textarea,.leadCommentEdit textarea{width:100%;min-height:70px;padding:9px 10px;border:1px solid var(--ak-border);border-radius:9px;background:var(--ak-bg);color:var(--ak-text);font:inherit;font-size:12px;resize:vertical}
+.leadCommentAdd>button{justify-self:end}
+.leadCommentEdit>div{display:flex;justify-content:flex-end;gap:7px}
+.leadCommentsEmpty,.leadCommentError{margin:0;color:var(--ak-muted);font-size:11px}
+.leadCommentError{color:var(--ak-danger,#c43b47)}
+"""store lead comments as individually editable history entries
+
+Revision ID: 0027_lead_comment_history
+Revises: 0026_stage3_performance_indexes
+"""

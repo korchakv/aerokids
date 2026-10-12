@@ -27,10 +27,13 @@ def _lead(client, headers, name: str):
 
 
 def _status(client, headers, student_id: str, status: str):
+    payload = {"crm_status": status}
+    if status == "contacted":
+        payload["comment"] = "Домовилися передзвонити"
     response = client.patch(
         f"/students/{student_id}/crm-status",
         headers=headers,
-        json={"crm_status": status},
+        json=payload,
     )
     assert response.status_code == 200, response.text
 

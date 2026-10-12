@@ -62,7 +62,7 @@ def test_student_detail_and_status_update_are_tenant_scoped(client):
     updated = client.patch(
         f"/students/{student['id']}/crm-status",
         headers=headers,
-        json={"crm_status": "contacted"},
+        json={"crm_status": "contacted", "comment": "Домовилися про наступний контакт"},
     )
     assert updated.status_code == 200
     assert updated.json()["crm_status"] == "contacted"
@@ -2117,7 +2117,7 @@ def test_audit_events_follow_student_workflow_and_are_tenant_scoped(client):
     client.patch(
         f"/students/{student_id}/crm-status",
         headers=a_headers,
-        json={"crm_status": "contacted"},
+        json={"crm_status": "contacted", "comment": "Домовилися про наступний контакт"},
     )
     client.post(
         "/trial-lessons",
@@ -2194,7 +2194,7 @@ def test_authenticated_manual_intake_creates_real_lead(client):
     assert leads.json()[0]["source"] == "phone"
 
 
-def test_lead_details_can_be_edited_including_comment_and_contact(client):
+def test_lead_details_keep_initial_comment_and_comments_have_independent_history(client):
     org = create_org(client, "Editable Leads", "editable-leads")
     headers = {"X-Organization-Id": org["id"]}
 
@@ -2233,7 +2233,29 @@ def test_lead_details_can_be_edited_including_comment_and_contact(client):
     assert updated.json()["phone"] == "+380931112233"
     assert updated.json()["age_at_inquiry"] == 11
     assert updated.json()["source"] == "instagram"
-    assert updated.json()["notes"] == "Хочуть FPV, зручно після 17:00"
+    assert updated.json()["notes"] == "Початковий коментар"
+
+    history = client.get(f"/students/{student_id}/lead-comments", headers=headers)
+    assert history.status_code == 200, history.text
+    assert [item["body"] for item in history.json()] == ["Початковий коментар"]
+
+    added = client.post(
+        f"/students/{student_id}/lead-comments",
+        headers=headers,
+        json={"body": "Хочуть FPV, зручно після 17:00"},
+    )
+    assert added.status_code == 201, added.text
+    second_comment_id = added.json()["id"]
+
+    changed = client.patch(
+        f"/students/{student_id}/lead-comments/{history.json()[0]['id']}",
+        headers=headers,
+        json={"body": "Початковий коментар · уточнено вік"},
+    )
+    assert changed.status_code == 200, changed.text
+    final_history = client.get(f"/students/{student_id}/lead-comments", headers=headers).json()
+    assert [item["body"] for item in final_history] == ["Початковий коментар · уточнено вік", "Хочуть FPV, зручно після 17:00"]
+    assert final_history[1]["id"] == second_comment_id
 
     detail = client.get(f"/students/{student_id}", headers=headers)
     assert detail.status_code == 200, detail.text
@@ -2247,7 +2269,7 @@ def test_lead_details_can_be_edited_including_comment_and_contact(client):
     assert row["student_phone"] == "+380931112233"
     assert row["contact_name"] == "Марина Іваненко"
     assert row["contact_phone"] == "+380502223344"
-    assert row["comment"] == "Хочуть FPV, зручно після 17:00"
+    assert row["comment"] == "Початковий коментар"
 
     events = client.get(
         "/audit-events",
@@ -2256,8 +2278,41 @@ def test_lead_details_can_be_edited_including_comment_and_contact(client):
     )
     assert events.status_code == 200, events.text
     edited = next(item for item in events.json() if item["event_type"] == "lead.details_updated")
-    assert "comment" in edited["payload"]["changed_fields"]
-    assert edited["payload"]["comment_changed"] is True
+    assert "comment" not in edited["payload"]["changed_fields"]
+    assert edited["payload"]["comment_changed"] is False
+
+
+def test_call_summary_is_a_new_comment_history_entry(client):
+    org = create_org(client, "Call Notes", "call-notes")
+    headers = {"X-Organization-Id": org["id"]}
+    intake = client.post("/intake", headers=headers, json={
+        "child_first_name": "Марко", "child_age": 10, "contact_name": "Ірина",
+        "phone": "0672223344", "comment": "Початкова заявка",
+    })
+    assert intake.status_code == 201, intake.text
+    student_id = intake.json()["student_id"]
+
+    rejected = client.patch(f"/students/{student_id}/crm-status", headers=headers, json={"crm_status": "contacted"})
+    assert rejected.status_code == 422, rejected.text
+
+    moved = client.patch(f"/students/{student_id}/crm-status", headers=headers, json={
+        "crm_status": "contacted", "comment": "Домовилися передзвонити у п’ятницю",
+    })
+    assert moved.status_code == 200, moved.text
+    history = client.get(f"/students/{student_id}/lead-comments", headers=headers)
+    assert [item["body"] for item in history.json()] == [
+        "Початкова заявка", "Домовилися передзвонити у п’ятницю",
+    ]
+
+    events = client.get(
+        "/audit-events",
+        headers=headers,
+        params={"entity_type": "student", "entity_id": student_id},
+    )
+    assert events.status_code == 200, events.text
+    call_event = next(item for item in events.json() if item["event_type"] == "lead.comment_added")
+    assert call_event["payload"]["body"] == "Домовилися передзвонити у п’ятницю"
+    assert call_event["payload"]["context"] == "call"
 
 
 def test_group_capacity_blocks_extra_enrollment_and_transfer(client):
@@ -2662,7 +2717,7 @@ def test_audit_event_records_authenticated_actor(client):
     changed = client.patch(
         f"/students/{student_id}/crm-status",
         headers=headers,
-        json={"crm_status": "contacted"},
+        json={"crm_status": "contacted", "comment": "Домовилися про наступний контакт"},
     )
     assert changed.status_code == 200, changed.text
 
@@ -2730,9 +2785,9 @@ def test_repeat_website_intake_keeps_student_and_appends_comment(client):
     assert leads.status_code == 200, leads.text
     assert len(leads.json()) == 1
     comment = leads.json()[0]["comment"]
-    assert "Перше звернення" in comment
-    assert "Повторне звернення через сайт" in comment
-    assert "Хочемо записатися ще раз" in comment
+    assert comment == "Перше звернення"
+    history = client.get(f"/students/{first.json()['student_id']}/lead-comments", headers=headers)
+    assert [item["body"] for item in history.json()] == ["Перше звернення", "Хочемо записатися ще раз"]
 
 
 def test_manual_intake_blocks_same_child_but_allows_sibling_same_parent_phone(client):
