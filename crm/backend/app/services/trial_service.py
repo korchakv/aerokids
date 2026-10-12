@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.core import CrmStatus, Location, Student, TrialLesson, TrialStatus
+from app.models.core import CrmStatus, LeadComment, Location, Student, TrialLesson, TrialStatus
 from app.services import audit_service
 
 
@@ -126,12 +126,27 @@ def list_trials(db: Session, org_id: UUID) -> list[TrialLesson]:
 
 def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommended_level: str | None, teacher_notes: str | None, actor_user_id: UUID | None = None) -> TrialLesson:
     trial = _scoped_get(db, TrialLesson, org_id, trial_id)
+    previous_status = trial.status
+    previous_notes = trial.teacher_notes
     was_completed = trial.status == TrialStatus.COMPLETED
     preserve_current_stage = was_completed and status == TrialStatus.COMPLETED
     trial.status = status
-    trial.recommended_level = recommended_level
-    trial.teacher_notes = teacher_notes
+    # Trial outcomes do not assign a student level.
+    trial.recommended_level = None
+    trial.teacher_notes = teacher_notes.strip() if teacher_notes and teacher_notes.strip() else None
     student = _scoped_get(db, Student, org_id, trial.student_id)
+    if (
+        status == TrialStatus.NO_SHOW
+        and trial.teacher_notes
+        and (previous_status != TrialStatus.NO_SHOW or previous_notes != trial.teacher_notes)
+    ):
+        db.add(LeadComment(
+            organization_id=org_id,
+            student_id=student.id,
+            author_user_id=actor_user_id,
+            body=trial.teacher_notes,
+            kind="trial",
+        ))
     if not preserve_current_stage:
         student.lead_close_reason = None
         student.lead_close_note = None
@@ -156,7 +171,7 @@ def complete_trial(db: Session, org_id: UUID, trial_id: UUID, status, recommende
         "student",
         student.id,
         f"trial.{status.value}",
-        {"trial_id": str(trial.id), "recommended_level": recommended_level, "teacher_notes": teacher_notes},
+        {"trial_id": str(trial.id), "recommended_level": None, "teacher_notes": None if status == TrialStatus.NO_SHOW else trial.teacher_notes},
         actor_user_id=actor_user_id,
     )
     db.commit()
