@@ -969,8 +969,13 @@ function App() {
     // Stages that require data open the exact procedure instead of silently changing status.
     if (target === "trial") {
       openLead(lead.id);
+      setLeadActionsOpen(false);
+      setLeadStatusMenuOpen(false);
+      setPostTrialMode(null);
       setLeadProcedureTarget("trial");
-      if (!lead.trialAt) setTrialAt(nextQuarterHourLocalInput());
+      setTrialAt(lead.trialAt ? toLocalDateTimeInput(lead.trialAt) : nextQuarterHourLocalInput());
+      setTrialLocationId(lead.trialLocationId ?? "");
+      setTrialLocation(lead.trialLocation ?? "");
       window.setTimeout(() => setTrialMode("schedule"), 0);
       return;
     }

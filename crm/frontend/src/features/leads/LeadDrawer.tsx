@@ -342,7 +342,21 @@ export function LeadDrawer(props: LeadDrawerProps) {
                   </select>
                 </label>}
           </div>
-          {canManageLeads && (selected.status === "Зв'язались" || ["no_show","cancelled"].includes(selected.trialResult ?? "")) && <button type="button" className="primary full" onClick={beginTrialScheduling}>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</button>}
+          {canManageLeads && (selected.status === "Зв'язались" || ["no_show","cancelled"].includes(selected.trialResult ?? "")) && trialMode !== "schedule" && <button type="button" className="primary full" onClick={beginTrialScheduling}>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</button>}
+          {selected.status === "Пробне заплановано" && selected.trialResult === "scheduled" && selected.trialAt && trialMode !== "schedule" && <div className="trialSummary">
+            <div className="trialSummaryHeader"><span>Коли і де</span>{canManageLeads && <button type="button" className="leadEditIcon" aria-label="Змінити дату, час і локацію пробного" title="Редагувати запис на пробне" onClick={beginTrialScheduling}><UiIcon name="edit" size={14} /></button>}</div>
+            <b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b>
+            <small>{selected.trialLocation ?? "Локацію не вказано"}</small>
+          </div>}
+          {trialMode === "schedule" && <div id="lead-trial-workflow" data-testid="lead-trial-workflow" className="workflowBox leadWorkflowBox">
+            <div className="workflowHead"><h3>{selected.trialResult === "scheduled" ? "Редагувати запис на пробне" : "Запис на пробне"}</h3><button type="button" aria-label="Закрити форму запису" onClick={() => setTrialMode(null)}>×</button></div>
+            <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
+            <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
+              <option value="" disabled={Boolean(selected.trialLocationId)}>Без локації</option>
+              {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
+            </select></label>
+            <button className="primary full" onClick={scheduleTrial}>Підтвердити пробне</button>
+          </div>}
           <div className="detailGrid"><span>Джерело<b>{leadSourceLabel(selected.source)}</b></span><span>Вік<b>{selected.age}</b></span></div>
           {selectedMissingDetails.length > 0 && <div className="leadCompletenessNotice">
             <div><span className="leadCompletenessIcon">!</span><p><b>Картку варто доповнити</b><small>Не заповнено: {selectedMissingDetails.join(", ")}.</small></p></div>
@@ -364,7 +378,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             {canManageLeads && <div className="leadCommentAdd"><label htmlFor="lead-comment-new">Додати коментар</label><textarea id="lead-comment-new" value={newComment} onChange={(event) => setNewComment(event.target.value)} maxLength={5000} placeholder="Запишіть домовленість або нову інформацію…" /><button type="button" className="primary" disabled={leadCommentSaving || !newComment.trim()} onClick={() => void addComment()}>{leadCommentSaving ? "Зберігаємо…" : "Додати коментар"}</button></div>}
             {commentError && <p className="leadCommentError" role="alert">{commentError}</p>}
           </section>
-          {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small>{canManageLeads && selected.trialResult === "scheduled" && <button type="button" className="inlineEditLink" aria-label="Змінити дату, час і локацію пробного" onClick={beginTrialScheduling}>Змінити дату й час</button>}</div>}
+
           <div className="preferenceSummary">
             <div><span>Бажана локація</span><b>{selected.preferredLocationName ?? "Не вказано"}</b></div>
             <div><span>Бажаний час</span><b>{availabilityLabel(selected.availability ?? [])}</b></div>
@@ -386,15 +400,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
 
 
 
-          {trialMode === "schedule" && <div id="lead-trial-workflow" className="workflowBox leadWorkflowBox">
-            <div className="workflowHead"><h3>Запис на пробне</h3><button onClick={() => setTrialMode(null)}>×</button></div>
-            <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
-            <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
-              <option value="" disabled={Boolean(selected.trialLocationId)}>Без локації</option>
-              {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
-            </select></label>
-            <button className="primary full" onClick={scheduleTrial}>Підтвердити пробне</button>
-          </div>}
+
 
           {trialMode === "complete" && <div id="lead-trial-result-workflow" className="workflowBox leadWorkflowBox">
             <div className="workflowHead"><h3>{leadProcedureTarget === "no_show" ? "Зафіксувати пропущене пробне" : "Результат пробного"}</h3><button onClick={() => { setTrialMode(null); setLeadProcedureTarget(null); }}>×</button></div>
