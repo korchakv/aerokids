@@ -1819,14 +1819,30 @@ html[data-theme="light"] .groupRosterRow{box-shadow:0 6px 18px rgba(19,64,61,.04
 /* Lead detail editing */
 .leadDrawerIdentity{
   display:flex;
-  align-items:center;
+  align-items:flex-start;
   gap:8px;
   min-width:0;
 }
+.leadDrawerNameBlock{min-width:0;flex:1}
 .leadDrawerIdentity h2{
   min-width:0;
   margin:0;
+  color:var(--ak-text);
+  line-height:1.2;
+  overflow-wrap:anywhere;
 }
+.leadDrawerMeta{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px;
+  margin:5px 0 0;
+  color:var(--ak-ui-muted,var(--ak-muted));
+  font-size:12px;
+  line-height:1.4;
+}
+.leadDrawerMeta i{font-style:normal;opacity:.7}
+.leadDrawerTitleRow{margin-bottom:16px}
 .leadEditIcon{
   display:grid;
   place-items:center;
