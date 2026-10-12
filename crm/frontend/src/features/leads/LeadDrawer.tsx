@@ -125,7 +125,7 @@ export type LeadDrawerProps = {
   resumeDeferredLead: () => MaybePromise;
   closeLead: () => MaybePromise;
   beginLeadDefer: () => MaybePromise;
-  beginLeadClose: () => MaybePromise;
+  beginLeadClose: (kind?: "declined" | "no_response" | "not_relevant") => MaybePromise;
   handleLeadPrimaryAction: () => MaybePromise;
   beginTrialScheduling: () => MaybePromise;
   beginTrialResult: () => MaybePromise;
@@ -330,8 +330,8 @@ export function LeadDrawer(props: LeadDrawerProps) {
             {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Змінити причину неявки</button>}
             <div className="postTrialActions">
               <button className="primary" onClick={beginTrialScheduling}>Перезаписати пробне</button>
-              <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
-              <button className="search" onClick={() => { setCloseKind("no_response"); setPostTrialMode("close"); setWorkspaceError(""); }}>Закрити заявку</button>
+              <button className="search" onClick={beginLeadFollowUp}>Передзвонити пізніше</button>
+              <button className="search" onClick={() => beginLeadClose("no_response")}>Закрити заявку</button>
             </div>
           </div>}
           {trialMode === "complete" && <div id="lead-trial-result-workflow" className="workflowBox leadWorkflowBox">
@@ -359,7 +359,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             {canManageLeads && <button type="button" onClick={beginLeadEdit}>Доповнити</button>}
           </div>}
           {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : action.label}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>{canManageLeads && <button type="button" className="inlineEditLink" onClick={beginLeadFollowUp}>Змінити нагадування</button>}</div>; })()}
-          {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}{canManageLeads && <button type="button" className="inlineEditLink" onClick={beginLeadClose}>Редагувати причину та коментар</button>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
+          {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}{canManageLeads && <button type="button" className="inlineEditLink" onClick={() => beginLeadClose()}>Редагувати причину та коментар</button>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
           <section className="leadCommentHistory" aria-label="Історія коментарів">
             <header><b>Історія коментарів</b><small>Нові коментарі додаються окремо</small></header>
             {leadCommentsLoading ? <p className="leadCommentsEmpty">Завантажуємо історію…</p> : leadComments.length === 0 ? <p className="leadCommentsEmpty">Коментарів ще немає.</p> : <ol>
@@ -408,8 +408,8 @@ export function LeadDrawer(props: LeadDrawerProps) {
               <small>Зафіксуйте рішення сім’ї. До «Очікує групу» дитина переходить тільки після підтвердження.</small>
               <div className="postTrialActions">
                 <button className="primary" onClick={() => saveLeadOutcome("waiting_for_group")}>Готові навчатися</button>
-                <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Ще думають</button>
-                <button className="search dangerSoft" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Не хочуть продовжувати</button>
+                <button className="search" onClick={beginLeadFollowUp}>Ще думають</button>
+                <button className="search dangerSoft" onClick={() => beginLeadClose("declined")}>Не хочуть продовжувати</button>
               </div>
             </>}
             {selected.status === "Очікує групу" && <><small>Готові навчатися · можна зарахувати в групу або без групи.</small>{canManageLeads && <button type="button" className="primary full" onClick={beginLeadEnrollment}>Зарахувати учня</button>}</>}
@@ -443,8 +443,8 @@ export function LeadDrawer(props: LeadDrawerProps) {
             {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Редагувати результат пробного</button>}
             <div className="postTrialActions">
               <button className="primary" onClick={() => setTrialMode("schedule")}>Перезаписати пробне</button>
-              <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
-              <button className="search" onClick={() => { setCloseKind("declined"); setPostTrialMode("close"); setWorkspaceError(""); }}>Закрити заявку</button>
+              <button className="search" onClick={beginLeadFollowUp}>Передзвонити пізніше</button>
+              <button className="search" onClick={() => beginLeadClose("declined")}>Закрити заявку</button>
             </div>
           </div>}
 
@@ -506,7 +506,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
 
           {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && postTrialMode !== "close" && <div className="leadCancelBeforeHistory">
             {!leadIsDeferred(selected) && <button className="search deferLeadAction" onClick={beginLeadDefer}>Повернутись пізніше</button>}
-            <button className="search dangerSoft" onClick={beginLeadClose}>Скасувати заявку</button>
+            <button className="search dangerSoft" onClick={() => beginLeadClose()}>Скасувати заявку</button>
           </div>}
 
           {!(leadEditing || preferenceMode || trialMode || postTrialMode || leadEnrollmentOpen) && <div className="mobileLeadActionBar" aria-label="Дії із заявкою">
@@ -529,7 +529,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Пробне заплановано" && <button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>◷</i><span><b>Запланувати дзвінок</b><small>Поставити дату наступного контакту</small></span></button>}
                 {!leadIsDeferred(selected) && !["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction" onClick={beginLeadDefer}><i>◷</i><span><b>Повернутись пізніше</b><small>Сховати заявку до вибраної дати</small></span></button>}
                 {leadIsDeferred(selected) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void resumeDeferredLead(); }}><i>↺</i><span><b>Повернути в роботу зараз</b><small>Прибрати відкладене нагадування</small></span></button>}
-                {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction danger" onClick={beginLeadClose}><i>×</i><span><b>Закрити заявку</b><small>Відмова, немає відповіді або неактуально</small></span></button>}
+                {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction danger" onClick={() => beginLeadClose()}><i>×</i><span><b>Закрити заявку</b><small>Відмова, немає відповіді або неактуально</small></span></button>}
                 {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); reopenLead(); }}><i>↺</i><span><b>Повернути в роботу</b><small>Відновити активну заявку</small></span></button>}
                 {canDeleteStudents && <button className="mobileLeadSheetAction danger quietDelete" disabled={leadDeleteSaving} onClick={deleteSelectedLead}><i>⌫</i><span><b>{leadDeleteSaving ? "Видаляємо…" : "Видалити заявку"}</b><small>Тільки якщо створена помилково</small></span></button>}
               </div>

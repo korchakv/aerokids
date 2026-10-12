@@ -410,3 +410,89 @@ test("student and group registries use database-backed page search", async ({ pa
   expect((await paymentSearchRequest).ok()).toBeTruthy();
   await expect(page.getByTestId("payments-workspace").getByText("За цим фільтром оплат не знайдено.")).toBeVisible();
 });
+
+test("no-show follow-up and close actions open, save, and close correctly", async ({ page }) => {
+  await login(page);
+
+  const suffix = Array.from({ length: 8 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
+  const childName = "NoShow " + suffix;
+  const childPhone = "+38067" + String(Math.floor(1_000_000 + Math.random() * 9_000_000));
+  const setup = await page.evaluate(async ({ childName, childPhone }) => {
+    const session = JSON.parse(sessionStorage.getItem("school-crm-session") ?? "null");
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + session.accessToken,
+      "X-Organization-Id": session.organizationId,
+    };
+    const intakeResponse = await fetch("/api/intake", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        child_first_name: childName,
+        child_age: 9,
+        contact_name: "Тестова мама",
+        phone: childPhone,
+        source: "phone",
+      }),
+    });
+    const intakeText = await intakeResponse.text();
+    const intake = intakeText ? JSON.parse(intakeText) : {};
+    if (!intakeResponse.ok) return { intake: intakeResponse.status, detail: intakeText };
+    const starts = new Date();
+    starts.setDate(starts.getDate() - 1);
+    starts.setHours(17, 0, 0, 0);
+    const trialResponse = await fetch("/api/trial-lessons", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ student_id: intake.student_id, location_id: null, starts_at: starts.toISOString() }),
+    });
+    const trial = await trialResponse.json();
+    if (!trialResponse.ok) return { intake: intakeResponse.status, trial: trialResponse.status };
+    const noShowResponse = await fetch("/api/trial-lessons/" + trial.id + "/complete", {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ status: "no_show", teacher_notes: "Не змогли приїхати" }),
+    });
+    return {
+      intake: intakeResponse.status,
+      trial: trialResponse.status,
+      noShow: noShowResponse.status,
+    };
+  }, { childName, childPhone });
+  expect(setup, JSON.stringify(setup)).toEqual({ intake: 201, trial: 201, noShow: 200 });
+
+  await page.reload();
+  await expect(page.getByText("Дашборд", { exact: true }).first()).toBeVisible();
+  await page.getByText("Заявки", { exact: true }).first().click();
+  const noShowLead = page.locator(".kanbanColumn.column-no_show .leadKanbanCard").filter({ hasText: childName });
+  await expect(noShowLead).toBeVisible();
+  await noShowLead.click();
+
+  const drawer = page.getByTestId("lead-drawer");
+  const followUp = drawer.locator("#lead-followup-workflow");
+  await drawer.locator(".noShowCard").getByRole("button", { name: "Передзвонити пізніше", exact: true }).click();
+  await expect(followUp).toBeVisible();
+  await followUp.getByLabel("Наступний контакт: дата").fill(await page.evaluate(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 2);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  }));
+  await followUp.getByLabel("Час").selectOption("11:00");
+  const followUpSaved = page.waitForResponse((response) =>
+    response.url().includes("/lead-outcome") && response.request().method() === "PATCH"
+  );
+  await followUp.getByRole("button", { name: "Зберегти нагадування" }).click();
+  expect((await followUpSaved).ok()).toBeTruthy();
+  await expect(followUp).toHaveCount(0);
+
+  const closeForm = drawer.locator("#lead-close-workflow");
+  await drawer.locator(".noShowCard").getByRole("button", { name: "Закрити заявку", exact: true }).click();
+  await expect(closeForm).toBeVisible();
+  await expect(closeForm.locator("select").first()).toHaveValue("no_response");
+  const closed = page.waitForResponse((response) =>
+    response.url().includes("/lead-outcome") && response.request().method() === "PATCH"
+  );
+  await closeForm.getByRole("button", { name: "Закрити заявку", exact: true }).click();
+  expect((await closed).ok()).toBeTruthy();
+  await expect(drawer.locator(".closedLeadBox")).toContainText("Не відповідає");
+});
