@@ -65,10 +65,23 @@ def update_trial(
     trial = _scoped_get(db, TrialLesson, org_id, trial_id)
     if location_id is not None:
         _scoped_get(db, Location, org_id, location_id)
+
+    before_location = _scoped_get(db, Location, org_id, trial.location_id) if trial.location_id else None
+    before = {
+        "starts_at": trial.starts_at.isoformat(),
+        "location_name": before_location.name if before_location else None,
+    }
+
     if location_id is not None:
         trial.location_id = location_id
     if starts_at is not None:
         trial.starts_at = starts_at
+    after_location = _scoped_get(db, Location, org_id, trial.location_id) if trial.location_id else None
+    after = {
+        "starts_at": trial.starts_at.isoformat(),
+        "location_name": after_location.name if after_location else None,
+    }
+    changed_fields = [field for field in ("starts_at", "location_name") if before[field] != after[field]]
 
     trial.status = TrialStatus.SCHEDULED
     student = _scoped_get(db, Student, org_id, trial.student_id)
@@ -90,6 +103,9 @@ def update_trial(
             "trial_id": str(trial.id),
             "starts_at": trial.starts_at.isoformat(),
             "location_id": str(trial.location_id) if trial.location_id else None,
+            "before": before,
+            "after": after,
+            "changed_fields": changed_fields,
         },
         actor_user_id=actor_user_id,
     )

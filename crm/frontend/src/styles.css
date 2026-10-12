@@ -3573,3 +3573,5 @@ Revises: 0026_stage3_performance_indexes
 .leadCommentMeta-trial .leadCommentKind{color:var(--ak-accent-text);background:var(--ak-surface)}
 
 .trialSummaryHeader{display:flex;align-items:center;justify-content:space-between;gap:8px}.trialSummaryHeader .leadEditIcon{margin:0}
+
+.historyItem{display:grid;grid-template-columns:14px 1fr;gap:9px;margin-top:14px}.historyItemContent{min-width:0}.historyItemContent>span{display:block;color:var(--ak-muted);font-size:13px;line-height:1.45}.historyChange{margin-top:6px;color:var(--ak-text-soft);font-size:13px}.historyChange summary{width:max-content;color:var(--ak-accent-soft);cursor:pointer;font-weight:650}.historyChange ul{display:grid;gap:5px;margin:7px 0 0;padding-left:18px}.historyChange li{padding-left:2px;line-height:1.45}.historyChange li b{color:var(--ak-accent-text)}
