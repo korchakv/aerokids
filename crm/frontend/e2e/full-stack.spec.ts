@@ -414,8 +414,8 @@ test("student and group registries use database-backed page search", async ({ pa
 test("no-show follow-up and close actions open, save, and close correctly", async ({ page }) => {
   await login(page);
 
-  const suffix = randomUUID().slice(0, 8);
-  const childName = "NoShow" + suffix.replaceAll("-", "").toUpperCase();
+  const suffix = Array.from({ length: 8 }, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join("");
+  const childName = "NoShow " + suffix;
   const childPhone = "+38067" + String(Math.floor(1_000_000 + Math.random() * 9_000_000));
   const setup = await page.evaluate(async ({ childName, childPhone }) => {
     const session = JSON.parse(sessionStorage.getItem("school-crm-session") ?? "null");
