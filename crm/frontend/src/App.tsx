@@ -3889,7 +3889,6 @@ function App() {
         trialMode,
         trialAt,
         trialLocationId,
-        recommendedLevel,
         teacherNotes,
         leadProcedureTarget,
         leadEnrollmentOpen,
