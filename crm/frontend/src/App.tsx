@@ -148,7 +148,6 @@ function App() {
   const [leadEnrollmentGroupId, setLeadEnrollmentGroupId] = useState<EntityId | "">("");
   const [leadEnrollmentSaving, setLeadEnrollmentSaving] = useState(false);
   const [leadActionsOpen, setLeadActionsOpen] = useState(false);
-  const [leadStatusMenuOpen, setLeadStatusMenuOpen] = useState(false);
   const [leadDeleteSaving, setLeadDeleteSaving] = useState(false);
   const [studentFilter, setStudentFilter] = useState<StudentFilter>("all");
   const [studentRegistryQuery, setStudentRegistryQuery] = useState("");
@@ -970,7 +969,7 @@ function App() {
     if (target === "trial") {
       openLead(lead.id);
       setLeadActionsOpen(false);
-      setLeadStatusMenuOpen(false);
+      
       setPostTrialMode(null);
       setLeadProcedureTarget("trial");
       setTrialAt(lead.trialAt ? toLocalDateTimeInput(lead.trialAt) : nextQuarterHourLocalInput());
@@ -1190,7 +1189,7 @@ function App() {
     setLeadEnrollmentOpen(false);
     setLeadEnrollmentGroupId("");
     setLeadActionsOpen(false);
-    setLeadStatusMenuOpen(false);
+    
     const lead = leads.find((item) => item.id === id);
     setTrialAt(lead?.trialAt ? toLocalDateTimeInput(lead.trialAt) : nextQuarterHourLocalInput());
     if (lead?.trialLocation) setTrialLocation(lead.trialLocation);
@@ -1446,7 +1445,7 @@ function App() {
   const beginTrialScheduling = () => {
     if (!selected) return;
     setLeadActionsOpen(false);
-    setLeadStatusMenuOpen(false);
+    
     setPostTrialMode(null);
     setLeadProcedureTarget("trial");
     setTrialAt(selected.trialAt ? toLocalDateTimeInput(selected.trialAt) : nextQuarterHourLocalInput());
@@ -1458,7 +1457,7 @@ function App() {
   const beginTrialResult = () => {
     if (!selected) return;
     setLeadActionsOpen(false);
-    setLeadStatusMenuOpen(false);
+    
     setPostTrialMode(null);
     setLeadProcedureTarget("after_trial");
     setRecommendedLevel(selected.recommendedLevel ?? "Початковий");
@@ -1469,7 +1468,7 @@ function App() {
 
   const beginLeadFollowUp = () => {
     setLeadActionsOpen(false);
-    setLeadStatusMenuOpen(false);
+    
     setTrialMode(null);
     setPostTrialMode("thinking");
     revealLeadWorkflow("lead-followup-workflow");
@@ -1477,7 +1476,7 @@ function App() {
 
   const beginLeadDefer = () => {
     setLeadActionsOpen(false);
-    setLeadStatusMenuOpen(false);
+    
     setTrialMode(null);
     const date = selected?.deferredUntil ? new Date(selected.deferredUntil) : new Date();
     if (!selected?.deferredUntil) {
@@ -1500,7 +1499,7 @@ function App() {
 
   const beginLeadEnrollment = () => {
     setLeadActionsOpen(false);
-    setLeadStatusMenuOpen(false);
+    
     setTrialMode(null);
     setPostTrialMode(null);
     setLeadProcedureTarget(null);
@@ -1511,7 +1510,7 @@ function App() {
 
   const beginLeadClose = () => {
     setLeadActionsOpen(false);
-    setLeadStatusMenuOpen(false);
+    
     setCloseKind(selected?.status === "Не відповідає" ? "no_response" : selected?.status === "Неактуально" ? "not_relevant" : "declined");
     setCloseReason(selected?.closeReason ?? "schedule");
     setCloseNote(selected?.closeNote ?? "");
@@ -1561,7 +1560,7 @@ function App() {
       return;
     }
     if (selected.status === "Після пробного") {
-      setLeadStatusMenuOpen(false);
+      
       setLeadActionsOpen(true);
       return;
     }
@@ -1570,13 +1569,6 @@ function App() {
       return;
     }
     beginTrialScheduling();
-  };
-
-  const setLeadMobileStatus = (status: "Нова" | "Зв'язались" | "Очікує групу") => {
-    if (!selected) return;
-    setLeadStatusMenuOpen(false);
-    setLeadActionsOpen(false);
-    void updateStatus(selected.id, status);
   };
 
   const enrollLeadDirectly = async () => {
@@ -3890,18 +3882,15 @@ function App() {
         groups,
         locations,
         leadActionsOpen,
-        leadStatusMenuOpen,
         leadDeleteSaving,
         entityEvents,
         leadComments,
         leadCommentsLoading,
         leadCommentSaving,
         historyLoading,
-        statuses,
         setSelectedId,
         setLeadEditing,
         setLeadActionsOpen,
-        setLeadStatusMenuOpen,
         setLeadEditFirstName,
         setLeadEditLastName,
         setLeadEditAge,
@@ -3933,7 +3922,6 @@ function App() {
         beginLeadEdit,
         saveLeadDetails,
         saveLeadComment,
-        updateStatus,
         reopenLead,
         saveStudentPreferences,
         scheduleTrial,
@@ -3954,7 +3942,6 @@ function App() {
         beginTrialResult,
         beginLeadFollowUp,
         beginLeadEnrollment,
-        setLeadMobileStatus,
         deleteSelectedLead,
         deferReasonLabel,
         closeReasonLabel,
