@@ -1223,7 +1223,7 @@ function App() {
         const path = `/students/${selected.id}/lead-comments`;
         if (commentId) {
           const saved = await apiPatch<ApiLeadComment>(`${path}/${commentId}`, { body: body.trim() }, session);
-          setLeadComments((items) => items.map((item) => item.id === commentId ? { ...item, ...saved, author_name: saved.author_name ?? session.user.full_name } : item));
+          setLeadComments((items) => items.map((item) => item.id === commentId ? { ...item, ...saved, author_name: saved.author_name ?? item.author_name } : item));
         } else {
           const saved = await apiPost<ApiLeadComment>(path, { body: body.trim() }, session);
           setLeadComments((items) => [...items, { ...saved, author_name: saved.author_name ?? session.user.full_name }]);
