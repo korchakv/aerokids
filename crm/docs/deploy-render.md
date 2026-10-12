@@ -1,55 +1,50 @@
-# Test deployment on Render
+# Ізольоване тестове середовище CRM
 
-The repository now contains a root `render.yaml` Blueprint for a temporary CRM test environment.
+## Принцип
 
-It creates:
+- Production залишається на `crm-v1`, адреса для роботи — `https://crm.aerokids.space`.
+- Тестова гілка — `crm-staging`; вона ніколи не є джерелом production-сервісів.
+- Тестовий Blueprint — `crm/render.staging.yaml` (у Render Dashboard вкажіть саме цей шлях).
+- Тестова база `aerokids-crm-staging-db` окрема від Neon production. Не переносити в неї реальні дані учнів.
+- Тестові frontend/API сервіси мають інші назви та адреси. На тесті створюються лише вигадані записи.
+- Робочі фічі вносяться в окремих feature-гілках через PR. Спочатку PR у `crm-staging`; після приймального тесту відкривається PR тієї самої feature-гілки до `crm-v1`.
+- На `crm-staging` CI запускається на кожен push, а Render Blueprint має `autoDeployTrigger: checksPass`. Тобто невдала CI-перевірка не повинна потрапити в тестовий деплой.
+- На першому запуску Render створить порожню базу. У першому вікні CRM створіть тестову організацію та власника. `BOOTSTRAP_SECRET` задається в Render як секрет і не комітиться.
 
-- `korchakv-aerokids-crm-api` — FastAPI backend;
-- `korchakv-aerokids-crm` — React static frontend;
-- `korchakv-aerokids-crm-db` — PostgreSQL 16.
+## Одноразове створення середовища
 
-## Deploy
+1. У GitHub створити гілку `crm-staging` від актуальної `crm-v1` та додати в неї конфігурацію `crm/render.staging.yaml` і зміну CI, яка запускає `crm-ci.yml` також на push до `crm-staging`.
+2. У Render Dashboard вибрати **New → Blueprint** і під’єднати `korchakv/aerokids`.
+3. Для гілки Blueprint вибрати `crm-staging`. Для Blueprint file path вказати `crm/render.staging.yaml`, а не кореневий `render.yaml`.
+4. Перевірити, що перед створенням у плані видно тільки ресурси з суфіксом `staging`: API, frontend і PostgreSQL. Якщо показаний production `aerokids-crm`, `aerokids-crm-api` або Neon production URL — скасувати створення й виправити вибір Blueprint.
+5. Встановити окремий випадковий `BOOTSTRAP_SECRET` (не менше 32 символів) у секретні змінні саме `aerokids-crm-api-staging`. Render сам генерує `JWT_SECRET`; `DATABASE_URL` та `MIGRATION_DATABASE_URL` мають посилатися на `aerokids-crm-staging-db`.
+6. Створити Blueprint та дочекатися `/ready` у staging API. Відкрити staging frontend і створити тестову організацію та обліковий запис власника.
+7. Зберегти посилання на dashboard тестових сервісів у цьому документі або в менеджері паролів. Пароль власника і bootstrap key не зберігати в репозиторії.
 
-1. Open Render.
-2. Choose **New → Blueprint**.
-3. Connect the GitHub repository `korchakv/aerokids`.
-4. Select branch `crm-v1`.
-5. Render reads `render.yaml`.
-6. When prompted for `BOOTSTRAP_SECRET`, enter a private value with at least 16 characters and save it somewhere safe.
-7. Deploy the Blueprint.
-8. Open the frontend service URL.
-9. On first launch, create the organization and owner. The **Ключ першого запуску** field is the same `BOOTSTRAP_SECRET`.
+Blueprint використовує безкоштовний PostgreSQL Render для тесту. Він призначений лише для перевірок, може мати строк зберігання, обмеження продуктивності й не є резервною копією production. Перевірте актуальний строк дії free DB перед запуском; перед його завершенням тестову базу можна скинути й створити заново. Дані тесту не повинні бути єдиним місцем зберігання реальних учнів.
 
-## Expected test URLs
+## Цикл однієї фічі
 
-- Frontend: `https://korchakv-aerokids-crm.onrender.com`
-- API: `https://korchakv-aerokids-crm-api.onrender.com`
-- API readiness: `https://korchakv-aerokids-crm-api.onrender.com/ready`
+1. Створити `crm/<коротка-назва>` від актуальної `crm-v1`.
+2. Зробити одну фічу; додати автоматизовані тести для поведінки та регресій.
+3. Відкрити PR до `crm-staging`. Перевірити, що всі сім CRM CI-перевірок пройшли.
+4. Після зеленого CI злити PR у `crm-staging`. Дочекатися успішного Render deploy та здорового `/ready`.
+5. Увійти до тестової CRM та пройти лише відповідні розділи чекліста `docs/test-plan-acceptance.md`, а також коротку регресію.
+6. Якщо знайдено проблему — виправлення додати в ту саму feature-гілку, оновити PR у staging і повторити CI та ручний тест.
+7. Коли ви підтвердили результат, відкрити PR тієї самої feature-гілки до `crm-v1`. Дочекатися семи перевірок і лише тоді злити в production.
+8. Переконатися, що Render frontend та API розгорнули саме production commit, `/ready` працює, а перевірка даних не показує порушень.
+9. Після успішного production deploy оновити `crm-staging` з `crm-v1`, щоб наступна фіча тестувалась на актуальній основі.
 
-If Render changes either generated hostname, update:
+Тестування на спільному staging виконується послідовно: поки ви приймаєте одну зміну, не розгортати туди іншу. Це не дасть новому деплою змінити екран посеред тесту.
 
-- backend `CORS_ORIGINS`;
-- frontend `VITE_API_URL`.
+## Що перевірити при кожному staging deploy
 
-## Important limits of the free test environment
+- frontend сервіс: `aerokids-crm-staging`;
+- API сервіс: `aerokids-crm-api-staging`;
+- frontend використовує тільки staging API;
+- API використовує тільки staging database;
+- API `GET /ready` повертає успіх;
+- у браузері немає критичних помилок або запитів до production API;
+- SMTP вимкнений, робочі паролі й база не використовуються.
 
-This setup is for testing, not production. The free Render PostgreSQL database expires after its free retention period and has no production-grade backups. Before using the CRM for real students or payments, move the database to a persistent paid plan and configure backups.
-
-## First manual acceptance flow
-
-After first login, verify this exact flow:
-
-1. create a location;
-2. create a manual lead;
-3. set preferred location and available days/time;
-4. schedule a trial lesson;
-5. complete the trial;
-6. move the child to **Очікує групу**;
-7. form a group with a recurring schedule;
-8. create a lesson;
-9. mark attendance;
-10. create a subscription plan;
-11. create a student charge and mark it paid;
-12. verify the audit history and reports.
-
-Only after this flow is stable should the public AeroKiDS website form be switched from Formspree to the CRM public intake endpoint.
+Ручний сценарій і очікувані результати: [`test-plan-acceptance.md`](test-plan-acceptance.md).

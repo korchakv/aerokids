@@ -53,6 +53,6 @@ docker compose up --build
 
 ## Тестове розгортання
 
-Для окремого тестового середовища підготовлено Render Blueprint у корені репозиторію: `render.yaml`.
+Тестове Render-середовище має окремий Blueprint: `crm/render.staging.yaml`. Воно використовує окрему тестову базу й окремі API/frontend-сервіси та не підключається до production Neon.
 
-Покрокова інструкція: `docs/deploy-render.md`.
+Поточний production Blueprint у корені репозиторію — `render.yaml`; не вибирайте його для тестового середовища. Покроковий запуск: `docs/deploy-render.md`. Повний чекліст ручного приймального тестування: `docs/test-plan-acceptance.md`.
