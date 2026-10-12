@@ -969,7 +969,7 @@ function App() {
     if (target === "trial") {
       openLead(lead.id);
       setLeadActionsOpen(false);
-      
+
       setPostTrialMode(null);
       setLeadProcedureTarget("trial");
       setTrialAt(lead.trialAt ? toLocalDateTimeInput(lead.trialAt) : nextQuarterHourLocalInput());
@@ -1189,7 +1189,7 @@ function App() {
     setLeadEnrollmentOpen(false);
     setLeadEnrollmentGroupId("");
     setLeadActionsOpen(false);
-    
+
     const lead = leads.find((item) => item.id === id);
     setTrialAt(lead?.trialAt ? toLocalDateTimeInput(lead.trialAt) : nextQuarterHourLocalInput());
     if (lead?.trialLocation) setTrialLocation(lead.trialLocation);
@@ -1445,7 +1445,7 @@ function App() {
   const beginTrialScheduling = () => {
     if (!selected) return;
     setLeadActionsOpen(false);
-    
+
     setPostTrialMode(null);
     setLeadProcedureTarget("trial");
     setTrialAt(selected.trialAt ? toLocalDateTimeInput(selected.trialAt) : nextQuarterHourLocalInput());
@@ -1457,7 +1457,7 @@ function App() {
   const beginTrialResult = () => {
     if (!selected) return;
     setLeadActionsOpen(false);
-    
+
     setPostTrialMode(null);
     setLeadProcedureTarget("after_trial");
     setRecommendedLevel(selected.recommendedLevel ?? "Початковий");
@@ -1468,7 +1468,7 @@ function App() {
 
   const beginLeadFollowUp = () => {
     setLeadActionsOpen(false);
-    
+
     setTrialMode(null);
     setPostTrialMode("thinking");
     revealLeadWorkflow("lead-followup-workflow");
@@ -1476,7 +1476,7 @@ function App() {
 
   const beginLeadDefer = () => {
     setLeadActionsOpen(false);
-    
+
     setTrialMode(null);
     const date = selected?.deferredUntil ? new Date(selected.deferredUntil) : new Date();
     if (!selected?.deferredUntil) {
@@ -1499,7 +1499,7 @@ function App() {
 
   const beginLeadEnrollment = () => {
     setLeadActionsOpen(false);
-    
+
     setTrialMode(null);
     setPostTrialMode(null);
     setLeadProcedureTarget(null);
@@ -1510,7 +1510,7 @@ function App() {
 
   const beginLeadClose = () => {
     setLeadActionsOpen(false);
-    
+
     setCloseKind(selected?.status === "Не відповідає" ? "no_response" : selected?.status === "Неактуально" ? "not_relevant" : "declined");
     setCloseReason(selected?.closeReason ?? "schedule");
     setCloseNote(selected?.closeNote ?? "");
@@ -1560,7 +1560,7 @@ function App() {
       return;
     }
     if (selected.status === "Після пробного") {
-      
+
       setLeadActionsOpen(true);
       return;
     }
@@ -3218,7 +3218,7 @@ function App() {
               onOpenStaff={(id) => { setActive("Працівники"); setSelectedStaffId(id); }}
             />
             {canManageLeads && <button className="primary headerPrimaryAction" onClick={() => setShowLeadForm(true)}><UiIcon name="plus" size={17} /><span>Нова заявка</span></button>}
-            
+
             {session && <button className="search iconButton logoutButton" aria-label="Вийти" title="Вийти" onClick={() => { clearSession(); setSession(null); }}><UiIcon name="logout" size={18} /></button>}
           </div>
         </header>
@@ -3609,7 +3609,7 @@ function App() {
         onCreateStaff={createStaffMember}
       />
 
-      
+
 
       <LocationDialog
         open={showLocationForm}
