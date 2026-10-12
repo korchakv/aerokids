@@ -162,6 +162,9 @@ def test_no_show_stays_active_and_can_be_rescheduled(client):
     )
     assert rescheduled.status_code == 200, rescheduled.text
     assert rescheduled.json()["status"] == "scheduled"
+    assert rescheduled.json()["teacher_notes"] is None
+    comments_after = client.get(f"/students/{student['id']}/lead-comments", headers=headers).json()
+    assert any(comment["body"] == "Не прийшли, телефонуємо" for comment in comments_after)
     detail_after = client.get(f"/students/{student['id']}", headers=headers).json()
     assert detail_after["crm_status"] == "trial_scheduled"
 
