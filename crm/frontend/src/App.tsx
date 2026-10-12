@@ -123,6 +123,11 @@ function App() {
   const [workspaceLoading, setWorkspaceLoading] = useState(() => Boolean(apiEnabled && loadSession()));
   const [workspaceRefreshing, setWorkspaceRefreshing] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
+  useEffect(() => {
+    if (!workspaceError) return;
+    const timeoutId = window.setTimeout(() => setWorkspaceError(""), 8000);
+    return () => window.clearTimeout(timeoutId);
+  }, [workspaceError]);
   const [saveToastTick, setSaveToastTick] = useState(0);
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [overviewReport, setOverviewReport] = useState<OverviewReport | null>(null);
