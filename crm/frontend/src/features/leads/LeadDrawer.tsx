@@ -22,6 +22,17 @@ import type { GroupItem } from "../groups/types";
 import type { LocationDemo } from "../locations/types";
 
 type Setter<T> = Dispatch<SetStateAction<T>>;
+
+const leadCommentKinds = {
+  registration: { label: "Реєстрація", icon: "student", className: "registration" },
+  repeat_intake: { label: "Повторне звернення", icon: "plus", className: "repeat" },
+  call: { label: "Після дзвінка", icon: "phone", className: "call" },
+  note: { label: "Коментар", icon: "leads", className: "note" },
+} as const;
+
+function leadCommentKind(kind: ApiLeadComment["kind"]) {
+  return leadCommentKinds[kind] ?? leadCommentKinds.note;
+}
 type MaybePromise = void | Promise<void>;
 
 export type LeadDrawerProps = {
@@ -341,10 +352,13 @@ export function LeadDrawer(props: LeadDrawerProps) {
           <section className="leadCommentHistory" aria-label="Історія коментарів">
             <header><b>Історія коментарів</b><small>Нові коментарі додаються окремо</small></header>
             {leadCommentsLoading ? <p className="leadCommentsEmpty">Завантажуємо історію…</p> : leadComments.length === 0 ? <p className="leadCommentsEmpty">Коментарів ще немає.</p> : <ol>
-              {leadComments.map((comment) => <li key={comment.id}>
-                <div className="leadCommentMeta"><span>{comment.author_name || "Коментар"}</span><time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>{comment.updated_at !== comment.created_at && <small> · змінено</small>}</div>
+              {leadComments.map((comment) => {
+                const kind = leadCommentKind(comment.kind);
+                return <li key={comment.id}>
+                <div className={"leadCommentMeta leadCommentMeta-" + kind.className}><span className="leadCommentKind"><UiIcon name={kind.icon} size={13} />{kind.label}</span>{comment.author_name && <span className="leadCommentAuthor">{comment.author_name}</span>}<time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>{comment.updated_at !== comment.created_at && <small> · змінено</small>}</div>
                 {editingCommentId === comment.id ? <div className="leadCommentEdit"><textarea autoFocus value={editingCommentBody} onChange={(event) => setEditingCommentBody(event.target.value)} maxLength={5000} /><div><button type="button" className="search" onClick={() => setEditingCommentId(null)}>Скасувати</button><button type="button" className="primary" disabled={leadCommentSaving || !editingCommentBody.trim()} onClick={() => void updateComment(comment.id)}>{leadCommentSaving ? "Зберігаємо…" : "Зберегти"}</button></div></div> : <div className="leadCommentBody"><p>{comment.body}</p>{canManageLeads && <button className="leadCommentEditButton" type="button" aria-label="Редагувати цей коментар" title="Редагувати цей коментар" onClick={() => { setEditingCommentId(comment.id); setEditingCommentBody(comment.body); }}><UiIcon name="edit" size={14} /></button>}</div>}
-              </li>)}
+              </li>;
+              })}
             </ol>}
             {canManageLeads && <div className="leadCommentAdd"><label htmlFor="lead-comment-new">Додати коментар</label><textarea id="lead-comment-new" value={newComment} onChange={(event) => setNewComment(event.target.value)} maxLength={5000} placeholder="Запишіть домовленість або нову інформацію…" /><button type="button" className="primary" disabled={leadCommentSaving || !newComment.trim()} onClick={() => void addComment()}>{leadCommentSaving ? "Зберігаємо…" : "Додати коментар"}</button></div>}
             {commentError && <p className="leadCommentError" role="alert">{commentError}</p>}

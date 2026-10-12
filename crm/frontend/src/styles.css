@@ -3559,3 +3559,13 @@ html[data-theme="dark"] .shell .globalSearchBar input.globalSearchInput{
 Revision ID: 0027_lead_comment_history
 Revises: 0026_stage3_performance_indexes
 """
+
+
+/* Action labels make the source of each lead history entry immediately visible. */
+.leadCommentMeta{flex-wrap:wrap}
+.leadCommentKind{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:750;line-height:1.2}
+.leadCommentMeta-registration .leadCommentKind{color:#1558a6;background:#e4efff}
+.leadCommentMeta-repeat .leadCommentKind{color:#6b42a5;background:#f0e9ff}
+.leadCommentMeta-call .leadCommentKind{color:#087a67;background:#e0f5ee}
+.leadCommentMeta-note .leadCommentKind{color:#536273;background:#e9eef4}
+.leadCommentAuthor{font-weight:650;color:var(--ak-text)}
