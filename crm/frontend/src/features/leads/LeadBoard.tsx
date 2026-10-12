@@ -67,7 +67,6 @@ export function LeadKanban({
           <div className="kanbanMeta">
             <span className="sourceBadge">{leadSourceLabel(lead.source)}</span>
             {lead.preferredLocationName && <span className="locationBadge">{lead.preferredLocationName}</span>}
-            {lead.recommendedLevel && <span className="levelBadge">{lead.recommendedLevel}</span>}
             {missingDetails.length > 0 && <span className="incompleteDataBadge" title={"Не заповнено: " + missingDetails.join(", ")}>! Доповнити дані</span>}
           </div>
           {(() => { const action = leadActionMeta(lead); return <div className={"kanbanNextAction action-" + action.type + " " + urgency}><i>{urgency === "overdue" ? "!" : action.icon}</i><span><b>{urgency === "overdue" ? "Прострочено" : action.label}</b><small>{leadNextAction(lead)}</small></span></div>; })()}
