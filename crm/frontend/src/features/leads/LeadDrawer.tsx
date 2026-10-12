@@ -349,17 +349,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             {canManageLeads && <div className="leadCommentAdd"><label htmlFor="lead-comment-new">Додати коментар</label><textarea id="lead-comment-new" value={newComment} onChange={(event) => setNewComment(event.target.value)} maxLength={5000} placeholder="Запишіть домовленість або нову інформацію…" /><button type="button" className="primary" disabled={leadCommentSaving || !newComment.trim()} onClick={() => void addComment()}>{leadCommentSaving ? "Зберігаємо…" : "Додати коментар"}</button></div>}
             {commentError && <p className="leadCommentError" role="alert">{commentError}</p>}
           </section>
-      {callSummaryLead && <div className="modalBackdrop" onClick={() => { if (!callSummarySaving) setCallSummaryLead(null); }}>
-        <section className="groupModal callSummaryModal" role="dialog" aria-modal="true" aria-labelledby="call-summary-title" onClick={(event) => event.stopPropagation()}>
-          <h2 id="call-summary-title">Підсумок дзвінка</h2>
-          <p className="modalIntro">Що узгодили з батьками {callSummaryLead.parent ? `(${callSummaryLead.parent})` : ""}? Запис збережеться окремо в історії заявки.</p>
-          <label htmlFor="call-summary-input">Про що домовилися<textarea id="call-summary-input" autoFocus maxLength={5000} value={callSummaryDraft} onChange={(event) => setCallSummaryDraft(event.target.value)} placeholder="Наприклад: передзвонити в п’ятницю після 17:00" /></label>
-          <div className="leadEditActions">
-            <button className="search" type="button" disabled={callSummarySaving} onClick={() => setCallSummaryLead(null)}>Скасувати перенесення</button>
-            <button className="primary" type="button" disabled={callSummarySaving || !callSummaryDraft.trim()} onClick={() => void confirmCallSummary()}>{callSummarySaving ? "Зберігаємо…" : "Зберегти й перенести"}</button>
-          </div>
-        </section>
-      </div>}          {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small>{canManageLeads && selected.trialResult === "scheduled" && <button type="button" className="inlineEditLink" aria-label="Змінити дату, час і локацію пробного" onClick={beginTrialScheduling}>Змінити дату й час</button>}</div>}
+          {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small>{canManageLeads && selected.trialResult === "scheduled" && <button type="button" className="inlineEditLink" aria-label="Змінити дату, час і локацію пробного" onClick={beginTrialScheduling}>Змінити дату й час</button>}</div>}
           <div className="preferenceSummary">
             <div><span>Бажана локація</span><b>{selected.preferredLocationName ?? "Не вказано"}</b></div>
             <div><span>Бажаний час</span><b>{availabilityLabel(selected.availability ?? [])}</b></div>
