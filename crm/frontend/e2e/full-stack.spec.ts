@@ -435,8 +435,9 @@ test("no-show follow-up and close actions open, save, and close correctly", asyn
         source: "phone",
       }),
     });
-    const intake = await intakeResponse.json();
-    if (!intakeResponse.ok) return { intake: intakeResponse.status, detail: await intakeResponse.text() };
+    const intakeText = await intakeResponse.text();
+    const intake = intakeText ? JSON.parse(intakeText) : {};
+    if (!intakeResponse.ok) return { intake: intakeResponse.status, detail: intakeText };
     const starts = new Date();
     starts.setDate(starts.getDate() - 1);
     starts.setHours(17, 0, 0, 0);
