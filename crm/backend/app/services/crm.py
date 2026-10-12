@@ -200,6 +200,18 @@ def update_lead_details(*args, **kwargs):
     return _lead_service_call("update_lead_details", *args, **kwargs)
 
 
+def list_lead_comments(*args, **kwargs):
+    return _lead_service_call("list_lead_comments", *args, **kwargs)
+
+
+def create_lead_comment(*args, **kwargs):
+    return _lead_service_call("create_lead_comment", *args, **kwargs)
+
+
+def update_lead_comment(*args, **kwargs):
+    return _lead_service_call("update_lead_comment", *args, **kwargs)
+
+
 def update_student_crm_status(*args, **kwargs):
     return _lead_service_call("update_student_crm_status", *args, **kwargs)
 

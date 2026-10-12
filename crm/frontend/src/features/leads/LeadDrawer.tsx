@@ -1,8 +1,8 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { AuditHistory } from "../../components/AuditHistory";
 import { AvailabilityWindowEditor, DateTimeEditor, type AvailabilityWindowDraft } from "../../components/ScheduleEditors";
 import { UiIcon } from "../../components/UiIcon";
-import type { ApiAuditEvent } from "../../api";
+import type { ApiAuditEvent, ApiLeadComment } from "../../api";
 import { dateValue } from "../../utils/date";
 import { formatUaPhone } from "../../utils/contact";
 import { availabilityLabel } from "./availability";
@@ -38,7 +38,6 @@ export type LeadDrawerProps = {
   leadEditContactName: string;
   leadEditPhone: string;
   leadEditSource: string;
-  leadEditComment: string;
   leadEditSaving: boolean;
   preferenceMode: boolean;
   preferenceLocationId: EntityId | "";
@@ -68,7 +67,11 @@ export type LeadDrawerProps = {
   leadStatusMenuOpen: boolean;
   leadDeleteSaving: boolean;
   entityEvents: ApiAuditEvent[];
+  leadComments: ApiLeadComment[];
+  leadCommentsLoading: boolean;
+  leadCommentSaving: boolean;
   historyLoading: boolean;
+  saveLeadComment: (body: string, commentId?: string) => Promise<void>;
   statuses: LeadStatus[];
   setSelectedId: Setter<EntityId | null>;
   setLeadEditing: Setter<boolean>;
@@ -81,7 +84,6 @@ export type LeadDrawerProps = {
   setLeadEditContactName: Setter<string>;
   setLeadEditPhone: Setter<string>;
   setLeadEditSource: Setter<string>;
-  setLeadEditComment: Setter<string>;
   setPreferenceMode: Setter<boolean>;
   setPreferenceLocationId: Setter<EntityId | "">;
   setAvailabilityWindows: Setter<AvailabilityWindowDraft[]>;
@@ -149,7 +151,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
     leadEditContactName,
     leadEditPhone,
     leadEditSource,
-    leadEditComment,
     leadEditSaving,
     preferenceMode,
     preferenceLocationId,
@@ -179,7 +180,11 @@ export function LeadDrawer(props: LeadDrawerProps) {
     leadStatusMenuOpen,
     leadDeleteSaving,
     entityEvents,
+    leadComments,
+    leadCommentsLoading,
+    leadCommentSaving,
     historyLoading,
+    saveLeadComment,
     statuses,
     setSelectedId,
     setLeadEditing,
@@ -192,7 +197,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
     setLeadEditContactName,
     setLeadEditPhone,
     setLeadEditSource,
-    setLeadEditComment,
     setPreferenceMode,
     setPreferenceLocationId,
     setAvailabilityWindows,
@@ -244,6 +248,32 @@ export function LeadDrawer(props: LeadDrawerProps) {
     auditEventLabel,
     auditEventDetail
   } = props;
+  const [newComment, setNewComment] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentBody, setEditingCommentBody] = useState("");
+  const [commentError, setCommentError] = useState("");
+
+  const addComment = async () => {
+    if (!newComment.trim()) return;
+    try {
+      await saveLeadComment(newComment);
+      setNewComment("");
+      setCommentError("");
+    } catch {
+      setCommentError("Не вдалося зберегти коментар. Спробуйте ще раз.");
+    }
+  };
+  const updateComment = async (id: string) => {
+    if (!editingCommentBody.trim()) return;
+    try {
+      await saveLeadComment(editingCommentBody, id);
+      setEditingCommentId(null);
+      setCommentError("");
+    } catch {
+      setCommentError("Не вдалося оновити коментар. Спробуйте ще раз.");
+    }
+  };
+
 
   return <div className="drawerBackdrop leadDrawerBackdrop" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); setLeadEnrollmentOpen(false); }}>
         <aside className="drawer leadDrawer" data-testid="lead-drawer" onClick={(e) => e.stopPropagation()}>
@@ -260,7 +290,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
           </div>
           {leadEditing && <div className="leadEditPanel">
             <div className="leadEditPanelHead">
-              <div><b>Редагування заявки</b><small>Основні дані дитини, контакт та коментар.</small></div>
+              <div><b>Редагування заявки</b><small>Основні дані дитини та контакт.</small></div>
               <button type="button" aria-label="Закрити редагування" onClick={() => setLeadEditing(false)}><UiIcon name="x" size={15} /></button>
             </div>
             <div className="formTwo">
@@ -285,7 +315,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
               <option value="maps">Google Maps</option>
               <option value="other">Інше</option>
             </select></label>
-            <label>Коментар<textarea value={leadEditComment} onChange={(e) => setLeadEditComment(e.target.value)} placeholder="Додайте примітку про запит, побажання або домовленості…" /></label>
             <div className="leadEditActions">
               <button className="search" type="button" disabled={leadEditSaving} onClick={() => setLeadEditing(false)}>Скасувати</button>
               <button className="primary" type="button" disabled={leadEditSaving || !leadEditFirstName.trim() || !leadEditContactName.trim() || !leadEditPhone.trim()} onClick={saveLeadDetails}>{leadEditSaving ? "Зберігаємо…" : "Зберегти зміни"}</button>
@@ -309,8 +338,28 @@ export function LeadDrawer(props: LeadDrawerProps) {
           </div>}
           {selected.nextContactAt && (() => { const action = leadActionMeta(selected); const overdue = dateValue(selected.nextContactAt) < Date.now(); return <div className={"noteBox followUpBox actionReminder " + action.type + (overdue ? " overdue" : "")}><span className="actionReminderLabel"><i>{overdue ? "!" : action.icon}</i>{overdue ? "Прострочений контакт" : action.label}</span><p>{new Date(selected.nextContactAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>{canManageLeads && <button type="button" className="inlineEditLink" onClick={beginLeadFollowUp}>Змінити нагадування</button>}</div>; })()}
           {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="noteBox closedLeadBox"><span>Заявку закрито</span><p><b>{selected.status}</b>{selected.closeReason ? " · " + closeReasonLabel(selected.closeReason) : ""}</p>{selected.closeNote && <p>{selected.closeNote}</p>}{canManageLeads && <button type="button" className="inlineEditLink" onClick={beginLeadClose}>Редагувати причину та коментар</button>}<button className="search reopenLead" onClick={reopenLead}>Повернути в роботу</button></div>}
-          <div className={"noteBox leadCommentBox" + (!selected.comment ? " empty" : "")}><span>Коментар</span><p>{selected.comment || "Коментар ще не додано."}</p>{canManageLeads && !leadEditing && <button type="button" className="inlineEditLink" onClick={beginLeadEdit}>{selected.comment ? "Редагувати" : "+ Додати"}</button>}</div>
-          {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small>{canManageLeads && selected.trialResult === "scheduled" && <button type="button" className="inlineEditLink" aria-label="Змінити дату, час і локацію пробного" onClick={beginTrialScheduling}>Змінити дату й час</button>}</div>}
+          <section className="leadCommentHistory" aria-label="Історія коментарів">
+            <header><b>Історія коментарів</b><small>Нові коментарі додаються окремо</small></header>
+            {leadCommentsLoading ? <p className="leadCommentsEmpty">Завантажуємо історію…</p> : leadComments.length === 0 ? <p className="leadCommentsEmpty">Коментарів ще немає.</p> : <ol>
+              {leadComments.map((comment) => <li key={comment.id}>
+                <div className="leadCommentMeta"><span>{comment.author_name || "Коментар"}</span><time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>{comment.updated_at !== comment.created_at && <small> · змінено</small>}</div>
+                {editingCommentId === comment.id ? <div className="leadCommentEdit"><textarea autoFocus value={editingCommentBody} onChange={(event) => setEditingCommentBody(event.target.value)} maxLength={5000} /><div><button type="button" className="search" onClick={() => setEditingCommentId(null)}>Скасувати</button><button type="button" className="primary" disabled={leadCommentSaving || !editingCommentBody.trim()} onClick={() => void updateComment(comment.id)}>{leadCommentSaving ? "Зберігаємо…" : "Зберегти"}</button></div></div> : <div className="leadCommentBody"><p>{comment.body}</p>{canManageLeads && <button className="leadCommentEditButton" type="button" aria-label="Редагувати цей коментар" title="Редагувати цей коментар" onClick={() => { setEditingCommentId(comment.id); setEditingCommentBody(comment.body); }}><UiIcon name="edit" size={14} /></button>}</div>}
+              </li>)}
+            </ol>}
+            {canManageLeads && <div className="leadCommentAdd"><label htmlFor="lead-comment-new">Додати коментар</label><textarea id="lead-comment-new" value={newComment} onChange={(event) => setNewComment(event.target.value)} maxLength={5000} placeholder="Запишіть домовленість або нову інформацію…" /><button type="button" className="primary" disabled={leadCommentSaving || !newComment.trim()} onClick={() => void addComment()}>{leadCommentSaving ? "Зберігаємо…" : "Додати коментар"}</button></div>}
+            {commentError && <p className="leadCommentError" role="alert">{commentError}</p>}
+          </section>
+      {callSummaryLead && <div className="modalBackdrop" onClick={() => { if (!callSummarySaving) setCallSummaryLead(null); }}>
+        <section className="groupModal callSummaryModal" role="dialog" aria-modal="true" aria-labelledby="call-summary-title" onClick={(event) => event.stopPropagation()}>
+          <h2 id="call-summary-title">Підсумок дзвінка</h2>
+          <p className="modalIntro">Що узгодили з батьками {callSummaryLead.parent ? `(${callSummaryLead.parent})` : ""}? Запис збережеться окремо в історії заявки.</p>
+          <label htmlFor="call-summary-input">Про що домовилися<textarea id="call-summary-input" autoFocus maxLength={5000} value={callSummaryDraft} onChange={(event) => setCallSummaryDraft(event.target.value)} placeholder="Наприклад: передзвонити в п’ятницю після 17:00" /></label>
+          <div className="leadEditActions">
+            <button className="search" type="button" disabled={callSummarySaving} onClick={() => setCallSummaryLead(null)}>Скасувати перенесення</button>
+            <button className="primary" type="button" disabled={callSummarySaving || !callSummaryDraft.trim()} onClick={() => void confirmCallSummary()}>{callSummarySaving ? "Зберігаємо…" : "Зберегти й перенести"}</button>
+          </div>
+        </section>
+      </div>}          {selected.trialAt && <div className="trialSummary"><span>Коли і де</span><b>{new Date(selected.trialAt).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</b><small>{selected.trialLocation ?? "Локацію не вказано"}</small>{canManageLeads && selected.trialResult === "scheduled" && <button type="button" className="inlineEditLink" aria-label="Змінити дату, час і локацію пробного" onClick={beginTrialScheduling}>Змінити дату й час</button>}</div>}
           <div className="preferenceSummary">
             <div><span>Бажана локація</span><b>{selected.preferredLocationName ?? "Не вказано"}</b></div>
             <div><span>Бажаний час</span><b>{availabilityLabel(selected.availability ?? [])}</b></div>

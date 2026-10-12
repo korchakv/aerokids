@@ -13,6 +13,7 @@ from app.models.core import (
     Contact,
     Enrollment,
     EnrollmentStatus,
+    LeadComment,
     LessonSession,
     MakeupCredit,
     Payment,
@@ -111,6 +112,10 @@ def export_student_data(db: Session, org_id: UUID, student_id: UUID) -> dict:
         AuditEvent.entity_type == "student",
         AuditEvent.entity_id == student.id,
     ).order_by(AuditEvent.created_at)))
+    lead_comments = list(db.scalars(select(LeadComment).where(
+        LeadComment.organization_id == org_id,
+        LeadComment.student_id == student.id,
+    ).order_by(LeadComment.created_at)))
 
     return {
         "exported_at": datetime.now(timezone.utc),
@@ -119,6 +124,7 @@ def export_student_data(db: Session, org_id: UUID, student_id: UUID) -> dict:
             "preferred_location_id", "crm_status", "student_status", "next_contact_at", "deferred_until",
             "deferred_reason", "deferred_note", "lead_close_reason", "lead_close_note", "notes", "created_at",
         ]),
+        "lead_comments": [_model_dict(row, ["id", "author_user_id", "body", "created_at", "updated_at"]) for row in lead_comments],
         "contacts": [{
             **_model_dict(contact, ["id", "full_name", "phone", "email", "notes", "created_at"]),
             "relation": link.relation,
@@ -204,6 +210,23 @@ def anonymize_archived_student(db: Session, org_id: UUID, student_id: UUID, acto
         TrialLesson.student_id == student.id,
     )):
         trial.teacher_notes = None
+    for comment in db.scalars(select(LeadComment).where(
+        LeadComment.organization_id == org_id,
+        LeadComment.student_id == student.id,
+    )):
+        comment.body = "[коментар видалено під час анонімізації]"
+        comment.author_user_id = None
+    for event in db.scalars(select(AuditEvent).where(
+        AuditEvent.organization_id == org_id,
+        AuditEvent.entity_type == "student",
+        AuditEvent.entity_id == student.id,
+        AuditEvent.event_type.in_(["lead.comment_added", "lead.comment_edited"]),
+    )):
+        payload = dict(event.payload or {})
+        for field in ("body", "before", "after"):
+            if field in payload:
+                payload[field] = "[коментар видалено під час анонімізації]"
+        event.payload = payload
     for slot in db.scalars(select(StudentAvailability).where(
         StudentAvailability.organization_id == org_id,
         StudentAvailability.student_id == student.id,

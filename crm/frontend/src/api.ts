@@ -1,5 +1,5 @@
 export type {
-  Membership, AuthUser, Session, StudentAvailabilitySlot, IntakeDuplicateMatch,
+  Membership, AuthUser, Session, StudentAvailabilitySlot, IntakeDuplicateMatch, ApiLeadComment,
   WorkspaceLead, WorkspaceStudent, WorkspaceGroup, WorkspaceBundle, PageResult, ApiLocation,
   ApiStaff, ApiStaffProfile, ApiSubscriptionPlan, ApiPayment, ApiStudentSubscription,
   ApiPaymentWorkspaceItem, ApiPaymentPage,

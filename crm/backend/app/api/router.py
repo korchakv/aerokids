@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, get_org_id, require_org_access_roles, require_org_roles
 from app.models.core import Organization, PaymentStatus, StaffRole, User
 from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleBatchCreate, GroupUpdate, GroupScheduleRead, IntakeCreate, IntakeDuplicateCheck, IntakeDuplicateResult, IntakeResult, LeadDeferUpdate, LeadDetailsUpdate, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LessonSessionUpdate, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, BillingRenewalResult, BillingRenewalRun, PaymentAdjustmentCreate, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentPage, PaymentRead, PaymentReceiptCreate, PaymentRefundCreate, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, PaymentTransactionRead, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentAttendanceHistoryItem, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionAutoRenewUpdate, SubscriptionPauseCreate, SubscriptionPauseRead, SubscriptionResumeCreate, StudentOverviewItem, SubscriptionPlanChangeCreate, SubscriptionPlanChangeResult, SubscriptionPlanCreate, SubscriptionPlanRead, SubscriptionPlanUpdate, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
+from app.schemas import LeadCommentCreate, LeadCommentRead, LeadCommentUpdate
 from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
@@ -381,9 +382,41 @@ def update_lead_details(
     return crm.update_lead_details(db, access.organization_id, student_id, data, access.user_id)
 
 
+@router.get("/students/{student_id}/lead-comments", response_model=list[LeadCommentRead])
+def get_lead_comments(
+    student_id: UUID,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER)),
+    db: Session = Depends(get_db),
+):
+    return crm.list_lead_comments(db, access.organization_id, student_id)
+
+
+@router.post("/students/{student_id}/lead-comments", response_model=LeadCommentRead, status_code=201)
+def post_lead_comment(
+    student_id: UUID,
+    data: LeadCommentCreate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER)),
+    db: Session = Depends(get_db),
+):
+    comment = crm.create_lead_comment(db, access.organization_id, student_id, data.body, access.user_id)
+    return {**LeadCommentRead.model_validate(comment).model_dump(), "author_name": None}
+
+
+@router.patch("/students/{student_id}/lead-comments/{comment_id}", response_model=LeadCommentRead)
+def patch_lead_comment(
+    student_id: UUID,
+    comment_id: UUID,
+    data: LeadCommentUpdate,
+    access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER, StaffRole.TEACHER)),
+    db: Session = Depends(get_db),
+):
+    comment = crm.update_lead_comment(db, access.organization_id, student_id, comment_id, data.body, access.user_id)
+    return {**LeadCommentRead.model_validate(comment).model_dump(), "author_name": None}
+
+
 @router.patch("/students/{student_id}/crm-status", response_model=StudentRead)
 def update_student_status(student_id: UUID, data: StudentStatusUpdate, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
-    return crm.update_student_crm_status(db, access.organization_id, student_id, data.crm_status, access.user_id)
+    return crm.update_student_crm_status(db, access.organization_id, student_id, data.crm_status, access.user_id, data.comment)
 
 
 @router.patch("/students/{student_id}/defer", response_model=StudentRead)

@@ -10,6 +10,7 @@ from app.models.core import (
     Attendance,
     Contact,
     Enrollment,
+    LeadComment,
     MakeupCredit,
     Organization,
     Payment,
@@ -98,6 +99,7 @@ def delete_student(
         )
 
     protected_history_checks = (
+        (LeadComment, "Є історія коментарів заявки."),
         (Attendance, "Є відмітки відвідування."),
         (StudentSubscription, "Є абонемент."),
         (SubscriptionUsage, "Є списання занять з абонемента."),

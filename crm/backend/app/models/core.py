@@ -158,6 +158,19 @@ class Student(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class LeadComment(Base):
+    __tablename__ = "lead_comments"
+    __table_args__ = (Index("ix_lead_comments_student_created", "student_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
+    author_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class StudentAvailability(Base):
     __tablename__ = "student_availability"
     __table_args__ = (

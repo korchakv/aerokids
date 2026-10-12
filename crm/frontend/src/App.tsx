@@ -38,7 +38,7 @@ import { applyWorkspace, crmStatusLabel, crmStatusValue, workspaceGroupToGroupIt
 import { cleanSpaces, emailError, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
-import { apiDelete, apiEnabled, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
+import { apiDelete, apiEnabled, apiGet, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiLeadComment, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
 
 
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
@@ -127,6 +127,9 @@ function App() {
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [overviewReport, setOverviewReport] = useState<OverviewReport | null>(null);
   const [entityEvents, setEntityEvents] = useState<ApiAuditEvent[]>([]);
+  const [leadComments, setLeadComments] = useState<ApiLeadComment[]>([]);
+  const [leadCommentsLoading, setLeadCommentsLoading] = useState(false);
+  const [leadCommentSaving, setLeadCommentSaving] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [active, setActive] = useState("Дашборд");
   const [organizationName, setOrganizationName] = useState("");
@@ -137,6 +140,9 @@ function App() {
   const [leadSort, setLeadSort] = useState<"priority" | "next_action" | "newest">("priority");
   const [leadSourceFilter, setLeadSourceFilter] = useState("all");
   const [leadMoveSavingId, setLeadMoveSavingId] = useState<EntityId | null>(null);
+  const [callSummaryLead, setCallSummaryLead] = useState<Lead | null>(null);
+  const [callSummaryDraft, setCallSummaryDraft] = useState("");
+  const [callSummarySaving, setCallSummarySaving] = useState(false);
   const [leadProcedureTarget, setLeadProcedureTarget] = useState<LeadKanbanColumnId | null>(null);
   const [leadEnrollmentOpen, setLeadEnrollmentOpen] = useState(false);
   const [leadEnrollmentGroupId, setLeadEnrollmentGroupId] = useState<EntityId | "">("");
@@ -185,7 +191,6 @@ function App() {
   const [leadEditContactName, setLeadEditContactName] = useState("");
   const [leadEditPhone, setLeadEditPhone] = useState("");
   const [leadEditSource, setLeadEditSource] = useState("phone");
-  const [leadEditComment, setLeadEditComment] = useState("");
   const [leadEditSaving, setLeadEditSaving] = useState(false);
   const [leadDuplicateMatches, setLeadDuplicateMatches] = useState<IntakeDuplicateMatch[]>([]);
   const [leadDuplicateChecking, setLeadDuplicateChecking] = useState(false);
@@ -663,6 +668,27 @@ function App() {
 
     return () => { cancelled = true; };
   }, [selected?.id, selectedStudent?.id, session?.accessToken, session?.organizationId]);
+
+  useEffect(() => {
+    if (!selected?.id) {
+      setLeadComments([]);
+      setLeadCommentsLoading(false);
+      return;
+    }
+    if (!apiEnabled || !session) {
+      const now = new Date().toISOString();
+      setLeadComments(selected.comment ? [{ id: `${selected.id}-initial`, student_id: selected.id, author_user_id: null, author_name: null, body: selected.comment, created_at: now, updated_at: now }] : []);
+      setLeadCommentsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLeadCommentsLoading(true);
+    apiGet<ApiLeadComment[]>(`/students/${selected.id}/lead-comments`, session)
+      .then((comments) => { if (!cancelled) setLeadComments(comments); })
+      .catch(() => { if (!cancelled) setLeadComments([]); })
+      .finally(() => { if (!cancelled) setLeadCommentsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selected?.id, selected?.comment, session?.accessToken, session?.organizationId]);
   const studentGroup = (studentId: EntityId) => groups.find((group) => group.members.includes(studentId));
 
   const waiting = useMemo(() => leads.filter((x) => x.status === "Очікує групу"), [leads]);
@@ -992,6 +1018,11 @@ function App() {
     }
 
     // "Нова" and "Зв'язались" have no mandatory procedure.
+    if (currentColumn === "new" && target === "contacted") {
+      setCallSummaryLead(lead);
+      setCallSummaryDraft("");
+      return;
+    }
     setLeadMoveSavingId(lead.id);
     try {
       if (apiEnabled && session) {
@@ -1012,6 +1043,12 @@ function App() {
   };
 
   const updateStatus = async (id: EntityId, status: LeadStatus) => {
+    const current = leads.find((item) => item.id === id);
+    if (current?.status === "Нова" && status === "Зв'язались") {
+      setCallSummaryLead(current);
+      setCallSummaryDraft("");
+      return;
+    }
     if (status === "Очікує групу") {
       try {
         setWorkspaceError("");
@@ -1033,6 +1070,32 @@ function App() {
     }
     setLeads((items) => items.map((item) => item.id === id ? { ...item, status } : item));
   };
+
+  const confirmCallSummary = async () => {
+    if (!callSummaryLead || !callSummaryDraft.trim() || callSummarySaving) return;
+    setCallSummarySaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        await apiPatch(`/students/${callSummaryLead.id}/crm-status`, { crm_status: "contacted", comment: callSummaryDraft.trim() }, session);
+        try { setLeadComments(await apiGet<ApiLeadComment[]>(`/students/${callSummaryLead.id}/lead-comments`, session)); } catch { /* the status change already saved */ }
+        setCallSummaryLead(null);
+        setCallSummaryDraft("");
+        await syncWorkspace(session);
+      } else {
+        setLeads((items) => items.map((item) => item.id === callSummaryLead.id ? { ...item, status: "Зв'язались", comment: item.comment } : item));
+        const now = new Date().toISOString();
+        setLeadComments((items) => [...items, { id: crypto.randomUUID(), student_id: callSummaryLead.id, author_user_id: null, author_name: null, body: callSummaryDraft.trim(), created_at: now, updated_at: now }]);
+      }
+      setCallSummaryLead(null);
+      setCallSummaryDraft("");
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти підсумок дзвінка.");
+    } finally {
+      setCallSummarySaving(false);
+    }
+  };
+
 
   const scheduleTrial = async () => {
     if (!selected) return;
@@ -1147,9 +1210,37 @@ function App() {
     setLeadEditContactName(selected.parent === "Контакт не вказано" ? "" : selected.parent);
     setLeadEditPhone(selected.phone ?? "");
     setLeadEditSource(canonicalLeadSource(selected.source) || "phone");
-    setLeadEditComment(selected.comment ?? "");
     setWorkspaceError("");
     setLeadEditing(true);
+  };
+
+  const saveLeadComment = async (body: string, commentId?: string) => {
+    if (!selected || leadCommentSaving || !body.trim()) return;
+    setLeadCommentSaving(true);
+    setWorkspaceError("");
+    try {
+      if (apiEnabled && session) {
+        const path = `/students/${selected.id}/lead-comments`;
+        if (commentId) {
+          const saved = await apiPatch<ApiLeadComment>(`${path}/${commentId}`, { body: body.trim() }, session);
+          setLeadComments((items) => items.map((item) => item.id === commentId ? { ...item, ...saved, author_name: saved.author_name ?? session.user.full_name } : item));
+        } else {
+          const saved = await apiPost<ApiLeadComment>(path, { body: body.trim() }, session);
+          setLeadComments((items) => [...items, { ...saved, author_name: saved.author_name ?? session.user.full_name }]);
+        }
+        try { setEntityEvents(await loadAuditEvents("student", selected.id, session)); } catch { /* comment is saved */ }
+      } else if (commentId) {
+        setLeadComments((items) => items.map((item) => item.id === commentId ? { ...item, body: body.trim(), updated_at: new Date().toISOString() } : item));
+      } else {
+        const now = new Date().toISOString();
+        setLeadComments((items) => [...items, { id: crypto.randomUUID(), student_id: selected.id, author_user_id: null, author_name: null, body: body.trim(), created_at: now, updated_at: now }]);
+      }
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти коментар.");
+      throw error;
+    } finally {
+      setLeadCommentSaving(false);
+    }
   };
 
   const saveLeadDetails = async () => {
@@ -1189,7 +1280,6 @@ function App() {
           contact_name: cleanSpaces(leadEditContactName),
           phone,
           source: leadEditSource,
-          comment: leadEditComment.trim() || null,
         }, session);
         await syncWorkspace(session);
         try {
@@ -1208,7 +1298,6 @@ function App() {
           parent: cleanSpaces(leadEditContactName),
           phone: formatUaPhone(phone),
           source: leadEditSource,
-          comment: leadEditComment.trim() || undefined,
         } : item));
       }
       setLeadEditing(false);
@@ -3756,7 +3845,7 @@ function App() {
         onCreateGroup={createGroupFromCandidates}
       />
 
-      {selected && <LeadDrawer {...{
+      {selected && <LeadDrawer key={selected.id} {...{
         selected,
         selectedMissingDetails,
         canManageLeads,
@@ -3770,7 +3859,6 @@ function App() {
         leadEditContactName,
         leadEditPhone,
         leadEditSource,
-        leadEditComment,
         leadEditSaving,
         preferenceMode,
         preferenceLocationId,
@@ -3800,6 +3888,9 @@ function App() {
         leadStatusMenuOpen,
         leadDeleteSaving,
         entityEvents,
+        leadComments,
+        leadCommentsLoading,
+        leadCommentSaving,
         historyLoading,
         statuses,
         setSelectedId,
@@ -3813,7 +3904,6 @@ function App() {
         setLeadEditContactName,
         setLeadEditPhone,
         setLeadEditSource,
-        setLeadEditComment,
         setPreferenceMode,
         setPreferenceLocationId,
         setAvailabilityWindows,
@@ -3837,6 +3927,7 @@ function App() {
         setWorkspaceError,
         beginLeadEdit,
         saveLeadDetails,
+        saveLeadComment,
         updateStatus,
         reopenLead,
         saveStudentPreferences,
@@ -3865,6 +3956,18 @@ function App() {
         auditEventLabel,
         auditEventDetail
       }} />}
+
+      {callSummaryLead && <div className="modalBackdrop" onClick={() => { if (!callSummarySaving) setCallSummaryLead(null); }}>
+        <section className="groupModal callSummaryModal" role="dialog" aria-modal="true" aria-labelledby="call-summary-title" onClick={(event) => event.stopPropagation()}>
+          <h2 id="call-summary-title">Підсумок дзвінка</h2>
+          <p className="modalIntro">Що узгодили з батьками {callSummaryLead.parent ? `(${callSummaryLead.parent})` : ""}? Запис збережеться окремо в історії заявки.</p>
+          <label htmlFor="call-summary-input">Про що домовилися<textarea id="call-summary-input" autoFocus maxLength={5000} value={callSummaryDraft} onChange={(event) => setCallSummaryDraft(event.target.value)} placeholder="Наприклад: передзвонити в п’ятницю після 17:00" /></label>
+          <div className="leadEditActions">
+            <button className="search" type="button" disabled={callSummarySaving} onClick={() => setCallSummaryLead(null)}>Скасувати перенесення</button>
+            <button className="primary" type="button" disabled={callSummarySaving || !callSummaryDraft.trim()} onClick={() => void confirmCallSummary()}>{callSummarySaving ? "Зберігаємо…" : "Зберегти й перенести"}</button>
+          </div>
+        </section>
+      </div>}
     </div>
   );
 }
@@ -3901,6 +4004,8 @@ function auditEventLabel(type: string) {
     "lead.created": "Заявка створена",
     "lead.duplicate_intake": "Повторна заявка",
     "lead.details_updated": "Дані заявки змінено",
+    "lead.comment_added": "Коментар додано",
+    "lead.comment_edited": "Коментар відредаговано",
     "student.crm_status_changed": "Статус заявки змінено",
     "trial.scheduled": "Пробне заплановано",
     "trial.rescheduled": "Пробне перенесено",
@@ -3923,6 +4028,8 @@ function auditEventLabel(type: string) {
 
 function auditEventDetail(event: ApiAuditEvent) {
   const payload = event.payload ?? {};
+  if (typeof payload["after"] === "string") return String(payload["after"]);
+  if (typeof payload["body"] === "string") return String(payload["body"]);
   if (typeof payload["group_name"] === "string") return payload["group_name"];
   if (typeof payload["to_group_name"] === "string") return payload["to_group_name"];
   if (typeof payload["crm_status"] === "string") {

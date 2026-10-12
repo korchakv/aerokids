@@ -417,6 +417,38 @@ class LeadDetailsUpdate(BaseModel):
 
 class StudentStatusUpdate(BaseModel):
     crm_status: CrmStatus
+    comment: str | None = Field(default=None, max_length=5000)
+
+    @field_validator("comment")
+    @classmethod
+    def normalize_comment(cls, value: str | None) -> str | None:
+        return value.strip() if value and value.strip() else None
+
+
+class LeadCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("body")
+    @classmethod
+    def normalize_body(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Коментар не може бути порожнім")
+        return value
+
+
+class LeadCommentUpdate(LeadCommentCreate):
+    pass
+
+
+class LeadCommentRead(ORMModel):
+    id: UUID
+    student_id: UUID
+    author_user_id: UUID | None
+    author_name: str | None = None
+    body: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class LeadOutcomeUpdate(BaseModel):
