@@ -404,7 +404,12 @@ def resource_conflict_reason(
             elif same_location_without_room:
                 reasons.append("локація зайнята")
             interval = _conflict_window_label(db, org_id, session.starts_at, session.duration_minutes)
-            return f"Конфлікт розкладу ({', '.join(reasons)}: {interval})"
+            group = db.scalar(select(Group).where(
+                Group.organization_id == org_id,
+                Group.id == session.group_id,
+            ))
+            group_name = group.name if group else "невідома група"
+            return f"Конфлікт розкладу: заняття «{group_name}» — {interval} ({', '.join(reasons)})."
 
     trials = list(db.scalars(select(TrialLesson).where(
         TrialLesson.organization_id == org_id,
@@ -431,7 +436,14 @@ def resource_conflict_reason(
         )
         if same_staff or same_room or same_location_without_room:
             interval = _conflict_window_label(db, org_id, trial.starts_at, trial_duration)
-            return f"Конфлікт із пробним заняттям: {interval}"
+            reasons = []
+            if same_staff:
+                reasons.append("викладач зайнятий")
+            if same_room:
+                reasons.append("кімната зайнята")
+            elif same_location_without_room:
+                reasons.append("локація зайнята")
+            return f"Конфлікт розкладу: пробне заняття — {interval} ({', '.join(reasons)})."
 
     individuals = list(db.scalars(select(IndividualLessonSession).where(
         IndividualLessonSession.organization_id == org_id,
@@ -451,7 +463,14 @@ def resource_conflict_reason(
         )
         if same_staff or same_room or same_location_without_room:
             interval = _conflict_window_label(db, org_id, lesson.starts_at, lesson.duration_minutes)
-            return f"Конфлікт з індивідуальним заняттям: {interval}"
+            reasons = []
+            if same_staff:
+                reasons.append("викладач зайнятий")
+            if same_room:
+                reasons.append("кімната зайнята")
+            elif same_location_without_room:
+                reasons.append("локація зайнята")
+            return f"Конфлікт розкладу: індивідуальне заняття — {interval} ({', '.join(reasons)})."
     return None
 
 
