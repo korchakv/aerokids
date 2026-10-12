@@ -82,7 +82,7 @@ export type ApiLeadComment = {
   author_user_id: string | null;
   author_name: string | null;
   body: string;
-  kind: "registration" | "repeat_intake" | "call" | "note";
+  kind: "registration" | "repeat_intake" | "call" | "trial" | "note";
   created_at: string;
   updated_at: string;
 };

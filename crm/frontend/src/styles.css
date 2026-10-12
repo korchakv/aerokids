@@ -3569,3 +3569,5 @@ Revises: 0026_stage3_performance_indexes
 .leadCommentMeta-call .leadCommentKind{color:#087a67;background:#e0f5ee}
 .leadCommentMeta-note .leadCommentKind{color:#536273;background:#e9eef4}
 .leadCommentAuthor{font-weight:650;color:var(--ak-text)}
+
+.leadCommentMeta-trial .leadCommentKind{color:var(--ak-accent-text);background:var(--ak-surface)}
