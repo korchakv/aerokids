@@ -415,7 +415,7 @@ test("no-show follow-up and close actions open, save, and close correctly", asyn
   await login(page);
 
   const suffix = randomUUID().slice(0, 8);
-  const childName = "No Show Action " + suffix.replaceAll("-", "").toUpperCase();
+  const childName = "NoShow" + suffix.replaceAll("-", "").toUpperCase();
   const childPhone = "+38067" + String(Math.floor(1_000_000 + Math.random() * 9_000_000));
   const setup = await page.evaluate(async ({ childName, childPhone }) => {
     const session = JSON.parse(sessionStorage.getItem("school-crm-session") ?? "null");
@@ -436,7 +436,7 @@ test("no-show follow-up and close actions open, save, and close correctly", asyn
       }),
     });
     const intake = await intakeResponse.json();
-    if (!intakeResponse.ok) return { intake: intakeResponse.status };
+    if (!intakeResponse.ok) return { intake: intakeResponse.status, detail: await intakeResponse.text() };
     const starts = new Date();
     starts.setDate(starts.getDate() - 1);
     starts.setHours(17, 0, 0, 0);
@@ -458,7 +458,7 @@ test("no-show follow-up and close actions open, save, and close correctly", asyn
       noShow: noShowResponse.status,
     };
   }, { childName, childPhone });
-  expect(setup).toEqual({ intake: 201, trial: 201, noShow: 200 });
+  expect(setup, JSON.stringify(setup)).toEqual({ intake: 201, trial: 201, noShow: 200 });
 
   await page.reload();
   await expect(page.getByText("Дашборд", { exact: true }).first()).toBeVisible();
