@@ -4061,7 +4061,6 @@ function auditEventDetail(event: ApiAuditEvent) {
     return status + reason;
   }
   if (typeof payload["student_status"] === "string") return String(payload["student_status"]);
-  if (typeof payload["recommended_level"] === "string") return String(payload["recommended_level"]);
   if (typeof payload["amount_minor"] === "number") return formatMoney(Number(payload["amount_minor"]) / 100);
   return "CRM";
 }
