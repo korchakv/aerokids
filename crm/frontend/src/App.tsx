@@ -1492,8 +1492,10 @@ function App() {
 
   const beginLeadFollowUp = () => {
     setLeadActionsOpen(false);
+    setWorkspaceError("");
 
     setTrialMode(null);
+    setFollowUpAt(selected?.nextContactAt ? toLocalDateTimeInput(selected.nextContactAt) : "");
     setPostTrialMode("thinking");
     revealLeadWorkflow("lead-followup-workflow");
   };
@@ -1532,10 +1534,11 @@ function App() {
     revealLeadWorkflow("lead-enrollment-workflow");
   };
 
-  const beginLeadClose = () => {
+  const beginLeadClose = (kind?: "declined" | "no_response" | "not_relevant") => {
     setLeadActionsOpen(false);
+    setWorkspaceError("");
 
-    setCloseKind(selected?.status === "Не відповідає" ? "no_response" : selected?.status === "Неактуально" ? "not_relevant" : "declined");
+    setCloseKind(kind ?? (selected?.status === "Не відповідає" ? "no_response" : selected?.status === "Неактуально" ? "not_relevant" : "declined"));
     setCloseReason(selected?.closeReason ?? "schedule");
     setCloseNote(selected?.closeNote ?? "");
     setPostTrialMode("close");
