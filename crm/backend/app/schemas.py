@@ -506,7 +506,13 @@ class TrialLessonUpdate(BaseModel):
 class TrialLessonComplete(BaseModel):
     status: TrialStatus = TrialStatus.COMPLETED
     recommended_level: str | None = Field(default=None, max_length=80)
-    teacher_notes: str | None = None
+    teacher_notes: str | None = Field(default=None, max_length=5000)
+
+    @model_validator(mode="after")
+    def no_show_requires_reason(self):
+        if self.status == TrialStatus.NO_SHOW and not (self.teacher_notes or "").strip():
+            raise ValueError("Вкажіть причину, чому дитина не прийшла на пробне.")
+        return self
 
 
 class StudentDetail(StudentRead):

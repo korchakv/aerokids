@@ -1141,6 +1141,9 @@ def update_trial_hardened(db: Session, org_id: UUID, trial_id: UUID, data, actor
     trial.starts_at = starts_at
     trial.location_id = location_id
     trial.status = TrialStatus.SCHEDULED
+    # Keep the prior outcome only in audit/comment history after rescheduling.
+    trial.recommended_level = None
+    trial.teacher_notes = None
     resources.room_id = room_id
     resources.staff_id = staff_id
     resources.duration_minutes = duration

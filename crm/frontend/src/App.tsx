@@ -350,7 +350,6 @@ function App() {
   const [trialAt, setTrialAt] = useState(() => `${localDateInput(new Date())}T17:00`);
   const [trialLocation, setTrialLocation] = useState("Основна локація");
   const [trialLocationId, setTrialLocationId] = useState<EntityId | "">("");
-  const [recommendedLevel, setRecommendedLevel] = useState("Початковий");
   const [teacherNotes, setTeacherNotes] = useState("");
   const [selectedCandidates, setSelectedCandidates] = useState<EntityId[]>([]);
   const [groupName, setGroupName] = useState("FPV Start 8–10");
@@ -1148,6 +1147,10 @@ function App() {
 
   const completeTrial = async (result: "completed" | "no_show" | "cancelled") => {
     if (!selected) return;
+    if (result === "no_show" && !teacherNotes.trim()) {
+      setWorkspaceError("Вкажіть причину, чому дитина не прийшла на пробне.");
+      return;
+    }
     if (apiEnabled && session) {
       try {
         let trialId = selected.trialId;
@@ -1161,10 +1164,15 @@ function App() {
         }
         await apiPatch(`/trial-lessons/${trialId}/complete`, {
           status: result,
-          recommended_level: result === "completed" ? recommendedLevel : null,
+          recommended_level: null,
           teacher_notes: teacherNotes || null,
         }, session);
         await syncWorkspace(session);
+        if (result === "no_show") {
+          try {
+            setLeadComments(await apiGet<ApiLeadComment[]>(`/students/${selected.id}/lead-comments`, session));
+          } catch { /* the missed-trial result already saved */ }
+        }
         setTrialMode(null);
         setLeadProcedureTarget(null);
         return;
@@ -1177,9 +1185,22 @@ function App() {
       ...item,
       status: result === "completed" ? "Після пробного" : "Зв'язались",
       trialResult: result,
-      recommendedLevel: result === "completed" ? recommendedLevel : item.recommendedLevel,
+      recommendedLevel: undefined,
       teacherNotes: teacherNotes || item.teacherNotes,
     } : item));
+    if (result === "no_show") {
+      const now = new Date().toISOString();
+      setLeadComments((items) => [...items, {
+        id: crypto.randomUUID(),
+        student_id: selected.id,
+        author_user_id: null,
+        author_name: null,
+        body: teacherNotes.trim(),
+        kind: "trial",
+        created_at: now,
+        updated_at: now,
+      }]);
+    }
     setTrialMode(null);
     setLeadProcedureTarget(null);
   };
@@ -1199,7 +1220,6 @@ function App() {
     setTrialAt(lead?.trialAt ? toLocalDateTimeInput(lead.trialAt) : nextQuarterHourLocalInput());
     if (lead?.trialLocation) setTrialLocation(lead.trialLocation);
     if (lead?.trialLocationId) setTrialLocationId(lead.trialLocationId);
-    if (lead?.recommendedLevel) setRecommendedLevel(lead.recommendedLevel);
     setTeacherNotes(lead?.teacherNotes ?? "");
     setFollowUpAt(lead?.nextContactAt ? toLocalDateTimeInput(lead.nextContactAt) : "");
     setCloseKind(lead?.status === "Не відповідає" ? "no_response" : lead?.status === "Неактуально" ? "not_relevant" : "declined");
@@ -1453,7 +1473,7 @@ function App() {
 
     setPostTrialMode(null);
     setLeadProcedureTarget("trial");
-    setTrialAt(selected.trialAt ? toLocalDateTimeInput(selected.trialAt) : nextQuarterHourLocalInput());
+    setTrialAt(selected.trialResult === "scheduled" && selected.trialAt ? toLocalDateTimeInput(selected.trialAt) : nextQuarterHourLocalInput());
     setTrialLocationId(selected.trialLocationId ?? "");
     setTrialMode("schedule");
     revealLeadWorkflow("lead-trial-workflow");
@@ -1464,8 +1484,7 @@ function App() {
     setLeadActionsOpen(false);
 
     setPostTrialMode(null);
-    setLeadProcedureTarget("after_trial");
-    setRecommendedLevel(selected.recommendedLevel ?? "Початковий");
+    setLeadProcedureTarget(selected.trialResult === "no_show" ? "no_show" : "after_trial");
     setTeacherNotes(selected.teacherNotes ?? "");
     setTrialMode("complete");
     revealLeadWorkflow("lead-trial-result-workflow");
@@ -3870,7 +3889,6 @@ function App() {
         trialMode,
         trialAt,
         trialLocationId,
-        recommendedLevel,
         teacherNotes,
         leadProcedureTarget,
         leadEnrollmentOpen,
@@ -3910,7 +3928,6 @@ function App() {
         setTrialAt,
         setTrialLocationId,
         setTrialLocation,
-        setRecommendedLevel,
         setTeacherNotes,
         setLeadProcedureTarget,
         setLeadEnrollmentOpen,
@@ -4026,6 +4043,7 @@ function auditEventLabel(type: string) {
 function auditEventDetail(event: ApiAuditEvent) {
   const payload = event.payload ?? {};
   if (event.event_type === "trial.rescheduled") return "Змінено дату, час або локацію";
+  if (event.event_type === "trial.no_show" && typeof payload["teacher_notes"] === "string") return String(payload["teacher_notes"]);
   if (typeof payload["after"] === "string") return String(payload["after"]);
   if (typeof payload["body"] === "string") return String(payload["body"]);
   if (typeof payload["group_name"] === "string") return payload["group_name"];
@@ -4044,7 +4062,6 @@ function auditEventDetail(event: ApiAuditEvent) {
     return status + reason;
   }
   if (typeof payload["student_status"] === "string") return String(payload["student_status"]);
-  if (typeof payload["recommended_level"] === "string") return String(payload["recommended_level"]);
   if (typeof payload["amount_minor"] === "number") return formatMoney(Number(payload["amount_minor"]) / 100);
   return "CRM";
 }

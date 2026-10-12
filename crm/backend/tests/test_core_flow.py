@@ -91,6 +91,7 @@ def test_completed_trial_waits_for_explicit_post_trial_decision(client):
         json={"status": "completed", "recommended_level": "starter", "teacher_notes": "Готова до групи"},
     )
     assert completed.status_code == 200, completed.text
+    assert completed.json()["recommended_level"] is None
     detail = client.get(f"/students/{student['id']}", headers=headers).json()
     assert detail["crm_status"] == "trial_completed"
 
@@ -128,12 +129,26 @@ def test_no_show_stays_active_and_can_be_rescheduled(client):
         json={"student_id": student["id"], "starts_at": "2026-10-06T17:00:00+03:00"},
     ).json()
 
+    missing_reason = client.patch(
+        f"/trial-lessons/{trial['id']}/complete",
+        headers=headers,
+        json={"status": "no_show", "teacher_notes": "   "},
+    )
+    assert missing_reason.status_code == 422
+
     missed = client.patch(
         f"/trial-lessons/{trial['id']}/complete",
         headers=headers,
-        json={"status": "no_show", "teacher_notes": "Не прийшли, телефонуємо"},
+        json={"status": "no_show", "recommended_level": "starter", "teacher_notes": "Не прийшли, телефонуємо"},
     )
     assert missed.status_code == 200, missed.text
+    assert missed.json()["recommended_level"] is None
+    comments = client.get(f"/students/{student['id']}/lead-comments", headers=headers)
+    assert comments.status_code == 200, comments.text
+    assert any(
+        comment["kind"] == "trial" and comment["body"] == "Не прийшли, телефонуємо"
+        for comment in comments.json()
+    )
     detail = client.get(f"/students/{student['id']}", headers=headers).json()
     assert detail["crm_status"] == "contacted"
 
@@ -147,6 +162,9 @@ def test_no_show_stays_active_and_can_be_rescheduled(client):
     )
     assert rescheduled.status_code == 200, rescheduled.text
     assert rescheduled.json()["status"] == "scheduled"
+    assert rescheduled.json()["teacher_notes"] is None
+    comments_after = client.get(f"/students/{student['id']}/lead-comments", headers=headers).json()
+    assert any(comment["body"] == "Не прийшли, телефонуємо" for comment in comments_after)
     detail_after = client.get(f"/students/{student['id']}", headers=headers).json()
     assert detail_after["crm_status"] == "trial_scheduled"
 
