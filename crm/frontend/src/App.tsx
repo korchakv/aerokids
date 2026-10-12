@@ -677,7 +677,7 @@ function App() {
     }
     if (!apiEnabled || !session) {
       const now = new Date().toISOString();
-      setLeadComments(selected.comment ? [{ id: `${selected.id}-initial`, student_id: selected.id, author_user_id: null, author_name: null, body: selected.comment, created_at: now, updated_at: now }] : []);
+      setLeadComments(selected.comment ? [{ id: `${selected.id}-initial`, student_id: selected.id, author_user_id: null, author_name: null, body: selected.comment, kind: "registration", created_at: now, updated_at: now }] : []);
       setLeadCommentsLoading(false);
       return;
     }
@@ -1085,7 +1085,7 @@ function App() {
       } else {
         setLeads((items) => items.map((item) => item.id === callSummaryLead.id ? { ...item, status: "Зв'язались", comment: item.comment } : item));
         const now = new Date().toISOString();
-        setLeadComments((items) => [...items, { id: crypto.randomUUID(), student_id: callSummaryLead.id, author_user_id: null, author_name: null, body: callSummaryDraft.trim(), created_at: now, updated_at: now }]);
+        setLeadComments((items) => [...items, { id: crypto.randomUUID(), student_id: callSummaryLead.id, author_user_id: null, author_name: null, body: callSummaryDraft.trim(), kind: "call", created_at: now, updated_at: now }]);
       }
       setCallSummaryLead(null);
       setCallSummaryDraft("");
@@ -1233,7 +1233,7 @@ function App() {
         setLeadComments((items) => items.map((item) => item.id === commentId ? { ...item, body: body.trim(), updated_at: new Date().toISOString() } : item));
       } else {
         const now = new Date().toISOString();
-        setLeadComments((items) => [...items, { id: crypto.randomUUID(), student_id: selected.id, author_user_id: null, author_name: null, body: body.trim(), created_at: now, updated_at: now }]);
+        setLeadComments((items) => [...items, { id: crypto.randomUUID(), student_id: selected.id, author_user_id: null, author_name: null, body: body.trim(), kind: "note", created_at: now, updated_at: now }]);
       }
     } catch (error) {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти коментар.");

@@ -1,4 +1,4 @@
-export type UiIconName = "home" | "leads" | "student" | "groups" | "calendar" | "attendance" | "wallet" | "staff" | "location" | "reports" | "settings" | "search" | "logout" | "login" | "plus" | "sun" | "moon" | "theme" | "edit" | "x" | "back";
+export type UiIconName = "home" | "leads" | "student" | "groups" | "calendar" | "attendance" | "wallet" | "staff" | "location" | "reports" | "settings" | "search" | "logout" | "login" | "plus" | "sun" | "moon" | "theme" | "edit" | "x" | "back" | "phone";
 
 export function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -24,6 +24,7 @@ export function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number })
     case "edit": return <svg {...common}><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="m13.8 8.2 3 3"/></svg>;
     case "x": return <svg {...common}><path d="m6 6 12 12M18 6 6 18"/></svg>;
     case "back": return <svg {...common}><path d="m15 18-6-6 6-6"/><path d="M9 12h11"/></svg>;
+    case "phone": return <svg {...common}><path d="M5 4h3l2 5-2 1.5a15 15 0 0 0 5.5 5.5L15 14l5 2v3c0 1.1-.9 2-2 2A16 16 0 0 1 3 6c0-1.1.9-2 2-2Z"/></svg>;
   }
 }
 

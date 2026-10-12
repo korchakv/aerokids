@@ -66,6 +66,8 @@ def test_student_detail_and_status_update_are_tenant_scoped(client):
     )
     assert updated.status_code == 200
     assert updated.json()["crm_status"] == "contacted"
+    call_history = client.get(f"/students/{student['id']}/lead-comments", headers=headers).json()
+    assert call_history[-1]["kind"] == "call"
 
     detail = client.get(f"/students/{student['id']}", headers=headers)
     assert detail.status_code == 200
@@ -2238,6 +2240,7 @@ def test_lead_details_keep_initial_comment_and_comments_have_independent_history
     history = client.get(f"/students/{student_id}/lead-comments", headers=headers)
     assert history.status_code == 200, history.text
     assert [item["body"] for item in history.json()] == ["Початковий коментар"]
+    assert [item["kind"] for item in history.json()] == ["registration"]
 
     added = client.post(
         f"/students/{student_id}/lead-comments",
@@ -2245,6 +2248,7 @@ def test_lead_details_keep_initial_comment_and_comments_have_independent_history
         json={"body": "Хочуть FPV, зручно після 17:00"},
     )
     assert added.status_code == 201, added.text
+    assert added.json()["kind"] == "note"
     second_comment_id = added.json()["id"]
 
     changed = client.patch(
@@ -2255,6 +2259,7 @@ def test_lead_details_keep_initial_comment_and_comments_have_independent_history
     assert changed.status_code == 200, changed.text
     final_history = client.get(f"/students/{student_id}/lead-comments", headers=headers).json()
     assert [item["body"] for item in final_history] == ["Початковий коментар · уточнено вік", "Хочуть FPV, зручно після 17:00"]
+    assert [item["kind"] for item in final_history] == ["registration", "note"]
     assert final_history[1]["id"] == second_comment_id
 
     detail = client.get(f"/students/{student_id}", headers=headers)
@@ -2788,6 +2793,7 @@ def test_repeat_website_intake_keeps_student_and_appends_comment(client):
     assert comment == "Перше звернення"
     history = client.get(f"/students/{first.json()['student_id']}/lead-comments", headers=headers)
     assert [item["body"] for item in history.json()] == ["Перше звернення", "Хочемо записатися ще раз"]
+    assert [item["kind"] for item in history.json()] == ["registration", "repeat_intake"]
 
 
 def test_manual_intake_blocks_same_child_but_allows_sibling_same_parent_phone(client):

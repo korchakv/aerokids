@@ -234,6 +234,7 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
                 student_id=existing_student.id,
                 author_user_id=actor_user_id,
                 body=body,
+                kind="repeat_intake",
             ))
         db.commit()
         db.refresh(existing_student)
@@ -257,6 +258,7 @@ def create_intake(db: Session, organization: Organization, data: IntakeCreate, a
             student_id=student.id,
             author_user_id=actor_user_id,
             body=data.comment.strip(),
+            kind="registration",
         ))
     db.add(StudentContact(
         organization_id=organization.id,
@@ -372,6 +374,7 @@ def update_student_crm_status(db: Session, org_id: UUID, student_id: UUID, statu
             student_id=student.id,
             author_user_id=actor_user_id,
             body=comment.strip(),
+            kind="call",
         ))
         record_audit(db, org_id, "student", student.id, "lead.comment_added", {"body": comment.strip(), "context": "call"}, actor_user_id=actor_user_id)
     record_audit(db, org_id, "student", student.id, "student.crm_status_changed", {"crm_status": status.value if hasattr(status, "value") else str(status)}, actor_user_id=actor_user_id)
@@ -394,6 +397,7 @@ def list_lead_comments(db: Session, org_id: UUID, student_id: UUID) -> list[dict
         "author_user_id": comment.author_user_id,
         "author_name": author_name,
         "body": comment.body,
+        "kind": comment.kind,
         "created_at": comment.created_at,
         "updated_at": comment.updated_at,
     } for comment, author_name in rows]
@@ -401,7 +405,7 @@ def list_lead_comments(db: Session, org_id: UUID, student_id: UUID) -> list[dict
 
 def create_lead_comment(db: Session, org_id: UUID, student_id: UUID, body: str, actor_user_id: UUID | None = None) -> LeadComment:
     scoped_get(db, Student, org_id, student_id)
-    comment = LeadComment(organization_id=org_id, student_id=student_id, author_user_id=actor_user_id, body=body.strip())
+    comment = LeadComment(organization_id=org_id, student_id=student_id, author_user_id=actor_user_id, body=body.strip(), kind="note")
     db.add(comment)
     record_audit(db, org_id, "student", student_id, "lead.comment_added", {"body": body.strip()}, actor_user_id=actor_user_id)
     db.commit()
