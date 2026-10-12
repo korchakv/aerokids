@@ -86,8 +86,8 @@ services:
 
 databases:
   - name: aerokids-crm-staging-db
-    databaseName: schoolcrm_staging
-    user: schoolcrm_staging
+    databaseName: aerokids_crm_staging_db
+    user: aerokids_crm_staging_db_user
     plan: free
     region: frankfurt
     postgresMajorVersion: 16
