@@ -8,15 +8,12 @@ import { formatUaPhone } from "../../utils/contact";
 import { availabilityLabel } from "./availability";
 import {
   leadActionMeta,
-  leadDisplayStatus,
   leadIsDeferred,
-  leadKanbanColumn,
   leadPrimaryActionLabel,
   leadSourceLabel,
   type EntityId,
   type Lead,
   type LeadKanbanColumnId,
-  type LeadStatus,
 } from "./model";
 import type { GroupItem } from "../groups/types";
 import type { LocationDemo } from "../locations/types";
@@ -76,7 +73,6 @@ export type LeadDrawerProps = {
   groups: GroupItem[];
   locations: LocationDemo[];
   leadActionsOpen: boolean;
-  leadStatusMenuOpen: boolean;
   leadDeleteSaving: boolean;
   entityEvents: ApiAuditEvent[];
   leadComments: ApiLeadComment[];
@@ -84,11 +80,9 @@ export type LeadDrawerProps = {
   leadCommentSaving: boolean;
   historyLoading: boolean;
   saveLeadComment: (body: string, commentId?: string) => Promise<void>;
-  statuses: LeadStatus[];
   setSelectedId: Setter<EntityId | null>;
   setLeadEditing: Setter<boolean>;
   setLeadActionsOpen: Setter<boolean>;
-  setLeadStatusMenuOpen: Setter<boolean>;
   setLeadEditFirstName: Setter<string>;
   setLeadEditLastName: Setter<string>;
   setLeadEditAge: Setter<number>;
@@ -119,7 +113,6 @@ export type LeadDrawerProps = {
   setWorkspaceError: Setter<string>;
   beginLeadEdit: () => MaybePromise;
   saveLeadDetails: () => MaybePromise;
-  updateStatus: (id: EntityId, status: LeadStatus) => MaybePromise;
   reopenLead: () => MaybePromise;
   saveStudentPreferences: () => MaybePromise;
   scheduleTrial: () => MaybePromise;
@@ -140,7 +133,6 @@ export type LeadDrawerProps = {
   beginTrialResult: () => MaybePromise;
   beginLeadFollowUp: () => MaybePromise;
   beginLeadEnrollment: () => MaybePromise;
-  setLeadMobileStatus: (status: "Нова" | "Зв'язались" | "Очікує групу") => MaybePromise;
   deleteSelectedLead: () => MaybePromise;
   deferReasonLabel: (reason: string | null | undefined) => string;
   closeReasonLabel: (reason: string | null | undefined) => string;
@@ -189,7 +181,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
     groups,
     locations,
     leadActionsOpen,
-    leadStatusMenuOpen,
     leadDeleteSaving,
     entityEvents,
     leadComments,
@@ -197,11 +188,9 @@ export function LeadDrawer(props: LeadDrawerProps) {
     leadCommentSaving,
     historyLoading,
     saveLeadComment,
-    statuses,
     setSelectedId,
     setLeadEditing,
     setLeadActionsOpen,
-    setLeadStatusMenuOpen,
     setLeadEditFirstName,
     setLeadEditLastName,
     setLeadEditAge,
@@ -232,7 +221,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
     setWorkspaceError,
     beginLeadEdit,
     saveLeadDetails,
-    updateStatus,
     reopenLead,
     saveStudentPreferences,
     scheduleTrial,
@@ -253,7 +241,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
     beginTrialResult,
     beginLeadFollowUp,
     beginLeadEnrollment,
-    setLeadMobileStatus,
     deleteSelectedLead,
     deferReasonLabel,
     closeReasonLabel,
@@ -287,18 +274,15 @@ export function LeadDrawer(props: LeadDrawerProps) {
   };
 
 
-  return <div className="drawerBackdrop leadDrawerBackdrop" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); setLeadEnrollmentOpen(false); }}>
+  return <div className="drawerBackdrop leadDrawerBackdrop" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadEnrollmentOpen(false); }}>
         <aside className="drawer leadDrawer" data-testid="lead-drawer" onClick={(e) => e.stopPropagation()}>
-          <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadStatusMenuOpen(false); setLeadEnrollmentOpen(false); }}>×</button>
+          <button className="drawerClose" aria-label="Закрити картку заявки" onClick={() => { setSelectedId(null); setLeadEditing(false); setLeadActionsOpen(false); setLeadEnrollmentOpen(false); }}>×</button>
           <p className="eyebrow">Картка заявки</p>
           <div className="leadDrawerTitleRow">
             <div className="leadDrawerIdentity">
               <h2>{selected.child}, {selected.age} років</h2>
               {canManageLeads && <button className="leadEditIcon" type="button" aria-label="Редагувати заявку" title="Редагувати заявку" onClick={beginLeadEdit}><UiIcon name="edit" size={14} /></button>}
             </div>
-            <button className={"mobileLeadStatusTrigger stage-" + leadKanbanColumn(selected)} onClick={() => { setLeadActionsOpen(false); setLeadStatusMenuOpen(true); }}>
-              <span>{leadDisplayStatus(selected)}</span><i>⌄</i>
-            </button>
           </div>
           {leadEditing && <div className="leadEditPanel">
             <div className="leadEditPanelHead">
@@ -333,15 +317,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
             </div>
           </div>}
           <div className="contactCard"><span>Контакт</span><b>{selected.parent}</b><a href={"tel:" + selected.phone.replace(/\s/g, "")}>{selected.phone}</a></div>
-          <div className="desktopLeadStatus">
-            {["Пробне заплановано","Після пробного","Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) || ["no_show","cancelled"].includes(selected.trialResult ?? "")
-              ? <div className="statusField statusReadonly">Статус<strong>{leadDisplayStatus(selected)}</strong></div>
-              : <label className="statusField">Статус
-                  <select value={selected.status} onChange={(e) => updateStatus(selected.id, e.target.value as LeadStatus)}>
-                    {statuses.filter((status) => ["Нова","Зв'язались","Очікує групу"].includes(status)).map((status) => <option key={status}>{status}</option>)}
-                  </select>
-                </label>}
-          </div>
           {canManageLeads && (selected.status === "Зв'язались" || ["no_show","cancelled"].includes(selected.trialResult ?? "")) && trialMode !== "schedule" && <button type="button" className="primary full" onClick={beginTrialScheduling}>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</button>}
           {selected.status === "Пробне заплановано" && selected.trialResult === "scheduled" && selected.trialAt && trialMode !== "schedule" && <div className="trialSummary">
             <div className="trialSummaryHeader"><span>Коли і де</span>{canManageLeads && <button type="button" className="leadEditIcon" aria-label="Змінити дату, час і локацію пробного" title="Редагувати запис на пробне" onClick={beginTrialScheduling}><UiIcon name="edit" size={14} /></button>}</div>
@@ -367,7 +342,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
           <section className="leadCommentHistory" aria-label="Історія коментарів">
             <header><b>Історія коментарів</b><small>Нові коментарі додаються окремо</small></header>
             {leadCommentsLoading ? <p className="leadCommentsEmpty">Завантажуємо історію…</p> : leadComments.length === 0 ? <p className="leadCommentsEmpty">Коментарів ще немає.</p> : <ol>
-              {leadComments.map((comment) => {
+              {leadComments.slice().reverse().map((comment) => {
                 const kind = leadCommentKind(comment.kind);
                 return <li key={comment.id}>
                 <div className={"leadCommentMeta leadCommentMeta-" + kind.className}><span className="leadCommentKind"><UiIcon name={kind.icon} size={13} />{kind.label}</span>{comment.author_name && <span className="leadCommentAuthor">{comment.author_name}</span>}<time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>{comment.updated_at !== comment.created_at && <small> · змінено</small>}</div>
@@ -536,7 +511,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
               <small>Наступна дія</small>
               <strong>{leadPrimaryActionLabel(selected)}</strong>
             </button>
-            <button className="mobileLeadMoreAction" aria-label="Інші дії" onClick={() => { setLeadStatusMenuOpen(false); setLeadActionsOpen(true); }}>•••</button>
+            <button className="mobileLeadMoreAction" aria-label="Інші дії" onClick={() => { setLeadActionsOpen(true); }}>•••</button>
           </div>}
 
           {leadActionsOpen && <div className="mobileLeadSheetLayer">
@@ -544,34 +519,16 @@ export function LeadDrawer(props: LeadDrawerProps) {
               <div className="mobileLeadSheetHead"><div><span>Заявка</span><h3>{selected.child}</h3></div><button aria-label="Закрити меню дій" onClick={() => setLeadActionsOpen(false)}>×</button></div>
               <div className="mobileLeadSheetActions">
                 {selected.phone && <a className="mobileLeadSheetAction" href={"tel:" + selected.phone.replace(/\s/g, "")}><i>☎</i><span><b>Подзвонити</b><small>{formatUaPhone(selected.phone)}</small></span></a>}
-                {selected.status === "Нова" && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void updateStatus(selected.id, "Зв'язались"); }}><i>✓</i><span><b>Позначити «Зв'язались»</b><small>Перейти до наступного етапу</small></span></button>}
                 {(selected.status === "Зв'язались" || selected.trialResult === "no_show" || selected.trialResult === "cancelled") && <button className="mobileLeadSheetAction" onClick={beginTrialScheduling}><i>◷</i><span><b>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</b><small>Обрати дату, час і локацію</small></span></button>}
                 {selected.status === "Пробне заплановано" && <><button className="mobileLeadSheetAction" onClick={beginTrialResult}><i>✓</i><span><b>Внести результат пробного</b><small>Був / не прийшов / скасували</small></span></button><button className="mobileLeadSheetAction" onClick={beginTrialScheduling}><i>↻</i><span><b>Перенести пробне</b><small>Змінити дату, час або локацію</small></span></button></>}
                 {selected.status === "Після пробного" && <><button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void saveLeadOutcome("waiting_for_group"); }}><i>✓</i><span><b>Готові навчатися</b><small>Перемістити в «Очікує групу»</small></span></button><button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>☎</i><span><b>Ще думають</b><small>Запланувати наступний контакт</small></span></button></>}
                 {selected.status === "Очікує групу" && <button className="mobileLeadSheetAction" onClick={beginLeadEnrollment}><i>→</i><span><b>Зарахувати учня</b><small>У групу або без групи</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Пробне заплановано" && <button className="mobileLeadSheetAction" onClick={beginLeadFollowUp}><i>◷</i><span><b>Запланувати дзвінок</b><small>Поставити дату наступного контакту</small></span></button>}
-                {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && selected.status !== "Очікує групу" && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void updateStatus(selected.id, "Очікує групу"); }}><i>◎</i><span><b>Очікує групу</b><small>Позначити готовність до підбору групи</small></span></button>}
-                <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); setLeadStatusMenuOpen(true); }}><i>⇄</i><span><b>Перемістити заявку</b><small>Змінити етап вручну</small></span></button>
                 {!leadIsDeferred(selected) && !["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction" onClick={beginLeadDefer}><i>◷</i><span><b>Повернутись пізніше</b><small>Сховати заявку до вибраної дати</small></span></button>}
                 {leadIsDeferred(selected) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); void resumeDeferredLead(); }}><i>↺</i><span><b>Повернути в роботу зараз</b><small>Прибрати відкладене нагадування</small></span></button>}
                 {!["Відмовились","Не відповідає","Неактуально","Зарахований"].includes(selected.status) && <button className="mobileLeadSheetAction danger" onClick={beginLeadClose}><i>×</i><span><b>Закрити заявку</b><small>Відмова, немає відповіді або неактуально</small></span></button>}
                 {["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <button className="mobileLeadSheetAction" onClick={() => { setLeadActionsOpen(false); reopenLead(); }}><i>↺</i><span><b>Повернути в роботу</b><small>Відновити активну заявку</small></span></button>}
                 {canDeleteStudents && <button className="mobileLeadSheetAction danger quietDelete" disabled={leadDeleteSaving} onClick={deleteSelectedLead}><i>⌫</i><span><b>{leadDeleteSaving ? "Видаляємо…" : "Видалити заявку"}</b><small>Тільки якщо створена помилково</small></span></button>}
-              </div>
-            </section>
-          </div>}
-
-          {leadStatusMenuOpen && <div className="mobileLeadSheetLayer">
-            <section className="mobileLeadSheet" role="dialog" aria-modal="true" aria-label="Перемістити заявку">
-              <div className="mobileLeadSheetHead"><div><span>Статус</span><h3>Перемістити заявку</h3></div><button aria-label="Закрити вибір статусу" onClick={() => setLeadStatusMenuOpen(false)}>×</button></div>
-              <div className="mobileLeadStageList">
-                <button className={"mobileLeadStageOption stage-new " + (selected.status === "Нова" ? "active" : "")} onClick={() => setLeadMobileStatus("Нова")}><i></i><span><b>Нова</b><small>Ще не опрацьована</small></span>{selected.status === "Нова" && <strong>✓</strong>}</button>
-                <button className={"mobileLeadStageOption stage-contacted " + (selected.status === "Зв'язались" ? "active" : "")} onClick={() => setLeadMobileStatus("Зв'язались")}><i></i><span><b>Зв'язались</b><small>Контакт уже відбувся</small></span>{selected.status === "Зв'язались" && <strong>✓</strong>}</button>
-                <button className={"mobileLeadStageOption stage-trial " + (selected.status === "Пробне заплановано" ? "active" : "")} onClick={beginTrialScheduling}><i></i><span><b>Пробне заплановано</b><small>Спочатку вкажіть дату і час</small></span>{selected.status === "Пробне заплановано" && <strong>✓</strong>}</button>
-                <button className={"mobileLeadStageOption stage-after_trial " + (selected.status === "Після пробного" ? "active" : "")} onClick={beginTrialResult}><i></i><span><b>Після пробного</b><small>Зафіксувати результат заняття</small></span>{selected.status === "Після пробного" && <strong>✓</strong>}</button>
-                <button className={"mobileLeadStageOption stage-waiting " + (selected.status === "Очікує групу" ? "active" : "")} onClick={() => setLeadMobileStatus("Очікує групу")}><i></i><span><b>Очікує групу</b><small>Готові до підбору групи</small></span>{selected.status === "Очікує групу" && <strong>✓</strong>}</button>
-                <button className={"mobileLeadStageOption stage-enrolled " + (selected.status === "Зарахований" ? "active" : "")} onClick={beginLeadEnrollment}><i></i><span><b>Зарахувати учня</b><small>У групу або без групи</small></span>{selected.status === "Зарахований" && <strong>✓</strong>}</button>
-                <button className="mobileLeadStageOption stage-closed" onClick={beginLeadClose}><i></i><span><b>Закрити заявку</b><small>Зберегти причину закриття</small></span></button>
               </div>
             </section>
           </div>}
