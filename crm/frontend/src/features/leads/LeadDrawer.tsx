@@ -56,7 +56,6 @@ export type LeadDrawerProps = {
   trialMode: "schedule" | "complete" | null;
   trialAt: string;
   trialLocationId: EntityId | "";
-  recommendedLevel: string;
   teacherNotes: string;
   leadProcedureTarget: LeadKanbanColumnId | null;
   leadEnrollmentOpen: boolean;
@@ -97,7 +96,6 @@ export type LeadDrawerProps = {
   setTrialAt: Setter<string>;
   setTrialLocationId: Setter<EntityId | "">;
   setTrialLocation: Setter<string>;
-  setRecommendedLevel: Setter<string>;
   setTeacherNotes: Setter<string>;
   setLeadProcedureTarget: Setter<LeadKanbanColumnId | null>;
   setLeadEnrollmentOpen: Setter<boolean>;
@@ -164,7 +162,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
     trialMode,
     trialAt,
     trialLocationId,
-    recommendedLevel,
     teacherNotes,
     leadProcedureTarget,
     leadEnrollmentOpen,
@@ -205,7 +202,6 @@ export function LeadDrawer(props: LeadDrawerProps) {
     setTrialAt,
     setTrialLocationId,
     setTrialLocation,
-    setRecommendedLevel,
     setTeacherNotes,
     setLeadProcedureTarget,
     setLeadEnrollmentOpen,
@@ -320,12 +316,35 @@ export function LeadDrawer(props: LeadDrawerProps) {
             </div>
           </div>}
           <div className="contactCard"><span>Контакт</span><b>{selected.parent}</b><a href={"tel:" + selected.phone.replace(/\s/g, "")}>{selected.phone}</a></div>
-          {canManageLeads && (selected.status === "Зв'язались" || ["no_show","cancelled"].includes(selected.trialResult ?? "")) && trialMode !== "schedule" && <button type="button" className="primary full" onClick={beginTrialScheduling}>{selected.trialResult === "no_show" || selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</button>}
+          {canManageLeads && (selected.status === "Зв'язались" || selected.trialResult === "cancelled") && trialMode !== "schedule" && <button type="button" className="primary full" onClick={beginTrialScheduling}>{selected.trialResult === "cancelled" ? "Перезаписати на пробне" : "Записати на пробне"}</button>}
           {selected.status === "Пробне заплановано" && selected.trialResult === "scheduled" && selected.trialAt && trialMode !== "schedule" && <div className="trialSummary">
             <div className="trialSummaryHeader"><span>Коли і де</span>{canManageLeads && <button type="button" className="leadEditIcon" aria-label="Змінити дату, час і локацію пробного" title="Редагувати запис на пробне" onClick={beginTrialScheduling}><UiIcon name="edit" size={14} /></button>}</div>
             <b>{new Date(selected.trialAt).toLocaleString("uk-UA", { weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(/^./, (character) => character.toLocaleUpperCase("uk-UA"))}</b>
             <small>{selected.trialLocation ?? "Локацію не вказано"}</small>
           </div>}
+          {selected.trialResult === "no_show" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && trialMode !== "complete" && trialMode !== "schedule" && <div className="resultCard noShowCard">
+            <span>Не прийшли на пробне</span>
+            <b>Потрібен повторний контакт</b>
+            {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
+            <small>Заявка залишається активною. Можна перезаписати пробне або закрити її після контакту.</small>
+            {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Змінити причину неявки</button>}
+            <div className="postTrialActions">
+              <button className="primary" onClick={beginTrialScheduling}>Перезаписати пробне</button>
+              <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
+              <button className="search" onClick={() => { setCloseKind("no_response"); setPostTrialMode("close"); setWorkspaceError(""); }}>Закрити заявку</button>
+            </div>
+          </div>}
+          {trialMode === "complete" && <div id="lead-trial-result-workflow" className="workflowBox leadWorkflowBox">
+            <div className="workflowHead"><h3>{leadProcedureTarget === "no_show" ? "Зафіксувати пропущене пробне" : "Результат пробного"}</h3><button type="button" aria-label="Закрити форму результату" onClick={() => { setTrialMode(null); setLeadProcedureTarget(null); }}>×</button></div>
+            {!selected.trialId && <><DateTimeEditor label="Коли було пробне" value={trialAt} onChange={setTrialAt} />{activeLocations.length === 1 ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label> : <label>Локація<select value={trialLocationId} onChange={(e) => setTrialLocationId(e.target.value)}><option value="">Без локації</option>{activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label>}</>}
+            <label>{leadProcedureTarget === "no_show" ? "Причина пропуску пробного" : "Коментар викладача"}<textarea value={teacherNotes} onChange={(e) => setTeacherNotes(e.target.value)} placeholder={leadProcedureTarget === "no_show" ? "Наприклад: дитина захворіла або не змогла приїхати" : "Що сподобалось, як дитина справилась"} /></label>
+            {leadProcedureTarget === "no_show" && <small className="softPreferenceHint">Причина збережеться в історії коментарів.</small>}
+            <div className="resultActions">{leadProcedureTarget === "no_show"
+              ? <button type="button" className="primary" disabled={!teacherNotes.trim()} onClick={() => completeTrial("no_show")}>Зафіксувати неявку</button>
+              : <><button type="button" className="primary" onClick={() => completeTrial("completed")}>Пробне пройдено</button><button type="button" className="search" onClick={() => { setTeacherNotes(""); setLeadProcedureTarget("no_show"); }}>Не прийшов</button><button type="button" className="search" onClick={() => completeTrial("cancelled")}>Скасували</button></>}
+            </div>
+          </div>}
+
           {trialMode === "schedule" && <div id="lead-trial-workflow" data-testid="lead-trial-workflow" className="workflowBox leadWorkflowBox">
             <div className="workflowHead"><h3>{selected.trialResult === "scheduled" ? "Редагувати запис на пробне" : "Запис на пробне"}</h3><button type="button" aria-label="Закрити форму запису" onClick={() => setTrialMode(null)}>×</button></div>
             <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
@@ -379,17 +398,10 @@ export function LeadDrawer(props: LeadDrawerProps) {
 
 
 
-          {trialMode === "complete" && <div id="lead-trial-result-workflow" className="workflowBox leadWorkflowBox">
-            <div className="workflowHead"><h3>{leadProcedureTarget === "no_show" ? "Зафіксувати пропущене пробне" : "Результат пробного"}</h3><button onClick={() => { setTrialMode(null); setLeadProcedureTarget(null); }}>×</button></div>
-            {!selected.trialId && <><DateTimeEditor label="Коли було пробне" value={trialAt} onChange={setTrialAt} />{activeLocations.length === 1 ? <label>Локація<div className="singleLocationField">{activeLocations[0].name}</div></label> : <label>Локація<select value={trialLocationId} onChange={(e) => setTrialLocationId(e.target.value)}><option value="">Без локації</option>{activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}</select></label>}</>}
-            <label>Рекомендований рівень<select value={recommendedLevel} onChange={(e) => setRecommendedLevel(e.target.value)}><option>Початковий</option><option>Середній</option><option>Просунутий</option></select></label>
-            <label>Коментар викладача<textarea value={teacherNotes} onChange={(e) => setTeacherNotes(e.target.value)} placeholder="Що сподобалось, як дитина справилась, що рекомендуємо" /></label>
-            <div className="resultActions">{leadProcedureTarget !== "no_show" && <button className="primary" onClick={() => completeTrial("completed")}>Пробне пройдено</button>}<button className={leadProcedureTarget === "no_show" ? "primary" : "search"} onClick={() => completeTrial("no_show")}>Не прийшов</button>{leadProcedureTarget !== "no_show" && <button className="search" onClick={() => completeTrial("cancelled")}>Скасували</button>}</div>
-          </div>}
+
 
           {selected.trialResult === "completed" && <div className="resultCard postTrialCard">
             <span>Пробне пройдено</span>
-            <b>{selected.recommendedLevel ?? "Рівень не вказано"}</b>
             {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
             {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Редагувати результат пробного</button>}
             {selected.status === "Після пробного" && <>
@@ -421,18 +433,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
           </div>}
 
           {selected.status === "Очікує групу" && selected.trialResult !== "completed" && canManageLeads && <div className="resultCard waitingEnrollmentCard"><span>Очікує групу</span><b>Готові навчатися</b><small>Оберіть групу або зарахуйте без групи.</small><button type="button" className="primary full" onClick={beginLeadEnrollment}>Зарахувати учня</button></div>}
-          {selected.trialResult === "no_show" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="resultCard noShowCard">
-            <span>Не прийшли на пробне</span>
-            <b>Потрібен повторний контакт</b>
-            {selected.teacherNotes && <p>{selected.teacherNotes}</p>}
-            <small>Заявка залишається активною. Можна перезаписати пробне або закрити її після контакту.</small>
-            {canManageLeads && <button type="button" className="inlineEditLink" onClick={beginTrialResult}>Редагувати результат пробного</button>}
-            <div className="postTrialActions">
-              <button className="primary" onClick={() => setTrialMode("schedule")}>Перезаписати пробне</button>
-              <button className="search" onClick={() => { setPostTrialMode("thinking"); setWorkspaceError(""); }}>Передзвонити пізніше</button>
-              <button className="search" onClick={() => { setCloseKind("no_response"); setPostTrialMode("close"); setWorkspaceError(""); }}>Закрити заявку</button>
-            </div>
-          </div>}
+
 
           {selected.trialResult === "cancelled" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && <div className="resultCard cancelledTrialCard">
             <span>Пробне скасовано</span>
@@ -543,7 +544,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <h3>Історія</h3>
             <div><i></i><p><b>Заявка створена</b><span>Джерело: {leadSourceLabel(selected.source)}</span></p></div>
             {selected.trialAt && <div><i></i><p><b>Пробне заплановано</b><span>{new Date(selected.trialAt).toLocaleString("uk-UA")}</span></p></div>}
-            {selected.trialResult === "completed" && <div><i></i><p><b>Пробне пройдено</b><span>Рівень: {selected.recommendedLevel ?? "не вказано"}</span></p></div>}
+            {selected.trialResult === "completed" && <div><i></i><p><b>Пробне пройдено</b></p></div>}
             {selected.status !== "Нова" && <div><i></i><p><b>Поточний статус</b><span>{selected.status}</span></p></div>}
           </div>}
         </aside>
