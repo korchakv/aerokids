@@ -54,6 +54,7 @@ export type WorkspaceLead = {
   last_name: string | null;
   student_phone: string | null;
   age: number | null;
+  school_shift: "first" | "second" | "other" | null;
   source: string | null;
   comment: string | null;
   preferred_location_id: string | null;
