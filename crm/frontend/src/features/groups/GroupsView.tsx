@@ -5,6 +5,8 @@ import { candidateCompatibility, MatchBadge, MatchExplanation } from "./matching
 import type { GroupItem } from "./types";
 import type { LocationDemo } from "../locations/types";
 import type { DraftScheduleSlot } from "../../components/ScheduleEditors";
+import { PotentialGroupsPanel } from "./PotentialGroupsPanel";
+import type { Session } from "../../api";
 
 export type CandidateAgeFilter = "all" | "8-10" | "11-13";
 export type CandidateMatchFilter = "all" | "match" | "partial" | "conflict" | "unknown";
@@ -13,6 +15,9 @@ export type CandidateSort = "match" | "age" | "name";
 type GroupsViewProps = {
   groups: GroupItem[];
   waiting: Lead[];
+  leads: Lead[];
+  session: Session | null;
+  canManage: boolean;
   visibleWaiting: Lead[];
   candidateLevels: string[];
   locations: LocationDemo[];
@@ -38,6 +43,7 @@ type GroupsViewProps = {
   teacherNameForGroup: (groupId: EntityId) => string | undefined;
   onOpenGroup: (groupId: EntityId) => void;
   onOpenCreation: (context: "groups" | "candidates") => void;
+  onCreateGroupFromProposal: (studentIds: EntityId[]) => void;
   onToggleCandidate: (studentId: EntityId) => void;
   onCandidateAgeFilterChange: (value: CandidateAgeFilter) => void;
   onCandidateLevelFilterChange: (value: string) => void;
@@ -49,6 +55,9 @@ type GroupsViewProps = {
 export function GroupsView({
   groups,
   waiting,
+  leads,
+  session,
+  canManage,
   visibleWaiting,
   candidateLevels,
   locations,
@@ -74,6 +83,7 @@ export function GroupsView({
   teacherNameForGroup,
   onOpenGroup,
   onOpenCreation,
+  onCreateGroupFromProposal,
   onToggleCandidate,
   onCandidateAgeFilterChange,
   onCandidateLevelFilterChange,
@@ -191,5 +201,13 @@ export function GroupsView({
         </div>
       </article>
     </section>
+
+    <PotentialGroupsPanel
+      waiting={waiting}
+      leads={leads}
+      session={session}
+      canManage={canManage}
+      onCreateGroup={onCreateGroupFromProposal}
+    />
   </section>;
 }

@@ -144,6 +144,7 @@ class Student(Base):
     phone: Mapped[str | None] = mapped_column(String(40), index=True)
     birth_date: Mapped[date | None] = mapped_column(Date)
     age_at_inquiry: Mapped[int | None] = mapped_column(Integer)
+    school_shift: Mapped[str | None] = mapped_column(String(20))
     source: Mapped[str | None] = mapped_column(String(80))
     preferred_location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"), index=True)
     crm_status: Mapped[CrmStatus] = mapped_column(Enum(CrmStatus), default=CrmStatus.NEW, nullable=False)
@@ -168,6 +169,20 @@ class LeadComment(Base):
     author_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(String(40), default="note", server_default="note", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class PotentialGroupProposal(Base):
+    __tablename__ = "potential_group_proposals"
+    __table_args__ = (Index("ix_potential_group_proposals_org_created", "organization_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+    members: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    slots: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    stale: Mapped[bool] = mapped_column(default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 

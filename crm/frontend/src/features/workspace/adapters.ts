@@ -11,6 +11,7 @@ export function workspaceStudentToLead(item: WorkspaceStudent): Lead {
     lastName: item.last_name ?? undefined,
     child: [item.first_name, item.last_name].filter(Boolean).join(" "),
     age: item.age ?? 0,
+    schoolShift: item.school_shift ?? null,
     parent: item.contact_name ?? "Контакт не вказано",
     phone: item.contact_phone ?? "",
     childPhone: item.student_phone ?? undefined,

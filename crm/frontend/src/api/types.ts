@@ -36,6 +36,7 @@ export type IntakeDuplicateMatch = {
   first_name: string;
   last_name: string | null;
   age: number | null;
+  school_shift: "first" | "second" | "other" | null;
   crm_status: WorkspaceLead["crm_status"];
   student_status: "prospect" | "active" | "paused" | "archived";
   student_phone: string | null;

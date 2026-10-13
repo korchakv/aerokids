@@ -376,6 +376,7 @@ def student_preferences(db: Session, org_id: UUID, student_id: UUID) -> dict:
     return {
         "preferred_location_id": student.preferred_location_id,
         "preferred_location_name": location.name if location else None,
+        "school_shift": student.school_shift,
         "availability": [{
             "weekday": item.weekday,
             "start_time": item.start_time,
@@ -399,6 +400,8 @@ def replace_student_preferences(db: Session, org_id: UUID, student_id: UUID, dat
         seen.add(key)
 
     student.preferred_location_id = data.preferred_location_id
+    if "school_shift" in data.model_fields_set:
+        student.school_shift = data.school_shift
     db.execute(delete(StudentAvailability).where(
         StudentAvailability.organization_id == org_id,
         StudentAvailability.student_id == student_id,
@@ -416,6 +419,7 @@ def replace_student_preferences(db: Session, org_id: UUID, student_id: UUID, dat
 
     record_audit(db, org_id, "student", student.id, "student.preferences_updated", {
         "preferred_location_id": str(data.preferred_location_id) if data.preferred_location_id else None,
+        "school_shift": data.school_shift if "school_shift" in data.model_fields_set else student.school_shift,
         "availability_count": len(data.availability),
     }, actor_user_id=actor_user_id)
     db.commit()

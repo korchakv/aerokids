@@ -25,6 +25,7 @@ export type Lead = {
   lastName?: string;
   child: string;
   age: number;
+  schoolShift?: "first" | "second" | "other" | null;
   parent: string;
   phone: string;
   childPhone?: string;
