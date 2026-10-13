@@ -43,23 +43,42 @@ def create_group_schedule(db: Session, org_id: UUID, data) -> GroupSchedule:
 
 
 def create_group_schedules(db: Session, org_id: UUID, data) -> list[GroupSchedule]:
-    crm.scoped_get(db, Group, org_id, data.group_id)
-    items = [
-        GroupSchedule(
-            organization_id=org_id,
-            group_id=data.group_id,
-            weekday=slot.weekday,
-            start_time=time.fromisoformat(slot.start_time),
-            duration_minutes=slot.duration_minutes,
-        )
-        for slot in data.slots
-    ]
+    from app.services import hardening
+    db.scalar(select(Organization).where(Organization.id == org_id).with_for_update())
+    group = crm.scoped_get(db, Group, org_id, data.group_id)
+    if data.starts_on and data.starts_on < hardening.organization_today(db, org_id):
+        raise HTTPException(status_code=422, detail="Дата початку має бути сьогодні або пізніше")
+    keys = [(s.weekday, s.start_time) for s in data.slots]
+    if len(keys) != len(set(keys)):
+        raise HTTPException(status_code=422, detail="Приберіть повторні дні й години")
+    items = [GroupSchedule(
+        organization_id=org_id, group_id=data.group_id, weekday=slot.weekday,
+        start_time=time.fromisoformat(slot.start_time), duration_minutes=slot.duration_minutes,
+        starts_on=data.starts_on,
+    ) for slot in data.slots]
     db.add_all(items)
     try:
+        db.flush()
+        active = list(db.scalars(select(GroupSchedule).where(
+            GroupSchedule.organization_id == org_id, GroupSchedule.group_id == group.id,
+            GroupSchedule.is_active.is_(True),
+        )))
+        for i, a in enumerate(active):
+            for b in active[i + 1:]:
+                if a.weekday == b.weekday:
+                    a_start = a.start_time.hour * 60 + a.start_time.minute
+                    b_start = b.start_time.hour * 60 + b.start_time.minute
+                    if a_start < b_start + b.duration_minutes and b_start < a_start + a.duration_minutes:
+                        raise HTTPException(status_code=409, detail="Час занять цієї групи перетинається")
+        hardening.save_schedule_history(db, org_id, group, active, None, effective_from=data.starts_on)
+        hardening.reconcile_group_future_sessions(db, org_id, group, None)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="One or more schedule slots already exist for this group") from exc
+        raise HTTPException(status_code=409, detail="Такий час уже є в розкладі групи") from exc
+    except HTTPException:
+        db.rollback()
+        raise
     for item in items:
         db.refresh(item)
     return items
@@ -204,6 +223,9 @@ def materialize_recurring_lesson_sessions(
 
         current_date = window_start + timedelta(days=slot.weekday)
         while current_date <= window_end:
+            if slot.starts_on and current_date < slot.starts_on:
+                current_date += timedelta(days=7)
+                continue
             local_start = datetime.combine(current_date, slot.start_time).replace(tzinfo=tz)
             starts_at = local_start.astimezone(timezone.utc)
             exists = db.scalar(

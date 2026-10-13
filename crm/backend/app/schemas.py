@@ -563,6 +563,8 @@ class GroupUpdate(BaseModel):
 
 
 class GroupFormationCreate(BaseModel):
+    proposal_id: UUID | None = None
+    proposal_version: int | None = None
     name: str = Field(min_length=1, max_length=160)
     location_id: UUID | None = None
     capacity: int = Field(default=8, ge=1, le=100)
@@ -626,6 +628,7 @@ class GroupScheduleCreate(GroupScheduleSlotCreate):
 
 class GroupScheduleBatchCreate(BaseModel):
     group_id: UUID
+    starts_on: date | None = None
     slots: list[GroupScheduleSlotCreate] = Field(min_length=1, max_length=28)
 
 
@@ -1237,8 +1240,9 @@ class GroupMatchPreviewResponse(BaseModel):
 
 class PotentialGroupMember(BaseModel):
     student_id: UUID
-    response: Literal["not_contacted", "awaiting", "agreed", "declined"] = "not_contacted"
+    response: Literal["not_contacted", "awaiting", "agreed", "declined", "other_time", "reconfirm"] = "not_contacted"
     availability_snapshot: list[StudentAvailabilitySlot] = Field(default_factory=list)
+    note: str = Field(default="", max_length=500)
 
 
 class PotentialGroupSlot(BaseModel):
@@ -1257,13 +1261,26 @@ class PotentialGroupSlot(BaseModel):
         return self
 
 
+class PotentialSchedulePreview(BaseModel):
+    location_id: UUID | None = None
+    slots: list[PotentialGroupSlot] = Field(max_length=7)
+
+
 class PotentialGroupProposalWrite(BaseModel):
     members: list[PotentialGroupMember] = Field(min_length=1, max_length=8)
-    slots: list[PotentialGroupSlot] = Field(min_length=1, max_length=14)
+    slots: list[PotentialGroupSlot] = Field(min_length=1, max_length=672)
+    selected_slots: list[PotentialGroupSlot] = Field(default_factory=list, max_length=7)
+    version: int | None = Field(default=None, ge=1)
     stale: bool = False
 
     @model_validator(mode="after")
     def unique_members(self):
+        days = [slot.weekday for slot in self.selected_slots]
+        if len(days) != len(set(days)):
+            raise ValueError("Оберіть лише одне заняття на кожен день")
+        for slot in self.selected_slots:
+            if (slot.end_time.hour * 60 + slot.end_time.minute) - (slot.start_time.hour * 60 + slot.start_time.minute) != 60:
+                raise ValueError("Заняття має тривати 60 хвилин")
         ids = [item.student_id for item in self.members]
         if len(ids) != len(set(ids)):
             raise ValueError("Duplicate students are not allowed")
@@ -1274,6 +1291,8 @@ class PotentialGroupProposalWrite(BaseModel):
 
 
 class PotentialGroupProposalRead(PotentialGroupProposalWrite):
+    schedule_history: list[dict] = Field(default_factory=list)
+    formed_group_id: UUID | None = None
     id: UUID
     created_at: datetime
     updated_at: datetime

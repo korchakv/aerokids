@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DateTimeEditor, DurationSelect, ScheduleSlotEditor, type DraftScheduleSlot } from "../../components/ScheduleEditors";
 import type { EntityId, Lead } from "../leads/model";
 import type { GroupItem } from "../groups/types";
@@ -6,6 +6,8 @@ import type { LessonItem } from "../teaching/model";
 import { dateValue, localDateInput } from "../../utils/date";
 
 type ScheduleViewProps = {
+  initialSchedule?: DraftScheduleSlot[] | null;
+  onPrefillConsumed?: () => void;
   groups: GroupItem[];
   lessonsThisWeek: LessonItem[];
   trialsThisWeek: Lead[];
@@ -42,10 +44,12 @@ type ScheduleViewProps = {
   scheduleTime: string;
   scheduleDuration: number;
   onScheduleGroupChange: (groupId: EntityId) => void;
-  onCreateGroupSchedule: (slots: DraftScheduleSlot[]) => Promise<boolean>;
+  onCreateGroupSchedule: (slots: DraftScheduleSlot[], startsOn?: string) => Promise<boolean>;
 };
 
 export function ScheduleView({
+  initialSchedule,
+  onPrefillConsumed,
   groups,
   lessonsThisWeek,
   trialsThisWeek,
@@ -83,6 +87,16 @@ export function ScheduleView({
   onCreateGroupSchedule,
 }: ScheduleViewProps) {
   const [scheduleCreateOpen, setScheduleCreateOpen] = useState(false);
+  const [startsOn, setStartsOn] = useState(localDateInput(new Date()));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (initialSchedule) {
+      setScheduleSlots(initialSchedule);
+      setScheduleCreateMode("recurring");
+      setScheduleCreateOpen(true);
+      onPrefillConsumed?.();
+    }
+  }, [initialSchedule]);
   const [scheduleCreateMode, setScheduleCreateMode] = useState<"lesson" | "recurring">("lesson");
   const [scheduleSlots, setScheduleSlots] = useState<DraftScheduleSlot[]>([{ weekday: scheduleWeekday, start_time: scheduleTime, duration_minutes: scheduleDuration }]);
 
@@ -92,7 +106,10 @@ export function ScheduleView({
       setScheduleCreateOpen(false);
       return;
     }
-    if (await onCreateGroupSchedule(scheduleSlots)) setScheduleCreateOpen(false);
+    if (saving) return;
+    setSaving(true);
+    try { if (await onCreateGroupSchedule(scheduleSlots, startsOn)) setScheduleCreateOpen(false); }
+    finally { setSaving(false); }
   };
 
   return <section className="scheduleWorkspace" data-testid="schedule-workspace">
@@ -230,11 +247,12 @@ export function ScheduleView({
           <DurationSelect value={newLessonDuration} onChange={onNewLessonDurationChange} />
           <label>Тема<input value={newLessonTopic} onChange={(event) => onNewLessonTopicChange(event.target.value)} placeholder="Можна заповнити пізніше в журналі" /></label>
         </> : <>
+          <label>Дата початку<input type="date" value={startsOn} min={localDateInput(new Date())} onChange={(e) => setStartsOn(e.target.value)} /></label>
           <ScheduleSlotEditor value={scheduleSlots} onChange={setScheduleSlots} />
         </>}
         {groups.length === 0 && <div className="emptyState compactEmpty">Спочатку створіть групу, щоб додати заняття або розклад.</div>}
-        <button type="button" className="primary full" disabled={groups.length === 0 || (scheduleCreateMode === "lesson" ? !newLessonGroupId : !scheduleGroupId || scheduleSlots.length === 0)} onClick={() => { void submitScheduleCreation(); }}>
-          {scheduleCreateMode === "lesson" ? "Створити заняття" : "Додати регулярний розклад"}
+        <button type="button" className="primary full" disabled={saving || (scheduleCreateMode === "recurring" && !startsOn) || groups.length === 0 || (scheduleCreateMode === "lesson" ? !newLessonGroupId : !scheduleGroupId || scheduleSlots.length === 0)} onClick={() => { void submitScheduleCreation(); }}>
+          {saving ? "Зберігаємо…" : scheduleCreateMode === "lesson" ? "Створити заняття" : "Додати регулярний розклад"}
         </button>
       </div>
     </div>}

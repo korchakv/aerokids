@@ -1,3 +1,4 @@
+import type { PotentialGroupProposal } from "./potentialGroups";
 // Stage 2 modular groups workspace; state and business actions remain in App.
 import { availabilityLabel } from "../leads/availability";
 import type { EntityId, Lead } from "../leads/model";
@@ -43,7 +44,7 @@ type GroupsViewProps = {
   teacherNameForGroup: (groupId: EntityId) => string | undefined;
   onOpenGroup: (groupId: EntityId) => void;
   onOpenCreation: (context: "groups" | "candidates") => void;
-  onCreateGroupFromProposal: (studentIds: EntityId[]) => void;
+  onCreateGroupFromProposal: (studentIds: EntityId[], proposal: PotentialGroupProposal) => void;
   onToggleCandidate: (studentId: EntityId) => void;
   onCandidateAgeFilterChange: (value: CandidateAgeFilter) => void;
   onCandidateLevelFilterChange: (value: string) => void;
