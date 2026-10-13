@@ -231,6 +231,7 @@ class StudentRead(ORMModel):
     phone: str | None
     birth_date: date | None
     age_at_inquiry: int | None
+    school_shift: Literal["first", "second", "other"] | None = None
     source: str | None
     preferred_location_id: UUID | None
     crm_status: CrmStatus
@@ -1191,12 +1192,14 @@ class StudentAvailabilitySlot(BaseModel):
 
 class StudentPreferencesUpdate(BaseModel):
     preferred_location_id: UUID | None = None
+    school_shift: Literal["first", "second", "other"] | None = None
     availability: list[StudentAvailabilitySlot] = Field(default_factory=list)
 
 
 class StudentPreferencesRead(BaseModel):
     preferred_location_id: UUID | None
     preferred_location_name: str | None
+    school_shift: Literal["first", "second", "other"] | None = None
     availability: list[StudentAvailabilitySlot]
 
 
@@ -1232,6 +1235,51 @@ class GroupMatchPreviewResponse(BaseModel):
     students: list[StudentScheduleMatch]
 
 
+class PotentialGroupMember(BaseModel):
+    student_id: UUID
+    response: Literal["not_contacted", "awaiting", "agreed", "declined"] = "not_contacted"
+    availability_snapshot: list[StudentAvailabilitySlot] = Field(default_factory=list)
+
+
+class PotentialGroupSlot(BaseModel):
+    weekday: int = Field(ge=0, le=6)
+    start_time: time
+    end_time: time
+    exact_match: bool = False
+
+    _start_quarter = field_validator("start_time")(validate_quarter_hour)
+    _end_quarter = field_validator("end_time")(validate_quarter_hour)
+
+    @model_validator(mode="after")
+    def valid_time_range(self):
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be after start_time")
+        return self
+
+
+class PotentialGroupProposalWrite(BaseModel):
+    members: list[PotentialGroupMember] = Field(min_length=1, max_length=8)
+    slots: list[PotentialGroupSlot] = Field(min_length=1, max_length=14)
+    stale: bool = False
+
+    @model_validator(mode="after")
+    def unique_members(self):
+        ids = [item.student_id for item in self.members]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Duplicate students are not allowed")
+        slots = [(slot.weekday, slot.start_time) for slot in self.slots]
+        if len(slots) != len(set(slots)):
+            raise ValueError("Duplicate potential group time options are not allowed")
+        return self
+
+
+class PotentialGroupProposalRead(PotentialGroupProposalWrite):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 class LeadListItem(BaseModel):
     student_id: UUID
     created_at: datetime
@@ -1239,6 +1287,7 @@ class LeadListItem(BaseModel):
     last_name: str | None
     student_phone: str | None
     age: int | None
+    school_shift: Literal["first", "second", "other"] | None = None
     source: str | None
     comment: str | None
     preferred_location_id: UUID | None

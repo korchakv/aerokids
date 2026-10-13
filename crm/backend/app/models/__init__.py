@@ -5,6 +5,7 @@ from app.models.core import (
     LeadComment,
     Location,
     Organization,
+    PotentialGroupProposal,
     Student,
     StudentContact,
     TrialLesson,
@@ -33,6 +34,7 @@ from app.models.hardening_extensions import (
 
 __all__ = [
     "Organization",
+    "PotentialGroupProposal",
     "Location",
     "Contact",
     "Student",

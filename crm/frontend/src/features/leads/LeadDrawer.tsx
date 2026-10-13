@@ -50,6 +50,7 @@ export type LeadDrawerProps = {
   leadEditSaving: boolean;
   preferenceMode: boolean;
   preferenceLocationId: EntityId | "";
+  preferenceSchoolShift: "first" | "second" | "other" | "";
   availabilityWindows: AvailabilityWindowDraft[];
   preferenceSaving: boolean;
   activeLocations: LocationDemo[];
@@ -91,6 +92,7 @@ export type LeadDrawerProps = {
   setLeadEditSource: Setter<string>;
   setPreferenceMode: Setter<boolean>;
   setPreferenceLocationId: Setter<EntityId | "">;
+  setPreferenceSchoolShift: Setter<"first" | "second" | "other" | "">;
   setAvailabilityWindows: Setter<AvailabilityWindowDraft[]>;
   setTrialMode: Setter<"schedule" | "complete" | null>;
   setTrialAt: Setter<string>;
@@ -156,6 +158,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
     leadEditSaving,
     preferenceMode,
     preferenceLocationId,
+    preferenceSchoolShift,
     availabilityWindows,
     preferenceSaving,
     activeLocations,
@@ -197,6 +200,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
     setLeadEditSource,
     setPreferenceMode,
     setPreferenceLocationId,
+    setPreferenceSchoolShift,
     setAvailabilityWindows,
     setTrialMode,
     setTrialAt,
@@ -378,12 +382,14 @@ export function LeadDrawer(props: LeadDrawerProps) {
           <div className="preferenceSummary">
             <div><span>Бажана локація</span><b>{selected.preferredLocationName ?? "Не вказано"}</b></div>
             <div><span>Бажаний час</span><b>{availabilityLabel(selected.availability ?? [])}</b></div>
+            <div><span>Шкільна зміна</span><b>{preferenceSchoolShift === "first" ? "І зміна" : preferenceSchoolShift === "second" ? "ІІ зміна" : preferenceSchoolShift === "other" ? "Інше" : "Не вказано"}</b></div>
             <button className="search" onClick={() => setPreferenceMode((value) => !value)}>{preferenceMode ? "Скасувати" : "Змінити"}</button>
           </div>
 
           {preferenceMode && <div className="workflowBox">
             <div className="workflowHead"><h3>Побажання щодо графіка</h3><button onClick={() => setPreferenceMode(false)}>×</button></div>
             <p className="softPreferenceHint">В одному записі можна вибрати кілька днів і один часовий проміжок, наприклад Пн / Ср / Пт · 17:00–19:00. Для іншого дня або іншого часу додайте ще один запис.</p>
+            <label>Шкільна зміна<select value={preferenceSchoolShift} onChange={(event) => setPreferenceSchoolShift(event.target.value as "first" | "second" | "other" | "")}><option value="">Не вказано</option><option value="first">І зміна</option><option value="second">ІІ зміна</option><option value="other">Інше</option></select></label>
             {activeLocations.length === 1
               ? <label>Бажана локація<div className="singleLocationField">{activeLocations[0].name}</div></label>
               : <label>Бажана локація<select value={preferenceLocationId} onChange={(e) => setPreferenceLocationId(e.target.value)}>

@@ -345,6 +345,7 @@ function App() {
   const [closeNote, setCloseNote] = useState("");
   const [preferenceMode, setPreferenceMode] = useState(false);
   const [preferenceLocationId, setPreferenceLocationId] = useState<EntityId | "">("");
+  const [preferenceSchoolShift, setPreferenceSchoolShift] = useState<"first" | "second" | "other" | "">("");
   const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindowDraft[]>([]);
   const [preferenceSaving, setPreferenceSaving] = useState(false);
   const [trialAt, setTrialAt] = useState(() => `${localDateInput(new Date())}T17:00`);
@@ -1226,6 +1227,7 @@ function App() {
     setCloseReason(lead?.closeReason ?? "schedule");
     setCloseNote(lead?.closeNote ?? "");
     setPreferenceLocationId(lead?.preferredLocationId ?? "");
+    setPreferenceSchoolShift(lead?.schoolShift ?? "");
     setAvailabilityWindows(groupAvailabilitySlots(lead?.availability ?? []));
   };
 
@@ -1661,6 +1663,7 @@ function App() {
     try {
       await apiPut(`/students/${selected.id}/preferences`, {
         preferred_location_id: preferenceLocationId || null,
+        school_shift: preferenceSchoolShift || null,
         availability: flattenAvailabilityWindows(availabilityWindows),
       }, session);
       await syncWorkspace(session);
@@ -3544,6 +3547,9 @@ function App() {
         {active === "Групи" && <GroupsView
           groups={registryGroups}
           waiting={waiting}
+          leads={leads}
+          session={session}
+          canManage={canManageLeads}
           visibleWaiting={visibleWaiting}
           candidateLevels={candidateLevels}
           locations={locations}
@@ -3569,6 +3575,10 @@ function App() {
           teacherNameForGroup={(groupId) => groupTeacher(groupId)?.fullName}
           onOpenGroup={(groupId) => { void openGroup(groupId); }}
           onOpenCreation={openGroupCreation}
+          onCreateGroupFromProposal={(studentIds) => {
+            setSelectedCandidates(studentIds);
+            openGroupCreation("candidates");
+          }}
           onToggleCandidate={toggleCandidate}
           onCandidateAgeFilterChange={setCandidateAgeFilter}
           onCandidateLevelFilterChange={setCandidateLevelFilter}
@@ -3886,6 +3896,7 @@ function App() {
         leadEditSaving,
         preferenceMode,
         preferenceLocationId,
+        preferenceSchoolShift,
         availabilityWindows,
         preferenceSaving,
         activeLocations,
@@ -3926,6 +3937,7 @@ function App() {
         setLeadEditSource,
         setPreferenceMode,
         setPreferenceLocationId,
+        setPreferenceSchoolShift,
         setAvailabilityWindows,
         setTrialMode,
         setTrialAt,

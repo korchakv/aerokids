@@ -7,12 +7,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import OrgAccess, get_current_user, get_db, get_org_access, get_org_id, require_org_access_roles, require_org_roles
 from app.models.core import Organization, PaymentStatus, StaffRole, User
 from app.schemas import AttendanceBulkUpdate, AttendanceRead, AuditEventRead, ContactCreate, ContactRead, EnrollmentCreate, EnrollmentRead, GroupCreate, GroupDetail, GroupFormationCreate, GroupFormationResult, GroupMatchPreviewRequest, GroupMatchPreviewResponse, GroupOverviewItem, GroupRead, GroupRosterStudent, GroupScheduleCreate, GroupScheduleBatchCreate, GroupUpdate, GroupScheduleRead, IntakeCreate, IntakeDuplicateCheck, IntakeDuplicateResult, IntakeResult, LeadDeferUpdate, LeadDetailsUpdate, LeadListItem, LeadOutcomeUpdate, LessonSessionCreate, LessonSessionRead, LessonSessionUpdate, LocationCreate, LocationRead, LocationUpdate, OrganizationCreate, OrganizationMembershipCreate, OrganizationMembershipRead, OrganizationRead, OrganizationUpdate, OverviewReport, BillingRenewalResult, BillingRenewalRun, PaymentAdjustmentCreate, PaymentCancel, PaymentCreate, PaymentMarkPaid, PaymentPage, PaymentRead, PaymentReceiptCreate, PaymentRefundCreate, PaymentReminderCandidate, PaymentReminderMark, PaymentSummary, PaymentTransactionRead, SubscriptionChargeCreate, SubscriptionChargeResult, StaffAssignmentInfo, StaffCreate, StaffGroupAssignment, StaffLocationAssignment, StaffProfile, StaffRead, StaffUpdate, StudentAttendanceHistoryItem, StudentContactCreate, StudentCreate, StudentDetail, StudentGroupInfo, StudentLifecycleUpdate, StudentPreferencesRead, StudentPreferencesUpdate, StudentProfile, StudentRead, StudentStatusUpdate, StudentSubscriptionCreate, StudentSubscriptionRead, StudentTransfer, SubscriptionAutoRenewUpdate, SubscriptionPauseCreate, SubscriptionPauseRead, SubscriptionResumeCreate, StudentOverviewItem, SubscriptionPlanChangeCreate, SubscriptionPlanChangeResult, SubscriptionPlanCreate, SubscriptionPlanRead, SubscriptionPlanUpdate, TrialLessonComplete, TrialLessonCreate, TrialLessonRead, TrialLessonUpdate, WaitingCandidate
-from app.schemas import LeadCommentCreate, LeadCommentRead, LeadCommentUpdate
+from app.schemas import LeadCommentCreate, LeadCommentRead, LeadCommentUpdate, PotentialGroupProposalRead, PotentialGroupProposalWrite
 from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, billing_service, contact_service, crm, group_service, location_service, organization_service, reporting_service, staff_service, student_service, trial_service
+from app.services import audit_service, billing_service, contact_service, crm, group_service, location_service, organization_service, potential_group_service, reporting_service, staff_service, student_service, trial_service
 
 router = APIRouter()
 
@@ -461,6 +461,21 @@ def form_group(data: GroupFormationCreate, access: OrgAccess = Depends(require_o
 @router.post("/groups/match-preview", response_model=GroupMatchPreviewResponse)
 def preview_group_matches(data: GroupMatchPreviewRequest, org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
     return {"students": crm.preview_group_matches(db, org_id, data)}
+
+
+@router.get("/groups/potential-proposals", response_model=list[PotentialGroupProposalRead])
+def list_potential_group_proposals(org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
+    return potential_group_service.list_proposals(db, org_id)
+
+
+@router.post("/groups/potential-proposals", response_model=PotentialGroupProposalRead, status_code=201)
+def create_potential_group_proposal(data: PotentialGroupProposalWrite, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
+    return potential_group_service.create_proposal(db, access.organization_id, access.user_id, data)
+
+
+@router.put("/groups/potential-proposals/{proposal_id}", response_model=PotentialGroupProposalRead)
+def update_potential_group_proposal(proposal_id: UUID, data: PotentialGroupProposalWrite, access: OrgAccess = Depends(require_org_access_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)), db: Session = Depends(get_db)):
+    return potential_group_service.update_proposal(db, access.organization_id, proposal_id, access.user_id, data)
 
 
 @router.post("/students/{student_id}/enroll-without-group", response_model=StudentRead)
