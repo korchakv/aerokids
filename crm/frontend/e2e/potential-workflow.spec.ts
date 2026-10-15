@@ -7,7 +7,7 @@ test("potential groups keep one selected schedule and require renewed consent", 
   await page.getByLabel("Пароль").fill("smoke-test-password-123");
   await page.getByRole("button", { name: "Увійти" }).click();
   await expect(page.getByText("Дашборд", { exact: true }).first()).toBeVisible();
-  const suffix = randomUUID().replace(/[^a-z]/g, "");
+  const suffix = randomUUID();
   const names = [`Підбір Анна ${suffix}`, `Підбір Богдан ${suffix}`];
   await page.evaluate(async (names) => {
     const session = JSON.parse(sessionStorage.getItem("school-crm-session")!);
@@ -35,7 +35,7 @@ test("potential groups keep one selected schedule and require renewed consent", 
   }, names);
   await page.reload();
   await page.getByText("Групи", { exact: true }).first().click();
-  const card = page.getByTestId("potential-proposal").filter({ hasText: names[0] });
+  const card = page.getByTestId("potential-proposal").filter({ hasText: names[0] }).first();
   await expect(card).toBeVisible();
   await expect(card.getByText("Середа 08:00–11:00", { exact: true })).toBeVisible();
   await expect(card.locator(".potentialSelected")).toContainText("П’ятниця 08:00–09:00");
