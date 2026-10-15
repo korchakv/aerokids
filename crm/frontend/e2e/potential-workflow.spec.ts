@@ -44,7 +44,7 @@ test("potential groups keep one selected schedule and require renewed consent", 
   await card.getByRole("button", { name: "Зберегти пропозицію" }).click();
   await expect(card.getByRole("button", { name: "Створити групу · 2 погоджених" })).toBeEnabled();
   await card.getByRole("button", { name: "Редагувати графік" }).click();
-  await card.getByLabel("Початок", { exact: true }).first().selectOption("09:00");
+  await card.locator(".potentialProposalSlot").first().locator("select").nth(1).selectOption("09:00");
   await expect(card.getByRole("button", { name: "Створити групу · 0 погоджених" })).toBeDisabled();
   await card.getByRole("button", { name: "Зберегти пропозицію" }).click();
   await expect(card.getByText("Збережено", { exact: true })).toBeVisible();
@@ -66,7 +66,7 @@ test("potential groups keep one selected schedule and require renewed consent", 
   await dialog.getByRole("button", { name: "Створити групу і зарахувати" }).click();
   const schedule = page.getByRole("dialog", { name: "Додати заняття або розклад" });
   await expect(schedule).toBeVisible();
-  await expect(schedule.getByLabel("Початок", { exact: true })).toHaveCount(2);
+  await expect(schedule.locator(".slotRow > label:nth-of-type(2) select")).toHaveCount(2);
   await expect(schedule.getByLabel("Дата початку")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy();
 });
