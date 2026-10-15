@@ -18,24 +18,27 @@ test("potential groups keep one selected schedule and require renewed consent", 
       return response.json();
     };
     const availability = [2, 4].map((weekday) => ({ weekday, start_time: "08:00", end_time: "11:00", preference: "preferred" }));
+    const ids = [];
     for (const name of names) {
       const student = await request("/students", "POST", { first_name: name, age_at_inquiry: 11 });
       await request(`/students/${student.id}/lead-outcome`, "PATCH", { crm_status: "waiting_for_group" });
       const preferences = await request(`/students/${student.id}/preferences`, "PUT", { preferred_location_id: null, availability });
       if (preferences.availability.length !== availability.length) throw new Error("Не збереглися всі тестові дні доступності");
+      ids.push(student.id);
     }
+    const selectedSlots = availability.map((slot) => ({ ...slot, end_time: "09:00", exact_match: true }));
+    await request("/groups/potential-proposals", "POST", {
+      members: ids.map((student_id) => ({ student_id, response: "not_contacted", availability_snapshot: availability })),
+      slots: selectedSlots,
+      selected_slots: selectedSlots,
+    });
   }, names);
   await page.reload();
   await page.getByText("Групи", { exact: true }).first().click();
-  await page.getByRole("button", { name: "Підібрати групи", exact: true }).click();
   const card = page.getByTestId("potential-proposal").filter({ hasText: names[0] });
   await expect(card).toBeVisible();
   await expect(card.getByText("Середа 08:00–11:00", { exact: true })).toBeVisible();
-  await expect(card.locator(".potentialProposalSlots select")).toHaveCount(0);
-  await card.getByRole("button", { name: "Обрати графік", exact: true }).click();
-  await expect(card.getByLabel("Початок", { exact: true })).toHaveCount(2);
-  await card.getByRole("button", { name: "Зберегти пропозицію" }).click();
-  await expect(card.getByText("Збережено", { exact: true })).toBeVisible();
+  await expect(card.locator(".potentialSelected")).toContainText("П’ятниця 08:00–09:00");
   await card.locator(".potentialPeople > summary").first().click();
   for (const name of names) await card.getByLabel(`Відповідь батьків: ${name}`, { exact: true }).selectOption("agreed");
   await card.getByRole("button", { name: "Зберегти пропозицію" }).click();
