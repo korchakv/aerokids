@@ -589,6 +589,9 @@ def reconcile_group_future_sessions(
         if current < today:
             current += timedelta(days=7)
         while current <= end_date:
+            if slot.starts_on and current < slot.starts_on:
+                current += timedelta(days=7)
+                continue
             local_start = datetime.combine(current, slot.start_time).replace(tzinfo=tz)
             starts_at = local_start.astimezone(timezone.utc)
             existing = db.scalar(select(LessonSession).where(

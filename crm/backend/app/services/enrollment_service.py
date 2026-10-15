@@ -165,11 +165,43 @@ def form_group(db: Session, org_id: UUID, data, actor_user_id: UUID | None = Non
     if len(data.student_ids) > data.capacity:
         raise HTTPException(status_code=422, detail="Selected students exceed group capacity")
 
+    proposal = None
+    if data.proposal_id:
+        from app.models.core import PotentialGroupProposal
+        proposal = db.scalar(select(PotentialGroupProposal).where(
+            PotentialGroupProposal.id == data.proposal_id,
+            PotentialGroupProposal.organization_id == org_id,
+        ).with_for_update())
+        if proposal is None or proposal.formed_group_id or proposal.version != data.proposal_version:
+            raise HTTPException(status_code=409, detail="Пропозиція змінилася або групу вже створено. Оновіть список")
+        if len(proposal.selected_slots) < 2 or proposal.stale:
+            raise HTTPException(status_code=409, detail="Перевірте й збережіть погоджений графік")
+        from app.schemas import PotentialSchedulePreview
+        from app.services.potential_group_service import preview_conflicts
+        conflicts = preview_conflicts(db, org_id, PotentialSchedulePreview(location_id=data.location_id, slots=proposal.selected_slots))
+        if conflicts:
+            raise HTTPException(status_code=409, detail=conflicts[0])
+        agreed = {m["student_id"] for m in proposal.members if m["response"] == "agreed"}
+        if len(data.student_ids) < 2 or any(str(sid) not in agreed for sid in data.student_ids):
+            raise HTTPException(status_code=409, detail="Оберіть щонайменше двох погоджених учнів")
+
     students: list[Student] = []
     for student_id in data.student_ids:
-        student = scoped_get(db, Student, org_id, student_id)
+        student = db.scalar(select(Student).where(Student.id == student_id, Student.organization_id == org_id).with_for_update())
+        if student is None:
+            raise HTTPException(status_code=404, detail="Учня не знайдено")
         if student.crm_status != CrmStatus.WAITING_FOR_GROUP:
             raise HTTPException(status_code=409, detail=f"Student {student_id} is not waiting for a group")
+        if proposal is not None:
+            if student.student_status != StudentStatus.PROSPECT:
+                raise HTTPException(status_code=409, detail="Стан учня змінився. Перевірте заявку")
+            member = next(m for m in proposal.members if m["student_id"] == str(student.id))
+            windows = list(db.scalars(select(StudentAvailability).where(StudentAvailability.student_id == student.id, StudentAvailability.organization_id == org_id)))
+            def snapshot_key(items):
+                return sorted((w["weekday"], str(w["start_time"])[:5], str(w["end_time"])[:5], w.get("preference") or "preferred") for w in items)
+            actual = [{"weekday": w.weekday, "start_time": w.start_time, "end_time": w.end_time, "preference": w.preference} for w in windows]
+            if snapshot_key(actual) != snapshot_key(member.get("availability_snapshot", [])):
+                raise HTTPException(status_code=409, detail="Побажання учня змінилися. Повторно погодьте графік")
         students.append(student)
 
     group = Group(
@@ -183,6 +215,9 @@ def form_group(db: Session, org_id: UUID, data, actor_user_id: UUID | None = Non
     db.add(group)
     try:
         db.flush()
+        if proposal is not None:
+            proposal.formed_group_id = group.id
+            proposal.version += 1
         schedule_keys: set[tuple[int, str]] = set()
         for slot in data.schedule_slots:
             key = (slot.weekday, slot.start_time)

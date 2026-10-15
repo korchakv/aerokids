@@ -1,140 +1,94 @@
 import type { Lead } from "../leads/model";
-import type { AvailabilitySlot } from "../../components/ScheduleEditors";
 import type { PotentialGroupMemberDraft, PotentialGroupSlotDraft } from "./potentialGroups";
 
-const LESSON_MINUTES = 60;
-
-function toMinutes(value: string) {
-  const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
-  return hours * 60 + minutes;
-}
-
-function clock(value: number) {
-  const normalized = ((value % 1440) + 1440) % 1440;
-  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
-}
+export const DAYS = ["Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя"];
+export const toMinutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+export const clock = (value: number) => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+export const memberKey = (members: PotentialGroupMemberDraft[]) => members.map((m) => m.student_id).sort().join("|");
+export const slotLabel = (slot: PotentialGroupSlotDraft) => `${DAYS[slot.weekday]} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`;
 
 export function availabilitySnapshot(lead: Lead) {
   return (lead.availability ?? []).map((item) => ({
-    weekday: item.weekday,
-    start_time: item.start_time.slice(0, 5),
-    end_time: item.end_time.slice(0, 5),
-    preference: item.preference ?? "preferred",
-    note: item.note ?? null,
-  })).sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time) || a.end_time.localeCompare(b.end_time));
+    weekday: item.weekday, start_time: item.start_time.slice(0, 5), end_time: item.end_time.slice(0, 5),
+    preference: item.preference ?? "preferred", note: item.note ?? null,
+  })).sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time) || a.end_time.localeCompare(b.end_time) || a.preference.localeCompare(b.preference));
 }
 
-export function generatePotentialGroups(waiting: Lead[], toleranceHours = 2): Array<{ members: PotentialGroupMemberDraft[]; slots: PotentialGroupSlotDraft[] }> {
-  const withAvailability = waiting.filter((lead) => (lead.availability ?? []).some((slot) => slot.preference !== "avoid"));
-  const toleranceMinutes = Math.max(0, Math.min(4, toleranceHours)) * 60;
+export function matchSlot(lead: Lead | undefined, slot: PotentialGroupSlotDraft, toleranceHours = 2): "preferred" | "possible" | "approximate" | "conflict" | "unknown" {
+  if (!lead || !(lead.availability ?? []).some((w) => w.preference !== "avoid")) return "unknown";
+  const start = toMinutes(slot.start_time), end = toMinutes(slot.end_time);
+  const windows = (lead.availability ?? []).filter((w) => w.weekday === slot.weekday);
+  if (windows.some((w) => w.preference === "avoid" && start < toMinutes(w.end_time) && end > toMinutes(w.start_time))) return "conflict";
+  const fits = windows.filter((w) => w.preference !== "avoid" && start >= toMinutes(w.start_time) && end <= toMinutes(w.end_time));
+  if (fits.some((w) => w.preference !== "possible")) return "preferred";
+  if (fits.length) return "possible";
+  if (windows.some((w) => w.preference !== "avoid" && start >= toMinutes(w.start_time) - toleranceHours * 60 && end <= toMinutes(w.end_time) + toleranceHours * 60)) return "approximate";
+  return "conflict";
+}
+
+export function commonSlots(leads: Lead[], toleranceHours = 2): PotentialGroupSlotDraft[] {
+  if (!leads.length) return [];
+  const slots: PotentialGroupSlotDraft[] = [];
+  for (let weekday = 0; weekday < 7; weekday++) {
+    for (let start = 8 * 60; start <= 21 * 60; start += 15) {
+      const slot = { weekday, start_time: clock(start), end_time: clock(start + 60), exact_match: false };
+      const matches = leads.map((lead) => matchSlot(lead, slot, toleranceHours));
+      if (matches.every((m) => m !== "unknown" && m !== "conflict")) slots.push({ ...slot, exact_match: matches.every((m) => m !== "approximate") });
+    }
+  }
+  return slots;
+}
+
+export function availabilityRanges(slots: PotentialGroupSlotDraft[]) {
+  const ranges: PotentialGroupSlotDraft[] = [];
+  for (const slot of [...slots].sort((a, b) => a.weekday - b.weekday || Number(b.exact_match) - Number(a.exact_match) || a.start_time.localeCompare(b.start_time))) {
+    const last = ranges[ranges.length - 1];
+    // Merge only adjacent valid starts, never bridge a gap or an avoided period.
+    if (last && last.weekday === slot.weekday && last.exact_match === slot.exact_match && toMinutes(slot.start_time) <= toMinutes(last.end_time) - 45) last.end_time = slot.end_time;
+    else ranges.push({ ...slot });
+  }
+  return ranges;
+}
+
+export function suggestedSchedule(slots: PotentialGroupSlotDraft[]) {
+  const best = [...slots].sort((a, b) => Number(b.exact_match) - Number(a.exact_match) || a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
+  const chosen: PotentialGroupSlotDraft[] = [];
+  for (const slot of best) if (!chosen.some((s) => s.weekday === slot.weekday) && chosen.length < 2) chosen.push(slot);
+  return chosen.sort((a, b) => a.weekday - b.weekday);
+}
+
+export function generatePotentialGroups(candidates: Lead[], toleranceHours = 2, ageSpread = 3): Array<{ members: PotentialGroupMemberDraft[]; slots: PotentialGroupSlotDraft[] }> {
+  const eligible = candidates.filter((lead) => lead.age > 0 && (lead.availability ?? []).some((slot) => slot.preference !== "avoid"));
   const byMembers = new Map<string, { members: PotentialGroupMemberDraft[]; slots: PotentialGroupSlotDraft[] }>();
-
-  for (let weekday = 0; weekday < 7; weekday += 1) {
-    for (let start = 8 * 60; start <= 20 * 60 + 45; start += 30) {
-      const compatible = withAvailability.map((lead) => {
-        const windows = (lead.availability ?? []).filter((slot) => slot.weekday === weekday && slot.preference !== "avoid");
-        const windowsForStart = windows.filter((window) => {
-          const from = toMinutes(window.start_time);
-          const until = toMinutes(window.end_time);
-          return start >= from - toleranceMinutes && start <= until - LESSON_MINUTES + toleranceMinutes;
-        });
-        if (!windowsForStart.length) return null;
-        const exact = windowsForStart.some((window) => start >= toMinutes(window.start_time) && start + LESSON_MINUTES <= toMinutes(window.end_time));
-        return { lead, exact };
-      }).filter((item): item is { lead: Lead; exact: boolean } => Boolean(item));
-
-      if (compatible.length < 2) continue;
-      compatible.sort((a, b) => Number(b.exact) - Number(a.exact) || a.lead.child.localeCompare(b.lead.child, "uk-UA"));
-
-      // Prefer balanced, non-overlapping groups; then retain overlapping alternatives.
-      const slices: typeof compatible[] = [];
-      const groupCount = Math.ceil(compatible.length / 8);
-      const baseSize = Math.floor(compatible.length / groupCount);
-      const largerGroupCount = compatible.length % groupCount;
-      let cursor = 0;
-      for (let groupIndex = 0; groupIndex < groupCount; groupIndex += 1) {
-        const size = baseSize + (groupIndex < largerGroupCount ? 1 : 0);
-        const slice = compatible.slice(cursor, cursor + size);
-        cursor += size;
-        if (slice.length >= 2) slices.push(slice);
-      }
-      // Keep a few overlapping alternatives after the balanced first pass.
-      for (let offset = 0; offset + 2 < compatible.length && slices.length < 6; offset += 4) {
-        const slice = compatible.slice(offset, offset + 8);
-        if (slice.length >= 2) slices.push(slice);
-      }
-
-      for (const slice of slices) {
-        const ids = slice.map(({ lead }) => lead.id).sort();
-        const key = ids.join("|");
-        let proposal = byMembers.get(key);
-        if (!proposal) {
-          proposal = {
-            members: slice.map(({ lead }) => ({ student_id: lead.id, response: "not_contacted", availability_snapshot: availabilitySnapshot(lead) })),
-            slots: [],
-          };
-          byMembers.set(key, proposal);
-        }
-        if (proposal.slots.length < 14) {
-          const candidate = {
-            weekday,
-            start_time: clock(start),
-            end_time: clock(start + LESSON_MINUTES),
-            exact_match: slice.every((item) => item.exact),
-          };
-          if (!proposal.slots.some((slot) => slot.weekday === candidate.weekday && slot.start_time === candidate.start_time)) proposal.slots.push(candidate);
+  for (let weekday = 0; weekday < 7; weekday++) for (let start = 8 * 60; start <= 21 * 60; start += 15) {
+    const slot = { weekday, start_time: clock(start), end_time: clock(start + 60), exact_match: false };
+    const compatible = eligible.filter((lead) => !["unknown", "conflict"].includes(matchSlot(lead, slot, toleranceHours)));
+    const locations = [...new Set(compatible.map((lead) => lead.preferredLocationId).filter(Boolean))];
+    for (const location of locations.length ? locations : [undefined]) {
+      const local = compatible.filter((lead) => !lead.preferredLocationId || lead.preferredLocationId === location).sort((a, b) => a.age - b.age || a.id.localeCompare(b.id));
+      for (const age of [...new Set(local.map((l) => l.age))]) {
+        const sameAge = local.filter((l) => l.age >= age && l.age <= age + ageSpread);
+        const count = sameAge.length > 8 ? Math.ceil(sameAge.length / 6) : 1;
+        const size = Math.ceil(sameAge.length / count);
+        for (let i = 0; i < sameAge.length; i += Math.max(size, 1)) {
+          const group = sameAge.slice(i, i + size);
+          if (group.length < 2) continue;
+          const members = group.map((lead) => ({ student_id: lead.id, response: "not_contacted" as const, availability_snapshot: availabilitySnapshot(lead) }));
+          const key = memberKey(members);
+          if (!byMembers.has(key)) byMembers.set(key, { members, slots: [] });
+          const proposal = byMembers.get(key)!;
+          if (!proposal.slots.some((s) => s.weekday === weekday && s.start_time === slot.start_time)) proposal.slots.push({ ...slot, exact_match: group.every((lead) => ["preferred", "possible"].includes(matchSlot(lead, slot, toleranceHours))) });
         }
       }
     }
   }
-
-  return [...byMembers.values()]
-    .filter((proposal) => proposal.slots.length > 0)
-    .sort((a, b) => b.members.length - a.members.length || b.slots.filter((slot) => slot.exact_match).length - a.slots.filter((slot) => slot.exact_match).length)
-    .slice(0, 40);
+  const result = [...byMembers.values()];
+  return result.filter((p) => !result.some((other) => other.members.length > p.members.length && p.members.every((m) => other.members.some((n) => n.student_id === m.student_id)) && p.slots.every((s) => other.slots.some((t) => t.weekday === s.weekday && t.start_time === s.start_time && (!s.exact_match || t.exact_match)))))
+    .sort((a, b) => Math.min(2, new Set(b.slots.filter((s) => s.exact_match).map((s) => s.weekday)).size) - Math.min(2, new Set(a.slots.filter((s) => s.exact_match).map((s) => s.weekday)).size) || Math.abs(a.members.length - 6) - Math.abs(b.members.length - 6) || b.members.length - a.members.length)
+    .slice(0, 12);
 }
 
 export function hasAvailabilityChanged(snapshot: PotentialGroupMemberDraft["availability_snapshot"], lead: Lead | undefined) {
-  if (!lead || lead.status !== "Очікує групу") return true;
-  const normalizedSnapshot = snapshot.map((item) => ({
-    weekday: item.weekday,
-    start_time: item.start_time.slice(0, 5),
-    end_time: item.end_time.slice(0, 5),
-    preference: item.preference ?? "preferred",
-    note: item.note ?? null,
-  })).sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time) || a.end_time.localeCompare(b.end_time));
-  return JSON.stringify(normalizedSnapshot) !== JSON.stringify(availabilitySnapshot(lead));
-}
-
-export function findSharedDayNeedsCoordination(waiting: Lead[], toleranceHours = 2) {
-  const tolerance = Math.max(0, Math.min(4, toleranceHours)) * 60;
-  const pairs: Array<[Lead, Lead, number]> = [];
-  for (let firstIndex = 0; firstIndex < waiting.length; firstIndex += 1) {
-    const first = waiting[firstIndex];
-    for (let secondIndex = firstIndex + 1; secondIndex < waiting.length; secondIndex += 1) {
-      const second = waiting[secondIndex];
-      let closestGap = Number.POSITIVE_INFINITY;
-      let hasSharedDay = false;
-      let hasPossibleTime = false;
-      const dayWindows: Array<[AvailabilitySlot, AvailabilitySlot]> = [];
-      for (const a of first.availability ?? []) {
-        if (a.preference === "avoid") continue;
-        for (const b of second.availability ?? []) {
-          if (b.preference === "avoid" || a.weekday !== b.weekday) continue;
-          hasSharedDay = true;
-          dayWindows.push([a, b]);
-          const gap = Math.max(toMinutes(a.start_time) - toMinutes(b.end_time), toMinutes(b.start_time) - toMinutes(a.end_time), 0);
-          closestGap = Math.min(closestGap, gap);
-        }
-      }
-      if (hasSharedDay) {
-        for (let start = 8 * 60; start <= 20 * 60 + 45; start += 30) {
-          const accepts = (window: (typeof dayWindows)[number][0]) => start >= toMinutes(window.start_time) - tolerance && start <= toMinutes(window.end_time) - LESSON_MINUTES + tolerance;
-          if (dayWindows.some(([a, b]) => accepts(a) && accepts(b))) { hasPossibleTime = true; break; }
-        }
-      }
-      if (hasSharedDay && !hasPossibleTime) pairs.push([first, second, closestGap]);
-    }
-  }
-  return pairs.sort((a, b) => a[2] - b[2]);
+  if (!lead) return true;
+  return JSON.stringify(availabilitySnapshot({ ...lead, availability: snapshot })) !== JSON.stringify(availabilitySnapshot(lead));
 }

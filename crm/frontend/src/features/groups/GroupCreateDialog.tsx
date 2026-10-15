@@ -3,7 +3,7 @@ import { ScheduleSlotEditor, type DraftScheduleSlot } from "../../components/Sch
 import type { LocationDemo } from "../locations/types";
 import type { StaffDemo } from "../staff/model";
 import { candidateCompatibility } from "./matching";
-import { hasDuplicateSlots } from "./helpers";
+import { hasDuplicateSlots, scheduleDraftLabel } from "./helpers";
 import type { EntityId, Lead } from "../leads/model";
 
 type Setter<T> = Dispatch<SetStateAction<T>>;
@@ -11,6 +11,8 @@ type MaybePromise = void | Promise<void>;
 
 export type GroupCreateDialogProps = {
   open: boolean;
+  proposalSchedule?: DraftScheduleSlot[];
+  creating?: boolean;
   groupName: string;
   groupCapacity: number;
   groupLocationId: EntityId | "";
@@ -37,6 +39,8 @@ export type GroupCreateDialogProps = {
 
 export function GroupCreateDialog({
   open,
+  proposalSchedule,
+  creating,
   groupName,
   groupCapacity,
   groupLocationId,
@@ -93,7 +97,7 @@ export function GroupCreateDialog({
         <option value="">Призначити пізніше</option>
         {activeTeachers.map((teacher) => <option value={teacher.id} key={teacher.id}>{teacher.fullName}</option>)}
       </select></label>}
-      {!groupScheduleEnabled
+      {proposalSchedule ? <div className="groupCreateSchedulePrompt"><div><b>Погоджений графік</b><small>{scheduleDraftLabel(proposalSchedule)}</small><small>Після створення відкриється розклад для вибору дати початку.</small></div></div> : !groupScheduleEnabled
         ? <div className="groupCreateSchedulePrompt">
             <div><b>Розклад</b><small>Можна додати зараз або пізніше в розділі «Розклад».</small></div>
             <button className="groupCreateScheduleButton" type="button" aria-expanded={false} onClick={() => setGroupScheduleEnabled(true)}>+ Додати розклад</button>
@@ -106,14 +110,14 @@ export function GroupCreateDialog({
             <ScheduleSlotEditor value={groupSchedule} onChange={setGroupSchedule} />
           </div>}
       {selectedCandidates.length > 0 && <div className="selectedNames">{leads.filter((lead) => selectedCandidates.includes(lead.id)).map((lead) => {
-        const compatibility = candidateCompatibility(lead, groupScheduleEnabled ? groupSchedule : [], groupLocationId || null);
+        const compatibility = candidateCompatibility(lead, proposalSchedule ?? (groupScheduleEnabled ? groupSchedule : []), groupLocationId || null);
         return <span className={"candidateCompatibility " + compatibility.state} key={lead.id}>
           <b>{lead.child} · {lead.age}</b><small>{compatibility.icon} {compatibility.label}</small><small>{compatibility.detail}</small>
         </span>;
       })}</div>}
       {groupCreateError && <div className="groupCreateError">{groupCreateError}</div>}
-      <button className="primary full" disabled={!groupName.trim() || selectedCandidates.length > groupCapacity || (groupScheduleEnabled && hasDuplicateSlots(groupSchedule))} onClick={() => void onCreateGroup()}>
-        {!groupName.trim() ? "Вкажіть назву групи" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : groupScheduleEnabled && hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
+      <button className="primary full" disabled={creating || !groupName.trim() || selectedCandidates.length > groupCapacity || (groupScheduleEnabled && hasDuplicateSlots(groupSchedule))} onClick={() => void onCreateGroup()}>
+        {creating ? "Створюємо…" : !groupName.trim() ? "Вкажіть назву групи" : selectedCandidates.length > groupCapacity ? "Збільште місткість групи" : groupScheduleEnabled && hasDuplicateSlots(groupSchedule) ? "Приберіть однакові слоти" : selectedCandidates.length ? "Створити групу і зарахувати" : "Створити групу"}
       </button>
     </div>
   </div>;

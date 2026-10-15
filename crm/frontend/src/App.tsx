@@ -1,3 +1,4 @@
+import type { PotentialGroupProposal } from "./features/groups/potentialGroups";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UiIcon, navigationIcon } from "./components/UiIcon";
 import { AuditHistory } from "./components/AuditHistory";
@@ -363,6 +364,9 @@ function App() {
   const [groupLocationId, setGroupLocationId] = useState<EntityId | "">("");
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [groupCreateError, setGroupCreateError] = useState("");
+  const [groupProposal, setGroupProposal] = useState<PotentialGroupProposal | null>(null);
+  const [schedulePrefill, setSchedulePrefill] = useState<DraftScheduleSlot[] | null>(null);
+  const [groupCreating, setGroupCreating] = useState(false);
   const [locationReturnToGroup, setLocationReturnToGroup] = useState(false);
   const [groupCreateContext, setGroupCreateContext] = useState<"groups" | "candidates" | "lead">("groups");
   const [newGroupTeacherId, setNewGroupTeacherId] = useState<EntityId | "">("");
@@ -1676,6 +1680,7 @@ function App() {
   };
 
   const openGroupCreation = (context: "groups" | "candidates" | "lead") => {
+    setGroupProposal(null);
     setGroupCreateContext(context);
     if (context === "groups" || context === "lead") setSelectedCandidates([]);
     setGroupName("");
@@ -1705,7 +1710,7 @@ function App() {
 
   const createGroupFromCandidates = async () => {
     const normalizedGroupName = groupName.trim();
-    const scheduleSlots = groupScheduleEnabled ? groupSchedule : [];
+    const scheduleSlots = !groupProposal && groupScheduleEnabled ? groupSchedule : [];
     if (!normalizedGroupName || (groupScheduleEnabled && hasDuplicateSlots(scheduleSlots)) || selectedCandidates.length > groupCapacity) return;
     const duplicateName = groups.find((group) => group.name.trim().toLocaleLowerCase("uk-UA") === normalizedGroupName.toLocaleLowerCase("uk-UA"));
     if (duplicateName) {
@@ -1714,10 +1719,14 @@ function App() {
     }
     setGroupCreateError("");
     if (apiEnabled && session) {
+      if (groupCreating) return;
+      setGroupCreating(true);
       try {
         setWorkspaceError("");
         const created = await apiPost<{ group: { id: EntityId }; enrolled_student_ids: EntityId[] }>("/groups/form", {
           name: normalizedGroupName,
+          proposal_id: groupProposal?.id,
+          proposal_version: groupProposal?.version,
           capacity: groupCapacity,
           location_id: groupLocationId || null,
           min_age: null,
@@ -1734,6 +1743,11 @@ function App() {
         setGroupScheduleEnabled(false);
         setShowGroupForm(false);
         setRegistryRefreshTick((value) => value + 1);
+        if (groupProposal) {
+          setScheduleGroupId(created.group.id);
+          setSchedulePrefill(groupProposal.selected_slots.map((slot) => ({ weekday: slot.weekday, start_time: slot.start_time.slice(0, 5), duration_minutes: 60 })));
+          setActive("Розклад");
+        }
 
         try {
           if (newGroupTeacherId && canManageStaff) {
@@ -1754,6 +1768,8 @@ function App() {
       } catch (error) {
         setGroupCreateError(error instanceof Error ? error.message : "Не вдалося створити групу.");
         return;
+      } finally {
+        setGroupCreating(false);
       }
     }
     const nextId = crypto.randomUUID();
@@ -2047,12 +2063,13 @@ function App() {
     });
   };
 
-  const createGroupSchedule = async (slots: DraftScheduleSlot[]): Promise<boolean> => {
+  const createGroupSchedule = async (slots: DraftScheduleSlot[], startsOn?: string): Promise<boolean> => {
     if (!scheduleGroupId || slots.length === 0) return false;
     if (apiEnabled && session) {
       try {
         await apiPost("/group-schedules/batch", {
           group_id: scheduleGroupId,
+          starts_on: startsOn || null,
           slots: slots.map(({ weekday, start_time, duration_minutes }) => ({ weekday, start_time, duration_minutes })),
         }, session);
         await syncWorkspace(session);
@@ -3347,6 +3364,8 @@ function App() {
         />}
 
         {active === "Розклад" && <ScheduleView
+          initialSchedule={schedulePrefill}
+          onPrefillConsumed={() => setSchedulePrefill(null)}
           groups={groups}
           lessonsThisWeek={lessonsThisWeek}
           trialsThisWeek={trialsThisWeek}
@@ -3575,9 +3594,11 @@ function App() {
           teacherNameForGroup={(groupId) => groupTeacher(groupId)?.fullName}
           onOpenGroup={(groupId) => { void openGroup(groupId); }}
           onOpenCreation={openGroupCreation}
-          onCreateGroupFromProposal={(studentIds) => {
+          onCreateGroupFromProposal={(studentIds, proposal) => {
             setSelectedCandidates(studentIds);
             openGroupCreation("candidates");
+            setGroupProposal(proposal);
+            setGroupSchedule(proposal.selected_slots.map((slot) => ({ weekday: slot.weekday, start_time: slot.start_time.slice(0, 5), duration_minutes: 60 })));
           }}
           onToggleCandidate={toggleCandidate}
           onCandidateAgeFilterChange={setCandidateAgeFilter}
@@ -3854,6 +3875,8 @@ function App() {
       />
 
       <GroupCreateDialog
+        proposalSchedule={groupProposal ? groupSchedule : undefined}
+        creating={groupCreating}
         open={showGroupForm}
         groupName={groupName}
         groupCapacity={groupCapacity}

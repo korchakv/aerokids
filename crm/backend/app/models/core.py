@@ -183,6 +183,10 @@ class PotentialGroupProposal(Base):
     members: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     slots: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     stale: Mapped[bool] = mapped_column(default=False, nullable=False)
+    selected_slots: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    schedule_history: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    formed_group_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("groups.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -278,6 +282,7 @@ class GroupSchedule(Base):
     weekday: Mapped[int] = mapped_column(Integer, nullable=False)
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+    starts_on: Mapped[date | None] = mapped_column(Date)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
 
 
