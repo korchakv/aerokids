@@ -18,17 +18,16 @@ test("potential groups keep one selected schedule and require renewed consent", 
       return response.json();
     };
     const availability = [2, 4].map((weekday) => ({ weekday, start_time: "08:00", end_time: "11:00", preference: "preferred" }));
-    const ids = [];
     for (const name of names) {
       const student = await request("/students", "POST", { first_name: name, age_at_inquiry: 11 });
       await request(`/students/${student.id}/lead-outcome`, "PATCH", { crm_status: "waiting_for_group" });
-      await request(`/students/${student.id}/preferences`, "PUT", { preferred_location_id: null, availability });
-      ids.push(student.id);
+      const preferences = await request(`/students/${student.id}/preferences`, "PUT", { preferred_location_id: null, availability });
+      if (preferences.availability.length !== availability.length) throw new Error("Не збереглися всі тестові дні доступності");
     }
-    await request("/groups/potential-proposals", "POST", { members: ids.map((student_id) => ({ student_id, response: "not_contacted", availability_snapshot: availability })), slots: availability.map((a) => ({ ...a, end_time: "09:00", exact_match: true })) });
   }, names);
   await page.reload();
   await page.getByText("Групи", { exact: true }).first().click();
+  await page.getByRole("button", { name: "Підібрати групи", exact: true }).click();
   const card = page.getByTestId("potential-proposal").filter({ hasText: names[0] });
   await expect(card).toBeVisible();
   await expect(card.getByText("Середа 08:00–11:00", { exact: true })).toBeVisible();
