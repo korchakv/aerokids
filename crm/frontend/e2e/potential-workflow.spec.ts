@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
 test("potential groups keep one selected schedule and require renewed consent", async ({ page }, testInfo) => {
   await page.goto("/");
@@ -7,7 +7,7 @@ test("potential groups keep one selected schedule and require renewed consent", 
   await page.getByLabel("Пароль").fill("smoke-test-password-123");
   await page.getByRole("button", { name: "Увійти" }).click();
   await expect(page.getByText("Дашборд", { exact: true }).first()).toBeVisible();
-  const suffix = randomUUID();
+  const suffix = Array.from(randomBytes(10), (value) => String.fromCharCode(97 + value % 26)).join("");
   const names = [`Підбір Анна ${suffix}`, `Підбір Богдан ${suffix}`];
   await page.evaluate(async (names) => {
     const session = JSON.parse(sessionStorage.getItem("school-crm-session")!);
