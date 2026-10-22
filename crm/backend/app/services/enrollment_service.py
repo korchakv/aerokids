@@ -4,7 +4,7 @@ from datetime import date, time
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -126,9 +126,14 @@ def create_enrollment(
 
 
 def list_waiting_candidates(db: Session, org_id: UUID) -> list[dict]:
+    already_enrolled = exists(select(Enrollment.id).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.student_id == Student.id,
+        Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+    ))
     students = list(db.scalars(
         select(Student)
-        .where(Student.organization_id == org_id, Student.crm_status == CrmStatus.WAITING_FOR_GROUP)
+        .where(Student.organization_id == org_id, Student.crm_status == CrmStatus.WAITING_FOR_GROUP, ~already_enrolled)
         .order_by(Student.age_at_inquiry, Student.created_at)
     ))
     result: list[dict] = []

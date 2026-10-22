@@ -699,7 +699,7 @@ function App() {
   }, [selected?.id, selected?.comment, session?.accessToken, session?.organizationId]);
   const studentGroup = (studentId: EntityId) => groups.find((group) => group.members.includes(studentId));
 
-  const waiting = useMemo(() => leads.filter((x) => x.status === "Очікує групу"), [leads]);
+  const waiting = useMemo(() => leads.filter((x) => x.status === "Очікує групу" && !x.groupId), [leads]);
   const stats = useMemo(() => ({
     newLeads: leads.filter((x) => x.status === "Нова").length,
     trial: leads.filter((x) => x.status === "Пробне заплановано").length,

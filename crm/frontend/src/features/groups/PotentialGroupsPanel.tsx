@@ -25,7 +25,8 @@ export function PotentialGroupsPanel({ waiting, leads, session, canManage, onCre
   const [ageSpread, setAgeSpread] = useState(3);
   const [expanded, setExpanded] = useState(false);
   const [generated, setGenerated] = useState(false);
-  const candidates = expanded ? leads.filter((l) => !l.groupId && !["Зарахований", "Відмовились", "Неактуально", "Не відповідає"].includes(l.status)) : waiting;
+  const candidates = (expanded ? leads.filter((l) => !["Відмовились", "Неактуально", "Не відповідає"].includes(l.status)) : waiting)
+    .filter((lead) => !lead.groupId && lead.status !== "Зарахований");
   const incomplete = candidates.filter((l) => !l.age || !(l.availability ?? []).some((s) => s.preference !== "avoid"));
   const load = async () => {
     if (!session || !apiEnabled) return;
@@ -35,7 +36,8 @@ export function PotentialGroupsPanel({ waiting, leads, session, canManage, onCre
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, [session?.accessToken, session?.organizationId]);
-  const activeSaved = saved.filter((p) => !p.formed_group_id);
+  const enrolledIds = new Set(leads.filter((lead) => lead.groupId || lead.status === "Зарахований").map((lead) => lead.id));
+  const activeSaved = saved.filter((p) => !p.formed_group_id && !p.members.some((member) => enrolledIds.has(member.student_id)));
   const visibleDrafts = recommendations.filter((p) => !activeSaved.some((s) => memberKey(s.members) === memberKey(p.members)));
   const all = [...activeSaved, ...visibleDrafts];
   const generate = () => {

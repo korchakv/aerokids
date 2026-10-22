@@ -58,7 +58,7 @@ export function suggestedSchedule(slots: PotentialGroupSlotDraft[]) {
 }
 
 export function generatePotentialGroups(candidates: Lead[], toleranceHours = 2, ageSpread = 3): Array<{ members: PotentialGroupMemberDraft[]; slots: PotentialGroupSlotDraft[] }> {
-  const eligible = candidates.filter((lead) => lead.age > 0 && (lead.availability ?? []).some((slot) => slot.preference !== "avoid"));
+  const eligible = candidates.filter((lead) => !lead.groupId && lead.status !== "Зарахований" && lead.age > 0 && (lead.availability ?? []).some((slot) => slot.preference !== "avoid"));
   const byMembers = new Map<string, { members: PotentialGroupMemberDraft[]; slots: PotentialGroupSlotDraft[] }>();
   for (let weekday = 0; weekday < 7; weekday++) for (let start = 8 * 60; start <= 21 * 60; start += 15) {
     const slot = { weekday, start_time: clock(start), end_time: clock(start + 60), exact_match: false };

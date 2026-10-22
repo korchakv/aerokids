@@ -1,3 +1,9 @@
+from uuid import UUID
+
+from app.db.session import SessionLocal
+from app.models.core import CrmStatus, Student, StudentStatus
+
+
 def create_org(client, name, slug):
     response = client.post("/organizations", json={"name": name, "slug": slug})
     assert response.status_code == 201, response.text
@@ -57,6 +63,30 @@ def test_proposal_is_saved_and_tenant_scoped(client):
     saved = client.put(f"/groups/potential-proposals/{proposal_id}", headers=headers, json=updated)
     assert saved.status_code == 200, saved.text
     assert saved.json()["members"][0]["response"] == "agreed"
+
+
+def test_proposal_rejects_student_with_current_group_enrollment(client):
+    org = create_org(client, "Enrolled Candidate School", "enrolled-candidate")
+    headers = {"X-Organization-Id": org["id"]}
+    enrolled_id = make_waiting_student(client, headers, "Already Enrolled")
+    waiting_id = make_waiting_student(client, headers, "Still Waiting")
+    group = client.post("/groups", headers=headers, json={"name": "Current Group", "capacity": 8}).json()
+    enrollment = client.post("/enrollments", headers=headers, json={"student_id": enrolled_id, "group_id": group["id"]})
+    assert enrollment.status_code == 201, enrollment.text
+
+    # Cover stale funnel data: enrollment is current even if the lead status is wrong.
+    with SessionLocal() as db:
+        student = db.get(Student, UUID(enrolled_id))
+        student.crm_status = CrmStatus.WAITING_FOR_GROUP
+        student.student_status = StudentStatus.PROSPECT
+        db.commit()
+
+    payload = {
+        "members": [{"student_id": student_id} for student_id in (enrolled_id, waiting_id)],
+        "slots": [{"weekday": 1, "start_time": "17:00", "end_time": "18:00"}],
+    }
+    response = client.post("/groups/potential-proposals", headers=headers, json=payload)
+    assert response.status_code == 422, response.text
 
 
 def setup_proposal(client, slug="workflow"):

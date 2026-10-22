@@ -45,9 +45,14 @@ def _primary_contact_for_student(db: Session, org_id: UUID, student_id: UUID) ->
 
 
 def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
+    already_enrolled = exists(select(Enrollment.id).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.student_id == Student.id,
+        Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+    ))
     students = list(db.scalars(
         select(Student)
-        .where(Student.organization_id == org_id, Student.student_status == StudentStatus.PROSPECT)
+        .where(Student.organization_id == org_id, Student.student_status == StudentStatus.PROSPECT, ~already_enrolled)
         .order_by(Student.created_at.desc())
     ))
     result = []
@@ -297,7 +302,12 @@ def _lead_column_condition(column: str, latest_trial_status, now: datetime):
     if column == "trial":
         return and_(~closed, active_now, Student.crm_status == CrmStatus.TRIAL_SCHEDULED)
     if column == "waiting":
-        return and_(~closed, active_now, Student.crm_status == CrmStatus.WAITING_FOR_GROUP)
+        already_enrolled = exists(select(Enrollment.id).where(
+            Enrollment.organization_id == Student.organization_id,
+            Enrollment.student_id == Student.id,
+            Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+        ))
+        return and_(~closed, active_now, Student.crm_status == CrmStatus.WAITING_FOR_GROUP, ~already_enrolled)
     if column == "new":
         return and_(~closed, active_now, Student.crm_status == CrmStatus.NEW)
     if column == "contacted":

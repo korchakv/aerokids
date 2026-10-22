@@ -26,3 +26,11 @@ test("age and location separate students; unknown availability is not free time"
   expect(proposals.map((p) => p.members.map((m) => m.student_id).sort())).toEqual(expect.arrayContaining([["a", "b"], ["c", "d"]]));
   expect(proposals.every((p) => !p.members.some((m) => ["unknown", "e"].includes(m.student_id)))).toBeTruthy();
 });
+
+test("students already enrolled in a group are never recommended", () => {
+  const enrolled = { ...lead("enrolled"), groupId: "group-1", status: "Зарахований" as const };
+  const waiting = lead("waiting");
+  const proposals = generatePotentialGroups([enrolled, waiting, lead("waiting-2")], 2);
+  expect(proposals.length).toBeGreaterThan(0);
+  expect(proposals.every((proposal) => proposal.members.every((member) => member.student_id !== enrolled.id))).toBeTruthy();
+});
