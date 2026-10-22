@@ -39,7 +39,7 @@ import { applyWorkspace, crmStatusLabel, crmStatusValue, workspaceGroupToGroupIt
 import { cleanSpaces, emailError, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
-import { apiDelete, apiEnabled, apiGet, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiLeadComment, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle } from "./api";
+import { apiDelete, apiEnabled, apiGet, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiLeadComment, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle, type WorkspaceStudent } from "./api";
 
 
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
@@ -158,6 +158,7 @@ function App() {
   const [studentFilter, setStudentFilter] = useState<StudentFilter>("all");
   const [studentRegistryQuery, setStudentRegistryQuery] = useState("");
   const [studentRegistryRows, setStudentRegistryRows] = useState<Lead[]>([]);
+  const [studentRegistryBilling, setStudentRegistryBilling] = useState<Record<string, WorkspaceStudent["billing"]>>({});
   const [studentRegistryStates, setStudentRegistryStates] = useState<Record<EntityId, StudentLifecycleLabel>>({});
   const [returningStudentToWaitingId, setReturningStudentToWaitingId] = useState<EntityId | null>(null);
   const [studentRegistryTotal, setStudentRegistryTotal] = useState(0);
@@ -550,6 +551,7 @@ function App() {
           return;
         }
         setStudentRegistryRows(page.items.map(workspaceStudentToLead));
+        setStudentRegistryBilling(Object.fromEntries(page.items.map((item) => [item.student_id, item.billing ?? null])));
         setStudentRegistryStates(Object.fromEntries(page.items.map((item) => [item.student_id, workspaceStudentLifecycle(item)])));
         setStudentRegistryTotal(page.total);
       }).catch((error) => {
@@ -3357,6 +3359,8 @@ function App() {
           onNextPage={() => setStudentRegistryOffset((value) => value + REGISTRY_PAGE_SIZE)}
           studentStates={registryStudentStates}
           groupForStudent={studentGroup}
+          studentBilling={studentRegistryBilling}
+          showBilling={canSeePayments}
           onOpenStudent={(studentId, currentGroupId) => {
             setSelectedStudentId(studentId);
             setTransferGroupId(currentGroupId);

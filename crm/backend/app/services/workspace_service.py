@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import and_, case, exists, func, or_, select
@@ -15,12 +16,19 @@ from app.models.core import (
     Group,
     GroupStaff,
     Location,
+    Organization,
+    Payment,
+    PaymentTransaction,
+    PaymentStatus,
     Staff,
     StaffRole,
     Student,
+    StudentSubscription,
     StudentAvailability,
     StudentContact,
     StudentStatus,
+    SubscriptionStatus,
+    SubscriptionUsage,
     TrialLesson,
     TrialStatus,
 )
@@ -621,6 +629,153 @@ def paginate_student_overview(
         "group_id": row.group_id,
         "group_name": row.group_name,
     } for row in rows for student in [row[0]]]
+
+    # Finance data is returned only to roles that can already access the
+    # payments workspace. Keep the student registry page-scoped so the list
+    # does not load every organization's billing history.
+    finance_roles = {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT}
+    if items and role in finance_roles:
+        student_ids = [item["student_id"] for item in items]
+        organization = db.get(Organization, org_id)
+        try:
+            today = datetime.now(ZoneInfo(organization.timezone if organization else "Europe/Kyiv")).date()
+        except Exception:
+            today = datetime.now(ZoneInfo("Europe/Kyiv")).date()
+
+        subscriptions = list(db.scalars(
+            select(StudentSubscription)
+            .where(
+                StudentSubscription.organization_id == org_id,
+                StudentSubscription.student_id.in_(student_ids),
+                StudentSubscription.status != SubscriptionStatus.CANCELLED,
+            )
+            .order_by(StudentSubscription.student_id, StudentSubscription.starts_on.desc(), StudentSubscription.created_at.desc())
+        ))
+        subscriptions_by_student: dict[UUID, list[StudentSubscription]] = {}
+        for subscription in subscriptions:
+            subscriptions_by_student.setdefault(subscription.student_id, []).append(subscription)
+
+        subscription_ids = [item.id for item in subscriptions]
+        usage_by_subscription: dict[UUID, int] = {}
+        if subscription_ids:
+            usage_rows = db.execute(
+                select(SubscriptionUsage.subscription_id, func.coalesce(func.sum(SubscriptionUsage.units), 0))
+                .where(
+                    SubscriptionUsage.organization_id == org_id,
+                    SubscriptionUsage.subscription_id.in_(subscription_ids),
+                )
+                .group_by(SubscriptionUsage.subscription_id)
+            ).all()
+            usage_by_subscription = {subscription_id: int(units or 0) for subscription_id, units in usage_rows}
+
+        payment_rows = list(db.scalars(
+            select(Payment)
+            .where(
+                Payment.organization_id == org_id,
+                Payment.student_id.in_(student_ids),
+                Payment.status != PaymentStatus.CANCELLED,
+            )
+            .order_by(Payment.student_id, Payment.created_at.desc(), Payment.id.desc())
+        ))
+        payments_by_student: dict[UUID, list[Payment]] = {}
+        payments_by_subscription: dict[UUID, list[Payment]] = {}
+        for payment in payment_rows:
+            payments_by_student.setdefault(payment.student_id, []).append(payment)
+            if payment.subscription_id:
+                payments_by_subscription.setdefault(payment.subscription_id, []).append(payment)
+
+        payment_ids = [payment.id for payment in payment_rows]
+        transaction_totals: dict[UUID, dict[str, int]] = {}
+        if payment_ids:
+            for payment_id, kind, amount in db.execute(
+                select(PaymentTransaction.payment_id, PaymentTransaction.kind, func.sum(PaymentTransaction.amount_minor))
+                .where(
+                    PaymentTransaction.organization_id == org_id,
+                    PaymentTransaction.payment_id.in_(payment_ids),
+                )
+                .group_by(PaymentTransaction.payment_id, PaymentTransaction.kind)
+            ):
+                transaction_totals.setdefault(payment_id, {})[kind] = int(amount or 0)
+
+        financials_by_payment: dict[UUID, dict[str, int]] = {}
+        for payment in payment_rows:
+            totals = transaction_totals.get(payment.id, {})
+            adjusted = max(
+                0,
+                payment.amount_minor
+                + totals.get("adjustment_increase", 0)
+                - totals.get("adjustment_decrease", 0),
+            )
+            paid = totals.get("payment", 0)
+            refunded = totals.get("refund", 0)
+            if not totals and payment.status == PaymentStatus.PAID:
+                paid = adjusted
+            net_paid = max(0, paid - refunded)
+            financials_by_payment[payment.id] = {
+                "adjusted": adjusted,
+                "net_paid": net_paid,
+                "balance": max(0, adjusted - net_paid),
+            }
+
+        for item in items:
+            student_id = item["student_id"]
+            student_subscriptions = subscriptions_by_student.get(student_id, [])
+            current_candidates = [
+                subscription for subscription in student_subscriptions
+                if subscription.status in {SubscriptionStatus.ACTIVE, SubscriptionStatus.PAUSED}
+                and subscription.starts_on <= today
+                and (subscription.ends_on is None or subscription.ends_on >= today)
+            ]
+            upcoming_candidates = [
+                subscription for subscription in student_subscriptions
+                if subscription.status == SubscriptionStatus.ACTIVE and subscription.starts_on > today
+            ]
+            selected = (
+                current_candidates[0] if current_candidates
+                else min(upcoming_candidates, key=lambda row: (row.starts_on, row.created_at), default=None)
+                or (student_subscriptions[0] if student_subscriptions else None)
+            )
+
+            student_payments = payments_by_student.get(student_id, [])
+            pending_dates = [
+                payment.due_date for payment in student_payments
+                if financials_by_payment[payment.id]["balance"] > 0 and payment.due_date is not None
+            ]
+            if selected is None:
+                item["billing"] = {
+                    "paid_lessons": None,
+                    "lessons_used": None,
+                    "lessons_included": None,
+                    "next_due_date": min(pending_dates, default=None),
+                }
+                continue
+
+            included = selected.lessons_included
+            used = usage_by_subscription.get(selected.id, 0)
+            related_charges = payments_by_subscription.get(selected.id, [])
+            charge = related_charges[0] if related_charges else None
+            paid_lessons = None
+            unit_price = selected.lesson_unit_price_minor
+            if included is not None and included > 0:
+                if unit_price is None:
+                    unit_price = int(round(max(0, selected.price_minor - selected.discount_minor) / included))
+                if unit_price and unit_price > 0 and charge is not None:
+                    finance = financials_by_payment[charge.id]
+                    adjusted_amount = finance["adjusted"]
+                    net_paid = finance["net_paid"]
+                    applied_credit = (
+                        max(0, selected.price_minor - selected.discount_minor - adjusted_amount)
+                        if selected.renewal_of_id is not None
+                        else 0
+                    )
+                    paid_lessons = min(included, (net_paid + applied_credit) // unit_price)
+
+            item["billing"] = {
+                "paid_lessons": paid_lessons,
+                "lessons_used": used,
+                "lessons_included": included,
+                "next_due_date": min(pending_dates, default=None),
+            }
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
