@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.core import CrmStatus, Organization, PotentialGroupProposal, Student, StudentStatus
+from app.models.core import CrmStatus, Enrollment, EnrollmentStatus, Organization, PotentialGroupProposal, Student, StudentStatus
 from app.services.audit_service import record_audit
 
 
@@ -13,8 +13,15 @@ def _validate_members(db: Session, org_id: UUID, data, existing_ids=()) -> list[
     members = []
     for member in data.members:
         student = db.scalar(select(Student).where(Student.id == member.student_id, Student.organization_id == org_id))
+        has_current_enrollment = db.scalar(select(Enrollment.id).where(
+            Enrollment.organization_id == org_id,
+            Enrollment.student_id == member.student_id,
+            Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+        ).limit(1)) is not None
         if student is None or (str(student.id) not in existing_ids and (
-            student.student_status != StudentStatus.PROSPECT or student.crm_status in (CrmStatus.DECLINED, CrmStatus.NOT_RELEVANT)
+            student.student_status != StudentStatus.PROSPECT
+            or student.crm_status in (CrmStatus.DECLINED, CrmStatus.NOT_RELEVANT)
+            or has_current_enrollment
         )):
             raise HTTPException(status_code=422, detail="До підбору можна додати лише відкриті заявки цієї організації")
         members.append(member.model_dump(mode="json"))

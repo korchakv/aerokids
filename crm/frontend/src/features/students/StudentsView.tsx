@@ -2,6 +2,7 @@ import { AuditHistory } from "../../components/AuditHistory";
 import type { ApiAuditEvent } from "../../api";
 import type { EntityId, Lead } from "../leads/model";
 import type { GroupItem } from "../groups/types";
+import type { WorkspaceStudent } from "../../api";
 
 export type StudentLifecycleLabel = "Активний" | "Пауза" | "Архів";
 export type StudentFilter = "all" | "active" | "paused" | "archived";
@@ -25,8 +26,18 @@ type StudentsViewProps = {
   onNextPage: () => void;
   studentStates: Record<EntityId, StudentLifecycleLabel>;
   groupForStudent: (studentId: EntityId) => GroupItem | undefined;
+  studentBilling: Record<EntityId, WorkspaceStudent["billing"]>;
+  showBilling: boolean;
   onOpenStudent: (studentId: EntityId, currentGroupId: EntityId | null) => void;
 };
+
+function formatBillingDate(value: string | null | undefined) {
+  if (!value) return "Не заплановано";
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return "Не заплановано";
+  return new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short", year: "numeric" })
+    .format(new Date(year, month - 1, day));
+}
 
 export function StudentsView({
   students,
@@ -47,6 +58,8 @@ export function StudentsView({
   onNextPage,
   studentStates,
   groupForStudent,
+  studentBilling,
+  showBilling,
   onOpenStudent,
 }: StudentsViewProps) {
   return <section className="studentsLayout" data-testid="students-workspace">
@@ -65,7 +78,7 @@ export function StudentsView({
       </div>
       {error && <div className="registryError" role="alert">{error}</div>}
       <div className={"studentTable " + (loading ? "registryLoading" : "")}>
-        <div className="studentRow studentHead"><span>Учень</span><span>Група</span><span>Контакт</span><span>Статус</span></div>
+        <div className={"studentRow studentHead " + (showBilling ? "hasBilling" : "")}><span>Учень</span><span>Група</span><span>Контакт</span>{showBilling && <span>Заняття й оплата</span>}<span>Статус</span></div>
         {loading && students.length === 0 && <div className="emptyState">Завантаження учнів…</div>}
         {!loading && students.length === 0 && <div className="emptyState">За цим фільтром учнів немає.</div>}
         {students.map((student) => {
@@ -73,10 +86,17 @@ export function StudentsView({
           const groupName = student.groupName ?? group?.name;
           const groupId = student.groupId ?? group?.id ?? null;
           const state = studentStates[student.id] ?? "Активний";
-          return <button className="studentRow studentButton" key={student.id} onClick={() => onOpenStudent(student.id, groupId)}>
+          const billing = studentBilling[student.id];
+          const lessonsLabel = billing?.lessons_included == null ? "Абонемент не задано" : `Абонемент: ${billing.lessons_included} занять`;
+          const paidLabel = billing?.paid_lessons == null
+            ? "Оплачено: немає даних"
+            : `Оплачено: ${billing.paid_lessons} із ${billing.lessons_included ?? billing.paid_lessons}`;
+          const usedLabel = billing?.lessons_used == null ? "Відвідано: —" : `Відвідано: ${billing.lessons_used}`;
+          return <button className={"studentRow studentButton " + (showBilling ? "hasBilling" : "")} key={student.id} onClick={() => onOpenStudent(student.id, groupId)}>
             <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років</small></b></span>
             <span>{groupName ?? "Без групи"}</span>
             <span>{student.parent}<small>{student.phone}</small></span>
+            {showBilling && <span className="studentBillingCell"><b>{paidLabel}</b><small>{usedLabel} · {lessonsLabel}</small><small>Наступна оплата: {formatBillingDate(billing?.next_due_date)}</small></span>}
             <span className={"studentState " + state.toLowerCase()}>{state}</span>
           </button>;
         })}

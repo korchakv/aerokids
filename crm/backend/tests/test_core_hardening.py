@@ -302,6 +302,30 @@ def test_enrolled_student_returns_to_waiting_prospect_state(client):
     assert returned_standalone.json()["student_status"] == "prospect"
 
 
+def test_currently_enrolled_student_is_excluded_from_group_candidates(client):
+    org = create_org(client, "Candidate Filtering School", "candidate-filtering")
+    group = create_group(client, org, "Already Enrolled Group")
+    student = create_student(client, org, "Already Enrolled Child")
+    enrolled = client.post("/enrollments", headers=headers(org), json={
+        "student_id": student["id"], "group_id": group["id"],
+    })
+    assert enrolled.status_code == 201, enrolled.text
+
+    # Simulate a stale CRM status while the enrollment itself is still current.
+    with SessionLocal() as db:
+        current = db.get(Student, UUID(student["id"]))
+        current.crm_status = CrmStatus.WAITING_FOR_GROUP
+        current.student_status = StudentStatus.PROSPECT
+        db.commit()
+
+    waiting_list = client.get("/waiting-list", headers=headers(org))
+    workspace_leads = client.get("/workspace/leads", headers=headers(org))
+    assert waiting_list.status_code == 200, waiting_list.text
+    assert workspace_leads.status_code == 200, workspace_leads.text
+    assert all(item["student_id"] != student["id"] for item in waiting_list.json())
+    assert all(item["student_id"] != student["id"] for item in workspace_leads.json())
+
+
 def test_absent_choice_is_persisted_across_finalize_and_correction(client):
     org = create_org(client, "Attendance School", "attendance-hardening")
     group = create_group(client, org, "Attendance Group")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from sqlalchemy import and_, case, exists, func, or_, select
@@ -15,12 +16,19 @@ from app.models.core import (
     Group,
     GroupStaff,
     Location,
+    Organization,
+    Payment,
+    PaymentTransaction,
+    PaymentStatus,
     Staff,
     StaffRole,
     Student,
+    StudentSubscription,
     StudentAvailability,
     StudentContact,
     StudentStatus,
+    SubscriptionStatus,
+    SubscriptionUsage,
     TrialLesson,
     TrialStatus,
 )
@@ -45,9 +53,14 @@ def _primary_contact_for_student(db: Session, org_id: UUID, student_id: UUID) ->
 
 
 def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
+    already_enrolled = exists(select(Enrollment.id).where(
+        Enrollment.organization_id == org_id,
+        Enrollment.student_id == Student.id,
+        Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+    ))
     students = list(db.scalars(
         select(Student)
-        .where(Student.organization_id == org_id, Student.student_status == StudentStatus.PROSPECT)
+        .where(Student.organization_id == org_id, Student.student_status == StudentStatus.PROSPECT, ~already_enrolled)
         .order_by(Student.created_at.desc())
     ))
     result = []
@@ -297,7 +310,12 @@ def _lead_column_condition(column: str, latest_trial_status, now: datetime):
     if column == "trial":
         return and_(~closed, active_now, Student.crm_status == CrmStatus.TRIAL_SCHEDULED)
     if column == "waiting":
-        return and_(~closed, active_now, Student.crm_status == CrmStatus.WAITING_FOR_GROUP)
+        already_enrolled = exists(select(Enrollment.id).where(
+            Enrollment.organization_id == Student.organization_id,
+            Enrollment.student_id == Student.id,
+            Enrollment.status.in_([EnrollmentStatus.ACTIVE, EnrollmentStatus.PAUSED]),
+        ))
+        return and_(~closed, active_now, Student.crm_status == CrmStatus.WAITING_FOR_GROUP, ~already_enrolled)
     if column == "new":
         return and_(~closed, active_now, Student.crm_status == CrmStatus.NEW)
     if column == "contacted":
@@ -588,7 +606,8 @@ def paginate_student_overview(
         contact_phone.label("contact_phone"),
         current_group_id.label("group_id"),
         current_group_name.label("group_name"),
-    ).where(*filters)
+        Organization.timezone.label("organization_timezone"),
+    ).join(Organization, Organization.id == Student.organization_id).where(*filters)
 
     if sort == "newest":
         statement = statement.order_by(Student.created_at.desc(), Student.id)
@@ -611,6 +630,174 @@ def paginate_student_overview(
         "group_id": row.group_id,
         "group_name": row.group_name,
     } for row in rows for student in [row[0]]]
+
+    # Finance data is returned only to roles that can already access the
+    # payments workspace. Keep the student registry page-scoped so the list
+    # does not load every organization's billing history.
+    finance_roles = {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT}
+    if items and role in finance_roles:
+        student_ids = [item["student_id"] for item in items]
+        try:
+            today = datetime.now(ZoneInfo(rows[0].organization_timezone or "Europe/Kyiv")).date()
+        except Exception:
+            today = datetime.now(ZoneInfo("Europe/Kyiv")).date()
+
+        # Load subscriptions and charges together to keep the page query count
+        # bounded even when students have no billing history.
+        billing_rows = db.execute(
+            select(StudentSubscription, Payment)
+            .select_from(Student)
+            .outerjoin(StudentSubscription, and_(
+                StudentSubscription.organization_id == org_id,
+                StudentSubscription.student_id == Student.id,
+                StudentSubscription.status != SubscriptionStatus.CANCELLED,
+            ))
+            .outerjoin(Payment, and_(
+                Payment.organization_id == org_id,
+                Payment.student_id == Student.id,
+                Payment.status != PaymentStatus.CANCELLED,
+            ))
+            .where(Student.organization_id == org_id, Student.id.in_(student_ids))
+            .order_by(
+                Student.id,
+                StudentSubscription.starts_on.desc(),
+                StudentSubscription.created_at.desc(),
+                Payment.created_at.desc(),
+                Payment.id.desc(),
+            )
+        ).all()
+        subscriptions: list[StudentSubscription] = []
+        subscriptions_by_student: dict[UUID, list[StudentSubscription]] = {}
+        seen_subscriptions: set[UUID] = set()
+        for subscription, _payment in billing_rows:
+            if subscription is None or subscription.id in seen_subscriptions:
+                continue
+            seen_subscriptions.add(subscription.id)
+            subscriptions.append(subscription)
+            subscriptions_by_student.setdefault(subscription.student_id, []).append(subscription)
+
+        subscription_ids = [item.id for item in subscriptions]
+        usage_by_subscription: dict[UUID, int] = {}
+        if subscription_ids:
+            usage_rows = db.execute(
+                select(SubscriptionUsage.subscription_id, func.coalesce(func.sum(SubscriptionUsage.units), 0))
+                .where(
+                    SubscriptionUsage.organization_id == org_id,
+                    SubscriptionUsage.subscription_id.in_(subscription_ids),
+                )
+                .group_by(SubscriptionUsage.subscription_id)
+            ).all()
+            usage_by_subscription = {subscription_id: int(units or 0) for subscription_id, units in usage_rows}
+
+        payment_rows: list[Payment] = []
+        payments_by_student: dict[UUID, list[Payment]] = {}
+        payments_by_subscription: dict[UUID, list[Payment]] = {}
+        seen_payments: set[UUID] = set()
+        for _subscription, payment in billing_rows:
+            if payment is None or payment.id in seen_payments:
+                continue
+            seen_payments.add(payment.id)
+            payment_rows.append(payment)
+            payments_by_student.setdefault(payment.student_id, []).append(payment)
+            if payment.subscription_id:
+                payments_by_subscription.setdefault(payment.subscription_id, []).append(payment)
+        for related_payments in payments_by_student.values():
+            related_payments.sort(key=lambda row: (row.created_at, row.id), reverse=True)
+        for related_payments in payments_by_subscription.values():
+            related_payments.sort(key=lambda row: (row.created_at, row.id), reverse=True)
+
+        payment_ids = [payment.id for payment in payment_rows]
+        transaction_totals: dict[UUID, dict[str, int]] = {}
+        if payment_ids:
+            for payment_id, kind, amount in db.execute(
+                select(PaymentTransaction.payment_id, PaymentTransaction.kind, func.sum(PaymentTransaction.amount_minor))
+                .where(
+                    PaymentTransaction.organization_id == org_id,
+                    PaymentTransaction.payment_id.in_(payment_ids),
+                )
+                .group_by(PaymentTransaction.payment_id, PaymentTransaction.kind)
+            ):
+                transaction_totals.setdefault(payment_id, {})[kind] = int(amount or 0)
+
+        financials_by_payment: dict[UUID, dict[str, int]] = {}
+        for payment in payment_rows:
+            totals = transaction_totals.get(payment.id, {})
+            adjusted = max(
+                0,
+                payment.amount_minor
+                + totals.get("adjustment_increase", 0)
+                - totals.get("adjustment_decrease", 0),
+            )
+            paid = totals.get("payment", 0)
+            refunded = totals.get("refund", 0)
+            if not totals and payment.status == PaymentStatus.PAID:
+                paid = adjusted
+            net_paid = max(0, paid - refunded)
+            financials_by_payment[payment.id] = {
+                "adjusted": adjusted,
+                "net_paid": net_paid,
+                "balance": max(0, adjusted - net_paid),
+            }
+
+        for item in items:
+            student_id = item["student_id"]
+            student_subscriptions = subscriptions_by_student.get(student_id, [])
+            current_candidates = [
+                subscription for subscription in student_subscriptions
+                if subscription.status in {SubscriptionStatus.ACTIVE, SubscriptionStatus.PAUSED}
+                and subscription.starts_on <= today
+                and (subscription.ends_on is None or subscription.ends_on >= today)
+            ]
+            upcoming_candidates = [
+                subscription for subscription in student_subscriptions
+                if subscription.status == SubscriptionStatus.ACTIVE and subscription.starts_on > today
+            ]
+            selected = (
+                current_candidates[0] if current_candidates
+                else min(upcoming_candidates, key=lambda row: (row.starts_on, row.created_at), default=None)
+                or (student_subscriptions[0] if student_subscriptions else None)
+            )
+
+            student_payments = payments_by_student.get(student_id, [])
+            pending_dates = [
+                payment.due_date for payment in student_payments
+                if financials_by_payment[payment.id]["balance"] > 0 and payment.due_date is not None
+            ]
+            if selected is None:
+                item["billing"] = {
+                    "paid_lessons": None,
+                    "lessons_used": None,
+                    "lessons_included": None,
+                    "next_due_date": min(pending_dates, default=None),
+                }
+                continue
+
+            included = selected.lessons_included
+            used = usage_by_subscription.get(selected.id, 0)
+            related_charges = payments_by_subscription.get(selected.id, [])
+            charge = related_charges[0] if related_charges else None
+            paid_lessons = None
+            unit_price = selected.lesson_unit_price_minor
+            if included is not None and included > 0:
+                if unit_price is None:
+                    unit_price = int(round(max(0, selected.price_minor - selected.discount_minor) / included))
+                if unit_price and unit_price > 0 and charge is not None:
+                    finance = financials_by_payment[charge.id]
+                    adjusted_amount = finance["adjusted"]
+                    net_paid = finance["net_paid"]
+                    applied_credit = (
+                        max(0, selected.price_minor - selected.discount_minor - adjusted_amount)
+                        if selected.renewal_of_id is not None
+                        else 0
+                    )
+                    paid_lessons = min(included, (net_paid + applied_credit) // unit_price)
+
+            item["billing"] = {
+                "paid_lessons": paid_lessons,
+                "lessons_used": used,
+                "lessons_included": included,
+                "next_due_date": min(pending_dates, default=None),
+            }
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 

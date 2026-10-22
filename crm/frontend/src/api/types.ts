@@ -101,6 +101,12 @@ export type WorkspaceStudent = {
   contact_phone: string | null;
   group_id: string | null;
   group_name: string | null;
+  billing?: {
+    paid_lessons: number | null;
+    lessons_used: number | null;
+    lessons_included: number | null;
+    next_due_date: string | null;
+  } | null;
 };
 
 export type WorkspaceGroup = {
