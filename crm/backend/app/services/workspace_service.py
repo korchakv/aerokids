@@ -606,7 +606,8 @@ def paginate_student_overview(
         contact_phone.label("contact_phone"),
         current_group_id.label("group_id"),
         current_group_name.label("group_name"),
-    ).where(*filters)
+        Organization.timezone.label("organization_timezone"),
+    ).join(Organization, Organization.id == Student.organization_id).where(*filters)
 
     if sort == "newest":
         statement = statement.order_by(Student.created_at.desc(), Student.id)
@@ -636,23 +637,43 @@ def paginate_student_overview(
     finance_roles = {StaffRole.OWNER, StaffRole.ADMIN, StaffRole.ACCOUNTANT}
     if items and role in finance_roles:
         student_ids = [item["student_id"] for item in items]
-        organization = db.get(Organization, org_id)
         try:
-            today = datetime.now(ZoneInfo(organization.timezone if organization else "Europe/Kyiv")).date()
+            today = datetime.now(ZoneInfo(rows[0].organization_timezone or "Europe/Kyiv")).date()
         except Exception:
             today = datetime.now(ZoneInfo("Europe/Kyiv")).date()
 
-        subscriptions = list(db.scalars(
-            select(StudentSubscription)
-            .where(
+        # Load subscriptions and charges together to keep the page query count
+        # bounded even when students have no billing history.
+        billing_rows = db.execute(
+            select(StudentSubscription, Payment)
+            .select_from(Student)
+            .outerjoin(StudentSubscription, and_(
                 StudentSubscription.organization_id == org_id,
-                StudentSubscription.student_id.in_(student_ids),
+                StudentSubscription.student_id == Student.id,
                 StudentSubscription.status != SubscriptionStatus.CANCELLED,
+            ))
+            .outerjoin(Payment, and_(
+                Payment.organization_id == org_id,
+                Payment.student_id == Student.id,
+                Payment.status != PaymentStatus.CANCELLED,
+            ))
+            .where(Student.organization_id == org_id, Student.id.in_(student_ids))
+            .order_by(
+                Student.id,
+                StudentSubscription.starts_on.desc(),
+                StudentSubscription.created_at.desc(),
+                Payment.created_at.desc(),
+                Payment.id.desc(),
             )
-            .order_by(StudentSubscription.student_id, StudentSubscription.starts_on.desc(), StudentSubscription.created_at.desc())
-        ))
+        ).all()
+        subscriptions: list[StudentSubscription] = []
         subscriptions_by_student: dict[UUID, list[StudentSubscription]] = {}
-        for subscription in subscriptions:
+        seen_subscriptions: set[UUID] = set()
+        for subscription, _payment in billing_rows:
+            if subscription is None or subscription.id in seen_subscriptions:
+                continue
+            seen_subscriptions.add(subscription.id)
+            subscriptions.append(subscription)
             subscriptions_by_student.setdefault(subscription.student_id, []).append(subscription)
 
         subscription_ids = [item.id for item in subscriptions]
@@ -668,21 +689,22 @@ def paginate_student_overview(
             ).all()
             usage_by_subscription = {subscription_id: int(units or 0) for subscription_id, units in usage_rows}
 
-        payment_rows = list(db.scalars(
-            select(Payment)
-            .where(
-                Payment.organization_id == org_id,
-                Payment.student_id.in_(student_ids),
-                Payment.status != PaymentStatus.CANCELLED,
-            )
-            .order_by(Payment.student_id, Payment.created_at.desc(), Payment.id.desc())
-        ))
+        payment_rows: list[Payment] = []
         payments_by_student: dict[UUID, list[Payment]] = {}
         payments_by_subscription: dict[UUID, list[Payment]] = {}
-        for payment in payment_rows:
+        seen_payments: set[UUID] = set()
+        for _subscription, payment in billing_rows:
+            if payment is None or payment.id in seen_payments:
+                continue
+            seen_payments.add(payment.id)
+            payment_rows.append(payment)
             payments_by_student.setdefault(payment.student_id, []).append(payment)
             if payment.subscription_id:
                 payments_by_subscription.setdefault(payment.subscription_id, []).append(payment)
+        for related_payments in payments_by_student.values():
+            related_payments.sort(key=lambda row: (row.created_at, row.id), reverse=True)
+        for related_payments in payments_by_subscription.values():
+            related_payments.sort(key=lambda row: (row.created_at, row.id), reverse=True)
 
         payment_ids = [payment.id for payment in payment_rows]
         transaction_totals: dict[UUID, dict[str, int]] = {}
