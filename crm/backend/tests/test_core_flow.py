@@ -2383,7 +2383,7 @@ def test_group_capacity_blocks_extra_enrollment_and_transfer(client):
     assert enrollment.status_code == 409
 
 
-def test_trial_conflict_message_names_reserved_group_or_trial(client):
+def test_trials_can_be_scheduled_even_when_time_and_location_are_busy(client):
     org = create_org(client, "Trial Conflict Details", "trial-conflict-details")
     headers = {"X-Organization-Id": org["id"]}
     location = client.post("/locations", headers=headers, json={"name": "Центр"}).json()
@@ -2405,7 +2405,7 @@ def test_trial_conflict_message_names_reserved_group_or_trial(client):
     assert lesson.status_code == 201, lesson.text
 
     student = client.post("/students", headers=headers, json={"first_name": "Тест"}).json()
-    group_conflict = client.post(
+    trial_in_group_slot = client.post(
         "/trial-lessons",
         headers=headers,
         json={
@@ -2414,11 +2414,7 @@ def test_trial_conflict_message_names_reserved_group_or_trial(client):
             "starts_at": "2026-10-15T16:15:00+03:00",
         },
     )
-    assert group_conflict.status_code == 409, group_conflict.text
-    group_detail = group_conflict.json()["detail"]
-    assert "заняття «Група 1»" in group_detail
-    assert "15.10.2026 16:00–17:00" in group_detail
-    assert "локація зайнята" in group_detail
+    assert trial_in_group_slot.status_code == 201, trial_in_group_slot.text
 
     first_student = client.post("/students", headers=headers, json={"first_name": "Перший"}).json()
     first_trial = client.post(
@@ -2433,7 +2429,7 @@ def test_trial_conflict_message_names_reserved_group_or_trial(client):
     assert first_trial.status_code == 201, first_trial.text
 
     second_student = client.post("/students", headers=headers, json={"first_name": "Другий"}).json()
-    trial_conflict = client.post(
+    overlapping_trial = client.post(
         "/trial-lessons",
         headers=headers,
         json={
@@ -2442,11 +2438,7 @@ def test_trial_conflict_message_names_reserved_group_or_trial(client):
             "starts_at": "2026-10-15T18:15:00+03:00",
         },
     )
-    assert trial_conflict.status_code == 409, trial_conflict.text
-    trial_detail = trial_conflict.json()["detail"]
-    assert "пробне заняття" in trial_detail
-    assert "15.10.2026 18:00–19:00" in trial_detail
-    assert "локація зайнята" in trial_detail
+    assert overlapping_trial.status_code == 201, overlapping_trial.text
 
 
 def test_trial_can_be_rescheduled_without_creating_duplicate(client):
@@ -2463,6 +2455,18 @@ def test_trial_can_be_rescheduled_without_creating_duplicate(client):
     assert trial.status_code == 201, trial.text
     trial_id = trial.json()["id"]
 
+    other_student = client.post("/students", headers=headers, json={"first_name": "Олена"}).json()
+    occupied_slot = client.post(
+        "/trial-lessons",
+        headers=headers,
+        json={
+            "student_id": other_student["id"],
+            "location_id": location["id"],
+            "starts_at": "2026-10-13T18:30:00+03:00",
+        },
+    )
+    assert occupied_slot.status_code == 201, occupied_slot.text
+
     updated = client.patch(
         f"/trial-lessons/{trial_id}",
         headers=headers,
@@ -2477,7 +2481,7 @@ def test_trial_can_be_rescheduled_without_creating_duplicate(client):
 
     trials = client.get("/trial-lessons", headers=headers)
     assert trials.status_code == 200
-    assert len(trials.json()) == 1
+    assert {item["id"] for item in trials.json()} == {trial_id, occupied_slot.json()["id"]}
 
     events = client.get(
         "/audit-events",
