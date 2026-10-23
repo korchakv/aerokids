@@ -485,7 +485,7 @@ def test_location_with_room_cannot_be_deleted(client):
     assert "кімнат" in deleted.json()["detail"].lower()
 
 
-def test_trial_conflict_explains_occupied_location_interval(client):
+def test_trial_can_be_added_during_an_occupied_group_slot(client):
     org = create_org(client, slug="trial-conflict-explanation")
     location = client.post("/locations", headers=headers(org), json={"name": "One Location"}).json()
     group = create_group(client, org, "Scheduled Group", location_id=location["id"])
@@ -506,11 +506,8 @@ def test_trial_conflict_explains_occupied_location_interval(client):
         "location_id": location["id"],
         "starts_at": (lesson_start + timedelta(minutes=15)).isoformat(),
     })
-    assert trial.status_code == 409, trial.text
-    detail = trial.json()["detail"]
-    assert "локація зайнята" in detail.lower()
-    assert lesson_date.strftime("%d.%m.%Y") in detail
-    assert "11:00–12:00" in detail
+    assert trial.status_code == 201, trial.text
+    assert trial.json()["lesson_session_id"] is None
 
 
 def test_trial_can_be_linked_to_a_group_session(client):
@@ -547,8 +544,8 @@ def test_trial_can_be_linked_to_a_group_session(client):
         "location_id": location["id"],
         "starts_at": (lesson_start + timedelta(minutes=15)).isoformat(),
     })
-    assert overlapping_trial.status_code == 409
-    assert "локація зайнята" in overlapping_trial.json()["detail"].lower()
+    assert overlapping_trial.status_code == 201, overlapping_trial.text
+    assert overlapping_trial.json()["lesson_session_id"] is None
 
 
 def test_curriculum_lessons_route_is_registered(client):
