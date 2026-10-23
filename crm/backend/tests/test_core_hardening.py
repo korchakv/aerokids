@@ -512,3 +512,12 @@ def test_trial_conflict_explains_occupied_location_interval(client):
     assert lesson_date.strftime("%d.%m.%Y") in detail
     assert "11:00–12:00" in detail
 
+
+def test_curriculum_lessons_route_is_registered(client):
+    org = create_org(client, slug="curriculum-route-smoke")
+
+    response = client.get("/curriculum-lessons", headers=headers(org))
+
+    assert response.status_code == 200, response.text
+    assert response.json() == []
+
