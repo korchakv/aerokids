@@ -507,7 +507,8 @@ def test_trial_can_be_added_during_an_occupied_group_slot(client):
         "starts_at": (lesson_start + timedelta(minutes=15)).isoformat(),
     })
     assert trial.status_code == 201, trial.text
-    assert trial.json()["starts_at"].startswith(lesson_start.strftime("%Y-%m-%dT11:15"))
+    actual_start = datetime.fromisoformat(trial.json()["starts_at"]).astimezone(ZoneInfo("Europe/Kyiv"))
+    assert actual_start == lesson_start + timedelta(minutes=15)
     assert trial.json()["lesson_session_id"] is None
 
 
