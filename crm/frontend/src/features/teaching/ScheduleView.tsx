@@ -99,6 +99,7 @@ export function ScheduleView({
   }, [initialSchedule]);
   const [scheduleCreateMode, setScheduleCreateMode] = useState<"lesson" | "recurring">("lesson");
   const [scheduleSlots, setScheduleSlots] = useState<DraftScheduleSlot[]>([{ weekday: scheduleWeekday, start_time: scheduleTime, duration_minutes: scheduleDuration }]);
+  const visibleTrials = trialsThisWeek.filter((trial) => scheduleFilterGroupId === "all" || lessonsThisWeek.some((lesson) => lesson.id === trial.trialLessonSessionId));
 
   const submitScheduleCreation = async () => {
     if (scheduleCreateMode === "lesson") {
@@ -122,7 +123,7 @@ export function ScheduleView({
             <span><b>{lessonsThisWeek.length}</b> занять</span>
             <span className="done"><b>{completedThisWeek}</b> проведено</span>
             {unfinishedPastThisWeek > 0 && <span className="attention"><b>{unfinishedPastThisWeek}</b> не завершено</span>}
-            {trialsThisWeek.length > 0 && <span className="trial"><b>{trialsThisWeek.length}</b> пробних</span>}
+            {visibleTrials.length > 0 && <span className="trial"><b>{visibleTrials.length}</b> пробних</span>}
           </div>
         </div>
         <div className="scheduleToolbarActions">
@@ -148,7 +149,7 @@ export function ScheduleView({
         {scheduleWeekDays.map((date) => {
           const dayKey = localDateInput(date);
           const dayLessons = lessonsThisWeek.filter((lesson) => localDateInput(new Date(lesson.startsAt)) === dayKey);
-          const dayTrials = trialsThisWeek.filter((lead) => lead.trialAt && localDateInput(new Date(lead.trialAt)) === dayKey);
+          const dayTrials = trialsThisWeek.filter((lead) => scheduleFilterGroupId === "all" && !lead.trialLessonSessionId && lead.trialAt && localDateInput(new Date(lead.trialAt)) === dayKey);
           const items = [
             ...dayLessons.map((lesson) => ({ kind: "lesson" as const, at: lesson.startsAt, lesson })),
             ...dayTrials.map((lead) => ({ kind: "trial" as const, at: lead.trialAt!, lead })),
@@ -172,22 +173,23 @@ export function ScheduleView({
                 const isPast = dateValue(item.lesson.startsAt) < Date.now();
                 const state = item.lesson.status === "completed" ? "completed" : isPast ? "missed" : "planned";
                 const label = state === "completed" ? "Проведено" : state === "missed" ? "Не проведено" : "Заплановано";
+                const attachedTrials = trialsThisWeek.filter((lead) => lead.trialLessonSessionId === item.lesson.id);
                 return <button className={"mobileScheduleRow " + state} key={"mlesson-" + item.lesson.id} onClick={() => onOpenLesson(item.lesson.id)}>
                   <time>{new Date(item.at).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time>
-                  <span><b>{group?.name ?? "Група"}</b><small>{label}</small></span>
+                  <span><b>{group?.name ?? "Група"}</b><small>{label}{attachedTrials.length ? ` · пробне (${attachedTrials.length})` : ""}</small></span>
                   <i>›</i>
                 </button>;
               })}
             </div>
           </section>;
         })}
-        {lessonsThisWeek.length === 0 && trialsThisWeek.length === 0 && <div className="mobileScheduleEmpty">На цей тиждень подій немає.</div>}
+        {lessonsThisWeek.length === 0 && visibleTrials.length === 0 && <div className="mobileScheduleEmpty">На цей тиждень подій немає.</div>}
       </div>
       <div className="weekGrid weekGridConcrete scheduleWeekClear">
         {scheduleWeekDays.map((date) => {
           const dayKey = localDateInput(date);
           const dayLessons = lessonsThisWeek.filter((lesson) => localDateInput(new Date(lesson.startsAt)) === dayKey);
-          const dayTrials = trialsThisWeek.filter((lead) => lead.trialAt && localDateInput(new Date(lead.trialAt)) === dayKey);
+          const dayTrials = trialsThisWeek.filter((lead) => scheduleFilterGroupId === "all" && !lead.trialLessonSessionId && lead.trialAt && localDateInput(new Date(lead.trialAt)) === dayKey);
           const isToday = dayKey === todayKey;
           const isPastDay = dayKey < todayKey;
           const dayState = isToday ? "today" : isPastDay ? "past" : "";
@@ -205,10 +207,12 @@ export function ScheduleView({
                 const isPast = dateValue(lesson.startsAt) < Date.now();
                 const state = lesson.status === "completed" ? "completed" : isPast ? "missed" : "planned";
                 const statusText = state === "completed" ? "Проведено" : state === "missed" ? "Не проведено" : "Заплановано";
+                const attachedTrials = trialsThisWeek.filter((lead) => lead.trialLessonSessionId === lesson.id);
                 return <button className={"scheduleCard concreteLessonCard " + state} key={lesson.id} onClick={() => onOpenLesson(lesson.id)}>
-                  <div className="scheduleCardTop"><time>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time><span className={"scheduleStatus " + state}>{statusText}</span></div>
+                  <div className="scheduleCardTop"><time>{new Date(lesson.startsAt).toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}</time><span className={"scheduleStatus " + state}>{statusText}</span>{attachedTrials.length > 0 && <span className="scheduleStatus trial">Пробне · {attachedTrials.length}</span>}</div>
                   <strong>{group?.name ?? "Група"}</strong>
                   <small>{lesson.topic || "Тема ще не вказана"}</small>
+                  {attachedTrials.length > 0 && <small className="scheduleTrialNames">Пробне: {attachedTrials.map((lead) => lead.child).join(", ")}</small>}
                   <div className="scheduleCardMeta">{teacher && <span>{teacher}</span>}{total > 0 && <span>{marked}/{total} відмічено</span>}</div>
                 </button>;
               })}

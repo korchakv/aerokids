@@ -17,6 +17,7 @@ import {
 } from "./model";
 import type { GroupItem } from "../groups/types";
 import type { LocationDemo } from "../locations/types";
+import type { LessonItem } from "../teaching/model";
 
 type Setter<T> = Dispatch<SetStateAction<T>>;
 
@@ -56,6 +57,10 @@ export type LeadDrawerProps = {
   activeLocations: LocationDemo[];
   trialMode: "schedule" | "complete" | null;
   trialAt: string;
+  trialLessonSessionId: EntityId | "";
+  lessons: LessonItem[];
+  onTrialAtChange: (value: string) => void;
+  onTrialLessonSessionChange: (value: EntityId | "") => void;
   trialLocationId: EntityId | "";
   teacherNotes: string;
   leadProcedureTarget: LeadKanbanColumnId | null;
@@ -164,6 +169,10 @@ export function LeadDrawer(props: LeadDrawerProps) {
     activeLocations,
     trialMode,
     trialAt,
+    trialLessonSessionId,
+    lessons,
+    onTrialAtChange,
+    onTrialLessonSessionChange,
     trialLocationId,
     teacherNotes,
     leadProcedureTarget,
@@ -325,6 +334,7 @@ export function LeadDrawer(props: LeadDrawerProps) {
             <div className="trialSummaryHeader"><span>Коли і де</span>{canManageLeads && <button type="button" className="leadEditIcon" aria-label="Змінити дату, час і локацію пробного" title="Редагувати запис на пробне" onClick={beginTrialScheduling}><UiIcon name="edit" size={14} /></button>}</div>
             <b>{new Date(selected.trialAt).toLocaleString("uk-UA", { weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(/^./, (character) => character.toLocaleUpperCase("uk-UA"))}</b>
             <small>{selected.trialLocation ?? "Локацію не вказано"}</small>
+            {selected.trialLessonSessionId && <small>Разом із заняттям групи «{groups.find((group) => group.id === lessons.find((lesson) => lesson.id === selected.trialLessonSessionId)?.groupId)?.name ?? "група"}»</small>}
           </div>}
           {selected.trialResult === "no_show" && !["Відмовились","Не відповідає","Неактуально"].includes(selected.status) && trialMode !== "complete" && trialMode !== "schedule" && <div className="resultCard noShowCard">
             <span>Не прийшли на пробне</span>
@@ -351,11 +361,19 @@ export function LeadDrawer(props: LeadDrawerProps) {
 
           {trialMode === "schedule" && <div id="lead-trial-workflow" data-testid="lead-trial-workflow" className="workflowBox leadWorkflowBox">
             <div className="workflowHead"><h3>{selected.trialResult === "scheduled" ? "Редагувати запис на пробне" : "Запис на пробне"}</h3><button type="button" aria-label="Закрити форму запису" onClick={() => setTrialMode(null)}>×</button></div>
-            <DateTimeEditor label="Дата і час" value={trialAt} onChange={setTrialAt} />
-            <label>Локація<select value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
+            <DateTimeEditor label="Дата і час" value={trialAt} onChange={onTrialAtChange} />
+            <label>До заняття групи <small>(необов’язково)</small><select value={trialLessonSessionId} onChange={(event) => onTrialLessonSessionChange(event.target.value)}>
+              <option value="">Окреме пробне</option>
+              {lessons.filter((lesson) => lesson.status === "scheduled" && new Date(lesson.startsAt).getTime() >= Date.now()).sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()).map((lesson) => {
+                const group = groups.find((item) => item.id === lesson.groupId);
+                return <option value={lesson.id} key={lesson.id}>{new Date(lesson.startsAt).toLocaleString("uk-UA", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · {group?.name ?? "Група"}</option>;
+              })}
+            </select></label>
+            <label>Локація<select disabled={Boolean(trialLessonSessionId)} value={trialLocationId} onChange={(e) => { setTrialLocationId(e.target.value); setTrialLocation(locations.find((location) => location.id === e.target.value)?.name ?? ""); }}>
               <option value="" disabled={Boolean(selected.trialLocationId)}>Без локації</option>
               {activeLocations.map((location) => <option value={location.id} key={location.id}>{location.name}</option>)}
             </select></label>
+            {trialLessonSessionId && <small className="softPreferenceHint">Пробне буде відображатися в картці обраного заняття групи.</small>}
             <button className="primary full" onClick={scheduleTrial}>Підтвердити пробне</button>
           </div>}
           {selectedMissingDetails.length > 0 && <div className="leadCompletenessNotice">

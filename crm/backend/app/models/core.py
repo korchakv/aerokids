@@ -233,6 +233,7 @@ class TrialLesson(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
     location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"), index=True)
+    lesson_session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("lesson_sessions.id", ondelete="SET NULL"), index=True)
     student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("students.id"), index=True, nullable=False)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[TrialStatus] = mapped_column(Enum(TrialStatus), default=TrialStatus.SCHEDULED, nullable=False)

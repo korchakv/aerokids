@@ -140,6 +140,7 @@ class HardenedLessonCreate(BaseModel):
 class HardenedTrialCreate(BaseModel):
     student_id: UUID
     location_id: UUID | None = None
+    lesson_session_id: UUID | None = None
     room_id: UUID | None = None
     staff_id: UUID | None = None
     starts_at: datetime
@@ -149,6 +150,7 @@ class HardenedTrialCreate(BaseModel):
 class HardenedTrialUpdate(BaseModel):
     starts_at: datetime | None = None
     location_id: UUID | None = None
+    lesson_session_id: UUID | None = None
     room_id: UUID | None = None
     staff_id: UUID | None = None
     duration_minutes: int | None = Field(default=None, ge=15, le=180)
@@ -553,7 +555,7 @@ def create_trial_hardened(
     access: OrgAccess = Depends(_require_capability("leads.manage")),
     db: Session = Depends(get_db),
 ):
-    return hardening.create_trial_hardened(db, access.organization_id, data, access.user_id)
+    return hardening.create_trial_hardened(db, access.organization_id, data, access.user_id, access.role)
 
 
 @router.patch("/trial-lessons/{trial_id}", response_model=TrialLessonRead)
@@ -563,7 +565,7 @@ def update_trial_hardened(
     access: OrgAccess = Depends(_require_capability("leads.manage")),
     db: Session = Depends(get_db),
 ):
-    return hardening.update_trial_hardened(db, access.organization_id, trial_id, data, access.user_id)
+    return hardening.update_trial_hardened(db, access.organization_id, trial_id, data, access.user_id, access.role)
 
 
 @router.post("/student-subscriptions", response_model=StudentSubscriptionRead, status_code=201)

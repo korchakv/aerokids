@@ -352,6 +352,7 @@ function App() {
   const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindowDraft[]>([]);
   const [preferenceSaving, setPreferenceSaving] = useState(false);
   const [trialAt, setTrialAt] = useState(() => `${localDateInput(new Date())}T17:00`);
+  const [trialLessonSessionId, setTrialLessonSessionId] = useState<EntityId | "">("");
   const [trialLocation, setTrialLocation] = useState("Основна локація");
   const [trialLocationId, setTrialLocationId] = useState<EntityId | "">("");
   const [teacherNotes, setTeacherNotes] = useState("");
@@ -997,6 +998,7 @@ function App() {
       setPostTrialMode(null);
       setLeadProcedureTarget("trial");
       setTrialAt(lead.trialAt ? toLocalDateTimeInput(lead.trialAt) : nextQuarterHourLocalInput());
+      setTrialLessonSessionId(lead.trialLessonSessionId ?? "");
       setTrialLocationId(lead.trialLocationId ?? "");
       setTrialLocation(lead.trialLocation ?? "");
       window.setTimeout(() => setTrialMode("schedule"), 0);
@@ -1133,12 +1135,14 @@ function App() {
         if (selected.trialId) {
           await apiPatch(`/trial-lessons/${selected.trialId}`, {
             location_id: trialLocationId || null,
+            lesson_session_id: trialLessonSessionId || null,
             starts_at: new Date(trialAt).toISOString(),
           }, session);
         } else {
           await apiPost("/trial-lessons", {
             student_id: selected.id,
             location_id: trialLocationId || null,
+            lesson_session_id: trialLessonSessionId || null,
             starts_at: new Date(trialAt).toISOString(),
           }, session);
         }
@@ -1495,6 +1499,7 @@ function App() {
     setPostTrialMode(null);
     setLeadProcedureTarget("trial");
     setTrialAt(selected.trialResult === "scheduled" && selected.trialAt ? toLocalDateTimeInput(selected.trialAt) : nextQuarterHourLocalInput());
+    setTrialLessonSessionId(selected.trialResult === "scheduled" ? selected.trialLessonSessionId ?? "" : "");
     setTrialLocationId(selected.trialLocationId ?? "");
     setTrialMode("schedule");
     revealLeadWorkflow("lead-trial-workflow");
@@ -3156,6 +3161,22 @@ function App() {
   const canEditGroups = !apiEnabled || managerRole;
   const canManagePlans = !apiEnabled || ["owner", "admin", "accountant"].includes(currentMembership?.role ?? "");
   const todayKey = localDateInput(new Date());
+  const onTrialAtChange = (value: string) => {
+    setTrialAt(value);
+    if (!trialLessonSessionId) return;
+    const linkedLesson = lessons.find((lesson) => lesson.id === trialLessonSessionId);
+    if (!linkedLesson || new Date(value).getTime() !== dateValue(linkedLesson.startsAt)) {
+      setTrialLessonSessionId("");
+    }
+  };
+  const onTrialLessonSessionChange = (value: EntityId | "") => {
+    setTrialLessonSessionId(value);
+    const linkedLesson = lessons.find((lesson) => lesson.id === value);
+    if (!linkedLesson) return;
+    setTrialAt(toLocalDateTimeInput(linkedLesson.startsAt));
+    setTrialLocationId(linkedLesson.locationId ?? "");
+    setTrialLocation(locations.find((location) => location.id === linkedLesson.locationId)?.name ?? "");
+  };
   const scheduleWeekStart = startOfLocalWeek(addLocalDays(new Date(), scheduleWeekOffset * 7));
   const scheduleWeekDays = Array.from({ length: 7 }, (_, index) => addLocalDays(scheduleWeekStart, index));
   const scheduleWeekEnd = addLocalDays(scheduleWeekStart, 6);
@@ -3167,13 +3188,13 @@ function App() {
       return lessonDate >= localDateInput(scheduleWeekStart) && lessonDate <= localDateInput(scheduleWeekEnd);
     })
     .sort((a, b) => dateValue(a.startsAt) - dateValue(b.startsAt));
-  const trialsThisWeek = scheduleFilterGroupId === "all" ? leads
+  const trialsThisWeek = leads
     .filter((lead) => {
       if (!lead.trialAt || lead.status !== "Пробне заплановано") return false;
       const trialDate = localDateInput(new Date(lead.trialAt));
       return trialDate >= localDateInput(scheduleWeekStart) && trialDate <= localDateInput(scheduleWeekEnd);
     })
-    .sort((a, b) => dateValue(a.trialAt) - dateValue(b.trialAt)) : [];
+    .sort((a, b) => dateValue(a.trialAt) - dateValue(b.trialAt));
   const completedThisWeek = lessonsThisWeek.filter((lesson) => lesson.status === "completed").length;
   const unfinishedPastThisWeek = lessonsThisWeek.filter((lesson) => lesson.status !== "completed" && dateValue(lesson.startsAt) < Date.now()).length;
   const canSeeLeads = navigation.includes("Заявки");
@@ -3952,6 +3973,10 @@ function App() {
         activeLocations,
         trialMode,
         trialAt,
+        trialLessonSessionId,
+        lessons,
+        onTrialAtChange,
+        onTrialLessonSessionChange,
         trialLocationId,
         teacherNotes,
         leadProcedureTarget,

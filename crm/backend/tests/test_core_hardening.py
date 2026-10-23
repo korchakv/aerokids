@@ -513,6 +513,44 @@ def test_trial_conflict_explains_occupied_location_interval(client):
     assert "11:00–12:00" in detail
 
 
+def test_trial_can_be_linked_to_a_group_session(client):
+    org = create_org(client, slug="trial-with-group-session")
+    location = client.post("/locations", headers=headers(org), json={"name": "Group Location"}).json()
+    group = create_group(client, org, "Trial Group", location_id=location["id"])
+    student = create_student(client, org, "Trial Guest")
+    lesson_start = datetime.combine(date.today() + timedelta(days=3), time(14, 15), tzinfo=ZoneInfo("Europe/Kyiv"))
+    lesson = client.post("/lesson-sessions", headers=headers(org), json={
+        "group_id": group["id"],
+        "location_id": location["id"],
+        "starts_at": lesson_start.isoformat(),
+        "duration_minutes": 60,
+    })
+    assert lesson.status_code == 201, lesson.text
+
+    trial = client.post("/trial-lessons", headers=headers(org), json={
+        "student_id": student["id"],
+        "location_id": location["id"],
+        "lesson_session_id": lesson.json()["id"],
+        "starts_at": lesson_start.isoformat(),
+    })
+    assert trial.status_code == 201, trial.text
+    assert trial.json()["lesson_session_id"] == lesson.json()["id"]
+
+    leads = client.get("/workspace/leads", headers=headers(org))
+    assert leads.status_code == 200, leads.text
+    lead = next(row for row in leads.json() if row["student_id"] == student["id"])
+    assert lead["latest_trial_lesson_session_id"] == lesson.json()["id"]
+
+    another_student = create_student(client, org, "Separate Trial")
+    overlapping_trial = client.post("/trial-lessons", headers=headers(org), json={
+        "student_id": another_student["id"],
+        "location_id": location["id"],
+        "starts_at": (lesson_start + timedelta(minutes=15)).isoformat(),
+    })
+    assert overlapping_trial.status_code == 409
+    assert "локація зайнята" in overlapping_trial.json()["detail"].lower()
+
+
 def test_curriculum_lessons_route_is_registered(client):
     org = create_org(client, slug="curriculum-route-smoke")
 
