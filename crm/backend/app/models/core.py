@@ -252,6 +252,8 @@ class Group(Base):
     min_age: Mapped[int | None] = mapped_column(Integer)
     max_age: Mapped[int | None] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    curriculum_completed_through: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    curriculum_baseline_date: Mapped[date | None] = mapped_column(Date)
 
 
 class Enrollment(Base):
@@ -292,6 +294,7 @@ class LessonSession(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=False)
     group_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("groups.id"), index=True, nullable=False)
+    curriculum_lesson_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("curriculum_lessons.id", ondelete="SET NULL"), index=True)
     location_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("locations.id"), index=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)

@@ -1059,7 +1059,8 @@ def create_lesson_session_hardened(db: Session, org_id: UUID, data, user_id: UUI
     session = LessonSession(
         organization_id=org_id, group_id=group.id, location_id=location_id,
         starts_at=data.starts_at, duration_minutes=data.duration_minutes,
-        topic=data.topic, notes=data.notes, status=LessonStatus.SCHEDULED,
+        topic=data.topic, curriculum_lesson_id=getattr(data, "curriculum_lesson_id", None),
+        notes=data.notes, status=LessonStatus.SCHEDULED,
     )
     db.add(session)
     db.flush()

@@ -661,6 +661,7 @@ class LessonSessionRead(ORMModel):
     starts_at: datetime
     duration_minutes: int
     topic: str | None
+    curriculum_lesson_id: UUID | None = None
     notes: str | None
     status: LessonStatus
     attendance_present: int = 0

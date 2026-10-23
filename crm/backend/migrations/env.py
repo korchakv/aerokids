@@ -8,6 +8,7 @@ from app.db.base import Base
 from app.models import core  # noqa: F401
 from app.models import hardening  # noqa: F401
 from app.models import hardening_extensions  # noqa: F401
+from app.models import learning  # noqa: F401
 
 config = context.config
 migration_database_url = settings.migration_database_url or settings.database_url

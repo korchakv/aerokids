@@ -33,6 +33,7 @@ import { StaffDrawer, StaffView } from "./features/staff/StaffView";
 import { StaffDialogs } from "./features/staff/StaffDialogs";
 import { SettingsView } from "./features/settings/SettingsView";
 import { ReportsView } from "./features/reports/ReportsView";
+import { LessonsView } from "./features/learning/LessonsView";
 import { StudentDrawer, StudentsView, type StudentFilter, type StudentLifecycleLabel } from "./features/students/StudentsView";
 import { applyOperations, paymentPageItemToDemo } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue, workspaceGroupToGroupItem, workspaceStudentLifecycle, workspaceStudentToLead } from "./features/workspace/adapters";
@@ -374,7 +375,7 @@ function App() {
   const [newLessonGroupId, setNewLessonGroupId] = useState<EntityId>("1");
   const [newLessonAt, setNewLessonAt] = useState(() => `${localDateInput(new Date())}T17:00`);
   const [newLessonDuration, setNewLessonDuration] = useState(60);
-  const [newLessonTopic, setNewLessonTopic] = useState("FPV / електроніка");
+  const [newLessonTopic, setNewLessonTopic] = useState("");
   const [scheduleGroupId, setScheduleGroupId] = useState<EntityId>("1");
   const [scheduleWeekday, setScheduleWeekday] = useState(0);
   const [scheduleTime, setScheduleTime] = useState("17:00");
@@ -397,6 +398,18 @@ function App() {
     const handleSaved = () => setSaveToastTick((value) => value + 1);
     window.addEventListener("crm:saved", handleSaved);
     return () => window.removeEventListener("crm:saved", handleSaved);
+  }, []);
+
+  useEffect(() => {
+    const handleLearningSessionUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string; lessonId: string | null; topic: string }>).detail;
+      if (!detail) return;
+      setLessons((current) => current.map((lesson) => lesson.id === detail.sessionId
+        ? { ...lesson, curriculumLessonId: detail.lessonId, topic: detail.topic }
+        : lesson));
+    };
+    window.addEventListener("crm:learning-session-updated", handleLearningSessionUpdated);
+    return () => window.removeEventListener("crm:learning-session-updated", handleLearningSessionUpdated);
   }, []);
 
   useEffect(() => {
@@ -3455,6 +3468,16 @@ function App() {
           onMarkAttendance={markAttendance}
           onAttendanceNoteChange={setAttendanceNote}
           onSaveAttendance={saveAttendance}
+        />}
+
+        {active === "Уроки" && <LessonsView
+          session={session}
+          groups={groups.map((group) => ({ id: String(group.id), name: group.name }))}
+          students={leads.filter((lead) => Boolean(studentGroup(lead.id))).map((lead) => ({
+            id: String(lead.id), name: lead.child, groupId: String(studentGroup(lead.id)?.id ?? ""),
+          }))}
+          sessions={lessons}
+          canEdit={currentMembership?.role !== "accountant"}
         />}
 
         {active === "Оплати" && <PaymentsView

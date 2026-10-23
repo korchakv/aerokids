@@ -9,6 +9,7 @@ export type LessonItem = {
   startsAt: string;
   duration: number;
   topic: string;
+  curriculumLessonId?: string | null;
   notes?: string;
   status?: "scheduled" | "completed" | "cancelled";
   attendancePresent?: number;
@@ -30,7 +31,8 @@ export function applyTeaching(
     groupId: item.group_id,
     startsAt: item.starts_at,
     duration: item.duration_minutes,
-    topic: item.topic ?? "Заняття",
+    topic: item.topic ?? "",
+    curriculumLessonId: item.curriculum_lesson_id ?? null,
     notes: item.notes ?? undefined,
     status: item.status,
     attendancePresent: item.attendance_present,
