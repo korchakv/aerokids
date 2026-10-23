@@ -8,7 +8,7 @@ export type {
   ApiGroupRosterStudent, TeachingBundle, OverviewReport, ApiAuditEvent,
 } from "./api/types";
 
-export { apiEnabled, loadSession, saveSession, clearSession, apiGet, apiPost, apiPatch, apiPut, apiDelete } from "./api/client";
+export { apiEnabled, loadSession, saveSession, clearSession, apiGet, apiPost, apiPatch, apiPut, apiUpload, apiDelete } from "./api/client";
 export { login, refreshMe, changeOrganization, getBootstrapStatus, bootstrapOwner, getInvitationStatus, acceptInvite, resetPassword } from "./api/auth";
 export { checkIntakeDuplicates } from "./api/intake";
 export { loadWorkspace, loadWorkspaceStudentsPage, loadWorkspaceGroupsPage } from "./api/workspace";

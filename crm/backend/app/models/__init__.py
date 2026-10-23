@@ -31,6 +31,7 @@ from app.models.hardening_extensions import (
     NotificationOutbox,
     SubscriptionRuleSnapshot,
 )
+from app.models.learning import CurriculumLesson, CurriculumMaterial, StudentLessonCompletion
 
 __all__ = [
     "Organization",
@@ -60,4 +61,7 @@ __all__ = [
     "IndividualDerivedBilling",
     "NotificationOutbox",
     "SubscriptionRuleSnapshot",
+    "CurriculumLesson",
+    "CurriculumMaterial",
+    "StudentLessonCompletion",
 ]

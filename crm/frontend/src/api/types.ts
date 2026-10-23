@@ -268,6 +268,7 @@ export type ApiLessonSession = {
   starts_at: string;
   duration_minutes: number;
   topic: string | null;
+  curriculum_lesson_id: string | null;
   notes: string | null;
   status: "scheduled" | "completed" | "cancelled";
   attendance_present: number;

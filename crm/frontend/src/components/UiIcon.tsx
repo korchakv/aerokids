@@ -1,4 +1,4 @@
-export type UiIconName = "home" | "leads" | "student" | "groups" | "calendar" | "attendance" | "wallet" | "staff" | "location" | "reports" | "settings" | "search" | "logout" | "login" | "plus" | "sun" | "moon" | "theme" | "edit" | "x" | "back" | "phone";
+export type UiIconName = "home" | "leads" | "student" | "groups" | "calendar" | "attendance" | "lessons" | "wallet" | "staff" | "location" | "reports" | "settings" | "search" | "logout" | "login" | "plus" | "sun" | "moon" | "theme" | "edit" | "x" | "back" | "phone";
 
 export function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -9,6 +9,7 @@ export function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number })
     case "groups": return <svg {...common}><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3.5 20c.7-4 2.5-6 5.5-6s4.8 2 5.5 6"/><path d="M14 15c3.3-.6 5.5 1 6.5 4"/></svg>;
     case "calendar": return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/><path d="M8 14h2M14 14h2M8 18h2"/></svg>;
     case "attendance": return <svg {...common}><path d="M9 5H6a2 2 0 0 0-2 2v13h16V7a2 2 0 0 0-2-2h-3"/><path d="M9 3h6v4H9z"/><path d="m8 14 2.5 2.5L16 11"/></svg>;
+    case "lessons": return <svg {...common}><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21z"/><path d="M4 5.5v13A2.5 2.5 0 0 1 6.5 16H20"/><path d="M9 7h7M9 10h7"/></svg>;
     case "wallet": return <svg {...common}><path d="M4 6h14a2 2 0 0 1 2 2v11H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/><path d="M15 11h6v5h-6a2.5 2.5 0 0 1 0-5Z"/></svg>;
     case "staff": return <svg {...common}><circle cx="9" cy="8" r="3"/><path d="M3.5 20c.7-4 2.5-6 5.5-6 1.7 0 3 .5 4 1.4"/><path d="M17 13v6M14 16h6"/></svg>;
     case "location": return <svg {...common}><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>;
@@ -31,7 +32,7 @@ export function UiIcon({ name, size = 18 }: { name: UiIconName; size?: number })
 export function navigationIcon(item: string): UiIconName {
   const map: Record<string, UiIconName> = {
     "Дашборд": "home", "Заявки": "leads", "Учні": "student", "Групи": "groups",
-    "Розклад": "calendar", "Відвідування": "attendance", "Оплати": "wallet",
+    "Розклад": "calendar", "Відвідування": "attendance", "Уроки": "lessons", "Оплати": "wallet",
     "Працівники": "staff", "Локації": "location", "Звіти": "reports", "Налаштування": "settings",
   };
   return map[item] ?? "home";

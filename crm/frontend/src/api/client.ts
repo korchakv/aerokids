@@ -90,6 +90,12 @@ const KNOWN_API_MESSAGES: Record<string, string> = {
   "Inactive staff member cannot be assigned": "Неактивного працівника не можна призначити.",
   "Staff member is not marked as able to teach": "Цього працівника не позначено як такого, що може викладати.",
   "Location name already exists": "Локація з такою назвою вже існує.",
+  "Curriculum lesson not found": "Урок програми не знайдено.",
+  "This curriculum lesson is linked to class history": "Цей урок уже пов’язаний з історією занять. Спершу змініть тему відповідних занять.",
+  "Material not found": "Матеріал не знайдено.",
+  "Upload a PDF, PowerPoint, JPG, PNG, WebP, or MP4 file": "Завантажте PDF, PowerPoint, JPG, PNG, WebP або MP4 файл.",
+  "File must be between 1 byte and 20 MB": "Файл має бути розміром до 20 МБ.",
+  "Material URL must use http or https": "Посилання має починатися з http:// або https://.",
   "Duplicate availability slots are not allowed": "У побажаннях щодо часу є однакові проміжки. Приберіть дубль.",
   "No access to this group": "У вас немає доступу до цієї групи.",
   "Too many login attempts. Please try again later.": "Забагато спроб входу. Зачекайте кілька хвилин і спробуйте ще раз.",
@@ -263,7 +269,7 @@ function emitMutationSaved(path: string, method: string) {
 export async function request<T>(path: string, init: RequestInit = {}, session?: Session): Promise<T> {
   if (!API_URL) throw new Error("CRM не підключена до сервера. Перевірте налаштування API.");
   const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
+  if (!(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (session) {
     headers.set("Authorization", `Bearer ${session.accessToken}`);
     headers.set("X-Organization-Id", session.organizationId);
@@ -313,6 +319,10 @@ export function apiGet<T>(path: string, session: Session) {
 
 export function apiPost<T>(path: string, body: unknown, session: Session) {
   return request<T>(path, { method: "POST", body: JSON.stringify(body) }, session);
+}
+
+export function apiUpload<T>(path: string, body: FormData, session: Session) {
+  return request<T>(path, { method: "POST", body }, session);
 }
 
 export function apiPatch<T>(path: string, body: unknown, session: Session) {
