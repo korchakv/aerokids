@@ -1136,12 +1136,6 @@ def create_trial_hardened(
         if not staff.is_active or not staff.can_teach:
             raise HTTPException(status_code=409, detail="Працівник не може проводити пробне")
     duration = getattr(data, "duration_minutes", 60)
-    conflict = resource_conflict_reason(
-        db, org_id, data.starts_at, duration, location_id, room_id, staff_id,
-        allow_session_id=lesson_session.id if lesson_session else None,
-    )
-    if conflict:
-        raise HTTPException(status_code=409, detail=conflict)
     trial = TrialLesson(
         organization_id=org_id, student_id=student.id, location_id=location_id,
         lesson_session_id=lesson_session.id if lesson_session else None,
@@ -1200,13 +1194,6 @@ def update_trial_hardened(
     if not lesson_session and staff_id is None:
         staff_id = resources.staff_id
     duration = getattr(data, "duration_minutes", None) or resources.duration_minutes or 60
-    conflict = resource_conflict_reason(
-        db, org_id, starts_at, duration, location_id, room_id, staff_id,
-        exclude_trial_id=trial.id,
-        allow_session_id=lesson_session.id if lesson_session else None,
-    )
-    if conflict:
-        raise HTTPException(status_code=409, detail=conflict)
     trial.starts_at = starts_at
     trial.location_id = location_id
     trial.lesson_session_id = lesson_session.id if lesson_session else None
