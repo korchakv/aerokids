@@ -37,6 +37,7 @@ export type Lead = {
   availability?: AvailabilitySlot[];
   trialId?: string;
   trialAt?: string;
+  trialLessonSessionId?: string;
   trialLocationId?: string;
   trialLocation?: string;
   trialResult?: "scheduled" | "completed" | "no_show" | "cancelled";

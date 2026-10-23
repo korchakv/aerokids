@@ -367,6 +367,7 @@ def resource_conflict_reason(
     exclude_session_id: UUID | None = None,
     exclude_trial_id: UUID | None = None,
     exclude_individual_id: UUID | None = None,
+    allow_session_id: UUID | None = None,
 ) -> str | None:
     start = _utc_naive(db, org_id, starts_at)
 
@@ -375,6 +376,8 @@ def resource_conflict_reason(
         LessonSession.status != LessonStatus.CANCELLED,
     )))
     for session in sessions:
+        if allow_session_id is not None and session.id == allow_session_id:
+            continue
         if exclude_session_id is not None and session.id == exclude_session_id:
             continue
         existing_start = _utc_naive(db, org_id, session.starts_at)
@@ -417,6 +420,10 @@ def resource_conflict_reason(
     )))
     for trial in trials:
         if exclude_trial_id is not None and trial.id == exclude_trial_id:
+            continue
+        if allow_session_id is not None and trial.lesson_session_id == allow_session_id:
+            continue
+        if exclude_session_id is not None and trial.lesson_session_id == exclude_session_id:
             continue
         resources = db.scalar(select(TrialResourceAssignment).where(
             TrialResourceAssignment.organization_id == org_id,
@@ -1075,28 +1082,69 @@ def create_lesson_session_hardened(db: Session, org_id: UUID, data, user_id: UUI
     return session
 
 
-def create_trial_hardened(db: Session, org_id: UUID, data, actor_user_id: UUID | None) -> TrialLesson:
+def _linked_trial_session(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID | None,
+    role: StaffRole,
+    lesson_session_id: UUID | None,
+    starts_at: datetime,
+    requested_location_id: UUID | None,
+) -> tuple[LessonSession | None, UUID | None, UUID | None, UUID | None]:
+    if lesson_session_id is None:
+        return None, requested_location_id, None, None
+    lesson_session = crm.scoped_get(db, LessonSession, org_id, lesson_session_id)
+    ensure_group_access(db, org_id, user_id, role, lesson_session.group_id)
+    if lesson_session.status != LessonStatus.SCHEDULED:
+        raise HTTPException(status_code=409, detail="До пробного можна прив’язати лише заплановане заняття групи")
+    if _utc_naive(db, org_id, starts_at) != _utc_naive(db, org_id, lesson_session.starts_at):
+        raise HTTPException(status_code=409, detail="Час пробного має збігатися з часом заняття групи")
+    if requested_location_id is not None and requested_location_id != lesson_session.location_id:
+        raise HTTPException(status_code=409, detail="Локація пробного має збігатися з локацією групового заняття")
+    assigned = db.scalar(select(LessonResourceAssignment).where(
+        LessonResourceAssignment.organization_id == org_id,
+        LessonResourceAssignment.session_id == lesson_session.id,
+    ))
+    room_id = assigned.room_id if assigned else group_room_id(db, org_id, lesson_session.group_id)
+    staff_id = assigned.staff_id if assigned else primary_group_staff_id(db, org_id, lesson_session.group_id)
+    return lesson_session, lesson_session.location_id, room_id, staff_id
+
+
+def create_trial_hardened(
+    db: Session,
+    org_id: UUID,
+    data,
+    actor_user_id: UUID | None,
+    role: StaffRole,
+) -> TrialLesson:
     student = crm.scoped_get(db, Student, org_id, data.student_id)
-    if data.location_id is not None:
-        crm.scoped_get(db, Location, org_id, data.location_id)
-    room_id = getattr(data, "room_id", None)
+    lesson_session, location_id, linked_room_id, linked_staff_id = _linked_trial_session(
+        db, org_id, actor_user_id, role, data.lesson_session_id, data.starts_at, data.location_id,
+    )
+    if location_id is not None:
+        crm.scoped_get(db, Location, org_id, location_id)
+    room_id = linked_room_id if lesson_session else getattr(data, "room_id", None)
     if room_id is not None:
         room = db.scalar(select(Room).where(Room.organization_id == org_id, Room.id == room_id))
         if room is None:
             raise HTTPException(status_code=404, detail="Кімнату не знайдено")
-        if data.location_id is not None and room.location_id != data.location_id:
+        if location_id is not None and room.location_id != location_id:
             raise HTTPException(status_code=409, detail="Кімната належить іншій локації")
-    staff_id = getattr(data, "staff_id", None)
+    staff_id = linked_staff_id if lesson_session else getattr(data, "staff_id", None)
     if staff_id is not None:
         staff = crm.scoped_get(db, Staff, org_id, staff_id)
         if not staff.is_active or not staff.can_teach:
             raise HTTPException(status_code=409, detail="Працівник не може проводити пробне")
     duration = getattr(data, "duration_minutes", 60)
-    conflict = resource_conflict_reason(db, org_id, data.starts_at, duration, data.location_id, room_id, staff_id)
+    conflict = resource_conflict_reason(
+        db, org_id, data.starts_at, duration, location_id, room_id, staff_id,
+        allow_session_id=lesson_session.id if lesson_session else None,
+    )
     if conflict:
         raise HTTPException(status_code=409, detail=conflict)
     trial = TrialLesson(
-        organization_id=org_id, student_id=student.id, location_id=data.location_id,
+        organization_id=org_id, student_id=student.id, location_id=location_id,
+        lesson_session_id=lesson_session.id if lesson_session else None,
         starts_at=data.starts_at, status=TrialStatus.SCHEDULED,
     )
     db.add(trial)
@@ -1117,10 +1165,25 @@ def create_trial_hardened(db: Session, org_id: UUID, data, actor_user_id: UUID |
     return trial
 
 
-def update_trial_hardened(db: Session, org_id: UUID, trial_id: UUID, data, actor_user_id: UUID | None) -> TrialLesson:
+def update_trial_hardened(
+    db: Session,
+    org_id: UUID,
+    trial_id: UUID,
+    data,
+    actor_user_id: UUID | None,
+    role: StaffRole,
+) -> TrialLesson:
     trial = crm.scoped_get(db, TrialLesson, org_id, trial_id)
     starts_at = data.starts_at or trial.starts_at
-    location_id = data.location_id if data.location_id is not None else trial.location_id
+    location_id = data.location_id if "location_id" in data.model_fields_set else trial.location_id
+    lesson_session_id = (
+        data.lesson_session_id
+        if "lesson_session_id" in data.model_fields_set
+        else trial.lesson_session_id
+    )
+    lesson_session, location_id, linked_room_id, linked_staff_id = _linked_trial_session(
+        db, org_id, actor_user_id, role, lesson_session_id, starts_at, location_id,
+    )
     if location_id is not None:
         crm.scoped_get(db, Location, org_id, location_id)
     resources = db.scalar(select(TrialResourceAssignment).where(
@@ -1130,20 +1193,23 @@ def update_trial_hardened(db: Session, org_id: UUID, trial_id: UUID, data, actor
     if resources is None:
         resources = TrialResourceAssignment(organization_id=org_id, trial_id=trial.id, duration_minutes=60)
         db.add(resources)
-    room_id = getattr(data, "room_id", None)
-    if room_id is None:
+    room_id = linked_room_id if lesson_session else getattr(data, "room_id", None)
+    if not lesson_session and room_id is None:
         room_id = resources.room_id
-    staff_id = getattr(data, "staff_id", None)
-    if staff_id is None:
+    staff_id = linked_staff_id if lesson_session else getattr(data, "staff_id", None)
+    if not lesson_session and staff_id is None:
         staff_id = resources.staff_id
     duration = getattr(data, "duration_minutes", None) or resources.duration_minutes or 60
     conflict = resource_conflict_reason(
-        db, org_id, starts_at, duration, location_id, room_id, staff_id, exclude_trial_id=trial.id,
+        db, org_id, starts_at, duration, location_id, room_id, staff_id,
+        exclude_trial_id=trial.id,
+        allow_session_id=lesson_session.id if lesson_session else None,
     )
     if conflict:
         raise HTTPException(status_code=409, detail=conflict)
     trial.starts_at = starts_at
     trial.location_id = location_id
+    trial.lesson_session_id = lesson_session.id if lesson_session else None
     trial.status = TrialStatus.SCHEDULED
     # Keep the prior outcome only in audit/comment history after rescheduling.
     trial.recommended_level = None

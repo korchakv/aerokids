@@ -70,6 +70,7 @@ export function applyWorkspace(
     status: crmStatusLabel(item.crm_status),
     trialId: item.latest_trial_id ?? undefined,
     trialAt: item.latest_trial_at ?? undefined,
+    trialLessonSessionId: item.latest_trial_lesson_session_id ?? undefined,
     trialLocationId: item.trial_location_id ?? undefined,
     trialLocation: item.trial_location_name ?? undefined,
     recommendedLevel: item.recommended_level ?? undefined,

@@ -93,6 +93,7 @@ def list_lead_overview(db: Session, org_id: UUID) -> list[dict]:
             "latest_trial_id": trial.id if trial else None,
             "latest_trial_at": trial.starts_at if trial else None,
             "latest_trial_status": trial.status if trial else None,
+            "latest_trial_lesson_session_id": trial.lesson_session_id if trial else None,
             "trial_location_id": trial.location_id if trial else None,
             "trial_location_name": trial_location.name if trial_location else None,
             "recommended_level": trial.recommended_level if trial else None,
@@ -266,6 +267,7 @@ def _lead_projection_subqueries(org_id: UUID):
     latest_trial_id = trial_field(TrialLesson.id)
     latest_trial_at = trial_field(TrialLesson.starts_at)
     latest_trial_status = trial_field(TrialLesson.status)
+    latest_trial_lesson_session_id = trial_field(TrialLesson.lesson_session_id)
     latest_trial_location_id = trial_field(TrialLesson.location_id)
     latest_trial_level = trial_field(TrialLesson.recommended_level)
     latest_trial_notes = trial_field(TrialLesson.teacher_notes)
@@ -283,6 +285,7 @@ def _lead_projection_subqueries(org_id: UUID):
         "latest_trial_id": latest_trial_id,
         "latest_trial_at": latest_trial_at,
         "latest_trial_status": latest_trial_status,
+        "latest_trial_lesson_session_id": latest_trial_lesson_session_id,
         "latest_trial_location_id": latest_trial_location_id,
         "latest_trial_level": latest_trial_level,
         "latest_trial_notes": latest_trial_notes,
@@ -382,6 +385,7 @@ def paginate_lead_overview(
         projection["latest_trial_id"].label("latest_trial_id"),
         projection["latest_trial_at"].label("latest_trial_at"),
         projection["latest_trial_status"].label("latest_trial_status"),
+        projection["latest_trial_lesson_session_id"].label("latest_trial_lesson_session_id"),
         projection["latest_trial_location_id"].label("trial_location_id"),
         projection["trial_location_name"].label("trial_location_name"),
         projection["latest_trial_level"].label("recommended_level"),
@@ -451,6 +455,7 @@ def paginate_lead_overview(
             "latest_trial_id": row.latest_trial_id,
             "latest_trial_at": row.latest_trial_at,
             "latest_trial_status": row.latest_trial_status,
+            "latest_trial_lesson_session_id": row.latest_trial_lesson_session_id,
             "trial_location_id": row.trial_location_id,
             "trial_location_name": row.trial_location_name,
             "recommended_level": row.recommended_level,

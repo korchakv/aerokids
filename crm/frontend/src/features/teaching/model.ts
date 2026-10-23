@@ -6,6 +6,7 @@ import type { GroupItem } from "../groups/types";
 export type LessonItem = {
   id: EntityId;
   groupId: EntityId;
+  locationId?: EntityId | null;
   startsAt: string;
   duration: number;
   topic: string;
@@ -29,6 +30,7 @@ export function applyTeaching(
   setLessons(bundle.lessons.map((item) => ({
     id: item.id,
     groupId: item.group_id,
+    locationId: item.location_id,
     startsAt: item.starts_at,
     duration: item.duration_minutes,
     topic: item.topic ?? "",

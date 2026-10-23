@@ -254,6 +254,7 @@ class StudentContactCreate(BaseModel):
 class TrialLessonCreate(BaseModel):
     student_id: UUID
     location_id: UUID | None = None
+    lesson_session_id: UUID | None = None
     starts_at: datetime
 
     _quarter_hour = field_validator("starts_at")(validate_datetime_quarter_hour)
@@ -263,6 +264,7 @@ class TrialLessonRead(ORMModel):
     id: UUID
     organization_id: UUID
     location_id: UUID | None
+    lesson_session_id: UUID | None = None
     student_id: UUID
     starts_at: datetime
     status: TrialStatus
@@ -497,6 +499,7 @@ class LeadDeferUpdate(BaseModel):
 class TrialLessonUpdate(BaseModel):
     starts_at: datetime | None = None
     location_id: UUID | None = None
+    lesson_session_id: UUID | None = None
 
     @field_validator("starts_at")
     @classmethod
@@ -1319,6 +1322,7 @@ class LeadListItem(BaseModel):
     latest_trial_id: UUID | None
     latest_trial_at: datetime | None
     latest_trial_status: TrialStatus | None
+    latest_trial_lesson_session_id: UUID | None = None
     trial_location_id: UUID | None
     trial_location_name: str | None
     recommended_level: str | None
