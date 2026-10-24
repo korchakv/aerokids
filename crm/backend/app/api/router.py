@@ -1,3 +1,4 @@
+import hmac
 import ipaddress
 from uuid import UUID
 
@@ -52,7 +53,10 @@ def auth_bootstrap(
     x_bootstrap_secret: str | None = Header(default=None, alias="X-Bootstrap-Secret"),
     db: Session = Depends(get_db),
 ):
-    if settings.environment.lower() == "production" and x_bootstrap_secret != settings.bootstrap_secret:
+    if settings.environment.lower() == "production" and not hmac.compare_digest(
+        (x_bootstrap_secret or "").encode("utf-8"),
+        (settings.bootstrap_secret or "").encode("utf-8"),
+    ):
         raise HTTPException(status_code=403, detail="Invalid bootstrap secret")
     organization, user, token = auth_service.bootstrap_owner(db, data)
     return BootstrapOwnerResult(
