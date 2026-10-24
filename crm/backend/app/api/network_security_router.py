@@ -1,3 +1,5 @@
+import ipaddress
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,14 +17,13 @@ router = APIRouter()
 
 
 def trusted_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        # A trusted reverse proxy appends the address it observed. Taking the
-        # right-most value avoids trusting a client-supplied first hop.
-        values = [part.strip() for part in forwarded.split(",") if part.strip()]
-        if values:
-            return values[-1]
-    return request.client.host if request.client else "unknown"
+    # Render sends public traffic through Cloudflare, which sets this from the
+    # connection and overwrites client-supplied values. Do not use XFF for limits.
+    forwarded_ip = (request.headers.get("cf-connecting-ip") or "").strip()
+    try:
+        return str(ipaddress.ip_address(forwarded_ip))
+    except ValueError:
+        return request.client.host if request.client else "unknown"
 
 
 @router.post("/auth/login", response_model=AuthTokenResponse)

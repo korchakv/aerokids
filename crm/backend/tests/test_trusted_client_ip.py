@@ -1,33 +1,75 @@
-from starlette.requests import Request
-
-from app.api.router import _trusted_client_ip
+from app.core.config import settings
 
 
-def _request(headers: dict[str, str], client: tuple[str, int] = ("testclient", 50000)) -> Request:
-    return Request({
-        "type": "http",
-        "method": "GET",
-        "path": "/",
-        "headers": [(key.lower().encode(), value.encode()) for key, value in headers.items()],
-        "client": client,
-        "server": ("testserver", 80),
-        "scheme": "http",
-    })
+def test_login_ip_limit_uses_cloudflare_ip_not_client_forwarded_for(client, monkeypatch):
+    monkeypatch.setattr(settings, "auth_login_ip_limit", 1)
+    monkeypatch.setattr(settings, "auth_login_email_limit", 100)
+    bootstrap = client.post(
+        "/auth/bootstrap",
+        json={
+            "organization_name": "AeroKiDS",
+            "organization_slug": "aerokids-security",
+            "full_name": "Owner User",
+            "email": "owner@aerokids.test",
+            "password": "very-secure-password",
+        },
+    )
+    assert bootstrap.status_code == 201, bootstrap.text
+
+    first = client.post(
+        "/auth/login",
+        json={"email": "owner@aerokids.test", "password": "wrong-password"},
+        headers={
+            "CF-Connecting-IP": "198.51.100.10",
+            "X-Forwarded-For": "203.0.113.10",
+        },
+    )
+    second = client.post(
+        "/auth/login",
+        json={"email": "owner@aerokids.test", "password": "wrong-password"},
+        headers={
+            "CF-Connecting-IP": "198.51.100.10",
+            "X-Forwarded-For": "203.0.113.11",
+        },
+    )
+    assert first.status_code == 401
+    assert second.status_code == 429
 
 
-def test_trusted_client_ip_prefers_cloudflare_over_forged_forwarded_for():
-    request = _request({
-        "CF-Connecting-IP": "198.51.100.10",
-        "X-Forwarded-For": "203.0.113.10",
-    })
+def test_public_intake_ip_limit_uses_cloudflare_ip_not_client_forwarded_for(client, monkeypatch):
+    monkeypatch.setattr(settings, "public_intake_ip_limit", 1)
+    monkeypatch.setattr(settings, "public_intake_phone_limit", 100)
+    organization = client.post(
+        "/organizations",
+        json={"name": "AeroKiDS", "slug": "aerokids-public-security"},
+    )
+    assert organization.status_code == 201, organization.text
 
-    assert _trusted_client_ip(request) == "198.51.100.10"
-
-
-def test_trusted_client_ip_uses_fallback_if_cloudflare_value_is_invalid():
-    request = _request({
-        "CF-Connecting-IP": "not-an-ip",
-        "X-Forwarded-For": "203.0.113.10",
-    }, client=("192.0.2.20", 50000))
-
-    assert _trusted_client_ip(request) == "192.0.2.20"
+    first = client.post(
+        "/public/intake/aerokids-public-security",
+        json={
+            "child_first_name": "Марта",
+            "child_age": 9,
+            "contact_name": "Оксана",
+            "phone": "0671234567",
+        },
+        headers={
+            "CF-Connecting-IP": "198.51.100.20",
+            "X-Forwarded-For": "203.0.113.20",
+        },
+    )
+    second = client.post(
+        "/public/intake/aerokids-public-security",
+        json={
+            "child_first_name": "Софія",
+            "child_age": 10,
+            "contact_name": "Оксана",
+            "phone": "0671234568",
+        },
+        headers={
+            "CF-Connecting-IP": "198.51.100.20",
+            "X-Forwarded-For": "203.0.113.21",
+        },
+    )
+    assert first.status_code == 201, first.text
+    assert second.status_code == 429
