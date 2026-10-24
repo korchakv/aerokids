@@ -79,8 +79,8 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: crm/frontend/package.json
-      - run: npm install
+          cache-dependency-path: crm/frontend/package-lock.json
+      - run: npm ci
       - run: npm run build
 
   docker-build:
@@ -184,11 +184,11 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: crm/frontend/package.json
+          cache-dependency-path: crm/frontend/package-lock.json
       - name: Install browser test dependencies
         working-directory: crm/frontend
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Run desktop and mobile browser smoke tests
         working-directory: crm/frontend
@@ -228,11 +228,11 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: crm/frontend/package.json
+          cache-dependency-path: crm/frontend/package-lock.json
       - name: Audit frontend dependencies
         working-directory: crm/frontend
         run: |
-          npm install
+          npm ci
           npm audit --audit-level=high
 
   secrets-scan:
