@@ -1,3 +1,5 @@
+import hmac
+import ipaddress
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -15,6 +17,17 @@ from app.core.security import auth_is_required
 from app.services import audit_service, billing_service, contact_service, crm, group_service, location_service, organization_service, potential_group_service, reporting_service, staff_service, student_service, trial_service
 
 router = APIRouter()
+
+
+def _trusted_client_ip(request: Request) -> str:
+    # Render routes public traffic through Cloudflare, which sets this header
+    # from the connection and overwrites any client-supplied value. Never use
+    # the leftmost X-Forwarded-For value for security limits: clients can spoof it.
+    forwarded_ip = (request.headers.get("cf-connecting-ip") or "").strip()
+    try:
+        return str(ipaddress.ip_address(forwarded_ip))
+    except ValueError:
+        return request.client.host if request.client else "unknown"
 
 
 @router.get("/health")
@@ -40,7 +53,10 @@ def auth_bootstrap(
     x_bootstrap_secret: str | None = Header(default=None, alias="X-Bootstrap-Secret"),
     db: Session = Depends(get_db),
 ):
-    if settings.environment.lower() == "production" and x_bootstrap_secret != settings.bootstrap_secret:
+    if settings.environment.lower() == "production" and not hmac.compare_digest(
+        (x_bootstrap_secret or "").encode("utf-8"),
+        (settings.bootstrap_secret or "").encode("utf-8"),
+    ):
         raise HTTPException(status_code=403, detail="Invalid bootstrap secret")
     organization, user, token = auth_service.bootstrap_owner(db, data)
     return BootstrapOwnerResult(
@@ -52,8 +68,7 @@ def auth_bootstrap(
 
 @router.post("/auth/login", response_model=AuthTokenResponse)
 def auth_login(data: LoginCreate, request: Request, db: Session = Depends(get_db)):
-    forwarded = request.headers.get("x-forwarded-for")
-    client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+    client_ip = _trusted_client_ip(request)
     auth_service.enforce_login_rate_limit(
         db,
         "ip",
@@ -292,8 +307,7 @@ def public_intake(organization_slug: str, data: IntakeCreate, request: Request, 
     if data.website:
         raise HTTPException(status_code=422, detail="Invalid form submission")
 
-    forwarded = request.headers.get("x-forwarded-for")
-    client_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+    client_ip = _trusted_client_ip(request)
     normalized_phone = crm.normalize_phone(data.phone)
 
     crm.enforce_public_intake_rate_limit(
