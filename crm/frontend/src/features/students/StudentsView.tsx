@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { cleanSpaces, personNameError, uaPhoneError, normalizeUaPhone, formatUaPhone } from "../../utils/contact";
 import { AuditHistory } from "../../components/AuditHistory";
 import type { ApiAuditEvent } from "../../api";
 import type { EntityId, Lead } from "../leads/model";
@@ -115,10 +117,63 @@ export function StudentsView({
   </section>;
 }
 
+function StudentDetailsEditor({ student, onSave }: { student: Lead; onSave: (student: Lead) => Promise<void> }) {
+  const [draft, setDraft] = useState<Lead | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const begin = () => {
+    const parts = student.child.trim().split(/\s+/);
+    setDraft({ ...student, firstName: student.firstName ?? parts[0], lastName: student.lastName ?? parts.slice(1).join(" "), parent: student.parent === "Контакт не вказано" ? "" : student.parent });
+    setError(""); setSaved(false);
+  };
+  if (!draft) return <div className="studentSection">
+    <button className="search full" type="button" onClick={begin}>Редагувати дані</button>
+    {saved && <p role="status">Дані дитини та батьків збережено.</p>}
+  </div>;
+  const change = (value: Partial<Lead>) => setDraft({ ...draft, ...value });
+  return <form className="leadEditPanel" aria-label="Редагування даних учня" onSubmit={async (event) => {
+    event.preventDefault();
+    if (saving) return;
+    const validation = personNameError(draft.firstName ?? "", "Ім’я дитини")
+      || (draft.lastName?.trim() ? personNameError(draft.lastName, "Прізвище дитини") : "")
+      || personNameError(draft.parent, "Ім’я одного з батьків")
+      || uaPhoneError(draft.phone) || uaPhoneError(draft.childPhone ?? "", false)
+      || (!Number.isInteger(draft.age) || draft.age < 3 || draft.age > 25 ? "Вік дитини має бути від 3 до 25 років." : "");
+    if (validation) { setError(validation); return; }
+    const firstName = cleanSpaces(draft.firstName ?? "");
+    const lastName = cleanSpaces(draft.lastName ?? "");
+    setSaving(true); setError("");
+    try {
+      await onSave({ ...draft, firstName, lastName, child: [firstName, lastName].filter(Boolean).join(" "), parent: cleanSpaces(draft.parent), phone: formatUaPhone(normalizeUaPhone(draft.phone)!), childPhone: draft.childPhone?.trim() ? formatUaPhone(normalizeUaPhone(draft.childPhone)!) : undefined });
+      setDraft(null); setSaved(true);
+    } catch (err) { setError(err instanceof Error ? err.message : "Не вдалося зберегти дані. Спробуйте ще раз."); }
+    finally { setSaving(false); }
+  }}>
+    <h3>Дані дитини та батьків</h3>
+    <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <div className="formTwo">
+        <label>Ім’я дитини<input autoFocus required maxLength={120} value={draft.firstName ?? ""} onChange={e => change({ firstName: e.target.value })} /></label>
+        <label>Прізвище дитини<input maxLength={120} value={draft.lastName ?? ""} onChange={e => change({ lastName: e.target.value })} /></label>
+      </div>
+      <div className="formTwo">
+        <label>Вік<input required type="number" min={3} max={25} step={1} value={draft.age || ""} onChange={e => change({ age: Number(e.target.value) })} /></label>
+        <label>Телефон дитини (необов’язково)<input type="tel" value={draft.childPhone ?? ""} onChange={e => change({ childPhone: e.target.value })} /></label>
+      </div>
+      <label>Ім’я одного з батьків / опікуна<input required maxLength={160} value={draft.parent} onChange={e => change({ parent: e.target.value })} /></label>
+      <label>Телефон батьків<input required type="tel" value={draft.phone} onChange={e => change({ phone: e.target.value })} /></label>
+      {error && <p role="alert">{error}</p>}
+      <button className="primary full" type="submit">{saving ? "Зберігаємо…" : "Зберегти зміни"}</button>
+      <button className="search full" type="button" onClick={() => setDraft(null)}>Скасувати</button>
+    </fieldset>
+  </form>;
+}
+
 type StudentDrawerProps = {
   student: Lead | null;
   currentGroup: GroupItem | undefined;
   studentState: StudentLifecycleLabel;
+  onSaveDetails: (student: Lead) => Promise<void>;
   canManageStudents: boolean;
   canDeleteStudents: boolean;
   transferGroupId: EntityId | null;
@@ -143,6 +198,7 @@ export function StudentDrawer({
   currentGroup,
   studentState,
   canManageStudents,
+  onSaveDetails,
   canDeleteStudents,
   transferGroupId,
   groups,
@@ -175,6 +231,8 @@ export function StudentDrawer({
         <div><span>Локація</span><b>{currentGroup?.location ?? "Без локації"}</b></div>
       </div>
       <div className="contactCard"><span>Контакт</span><b>{student.parent}</b><a href={"tel:" + student.phone.replace(/\s/g, "")}>{student.phone}</a></div>
+
+      {canManageStudents && <StudentDetailsEditor key={student.id} student={student} onSave={onSaveDetails} />}
 
       {canManageStudents && <>
         <div className="studentSection">
