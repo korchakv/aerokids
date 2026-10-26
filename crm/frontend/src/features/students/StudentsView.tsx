@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
+import { cleanSpaces, personNameError, uaPhoneError, normalizeUaPhone, formatUaPhone } from "../../utils/contact";
 import { AuditHistory } from "../../components/AuditHistory";
-import type { ApiAuditEvent } from "../../api";
+import { apiGet, type ApiAuditEvent, type ApiLeadComment, type Session } from "../../api";
 import type { EntityId, Lead } from "../leads/model";
 import type { GroupItem } from "../groups/types";
 import type { WorkspaceStudent } from "../../api";
@@ -115,10 +117,92 @@ export function StudentsView({
   </section>;
 }
 
+function StudentComments({ student, session, apiEnabled }: { student: Lead; session: Session | null; apiEnabled: boolean }) {
+  const [comments, setComments] = useState<ApiLeadComment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setComments([]); setError(""); setLoading(true);
+    if (!apiEnabled) { setLoading(false); return; }
+    if (!session) { setError("Увійдіть у CRM повторно."); setLoading(false); return; }
+    apiGet<ApiLeadComment[]>(`/students/${student.id}/lead-comments`, session)
+      .then(items => { if (!cancelled) setComments(items); })
+      .catch(() => { if (!cancelled) setError("Не вдалося завантажити коментарі."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [student.id, session?.accessToken, session?.organizationId, apiEnabled, retry]);
+  const labels: Record<ApiLeadComment["kind"], string> = { registration: "Реєстрація", repeat_intake: "Повторне звернення", call: "Після дзвінка", trial: "Пробне заняття", note: "Коментар" };
+  return <section className="leadCommentHistory" aria-label="Історія коментарів учня">
+    <header><b>Історія коментарів</b><small>Коментарі із заявки та пробних занять</small></header>
+    {loading ? <p role="status">Завантажуємо історію…</p> : error ? <div role="alert"><p>{error}</p><button type="button" className="search" onClick={() => setRetry(value => value + 1)}>Спробувати ще раз</button></div> : comments.length ? <ol>
+      {comments.slice().reverse().map(comment => <li key={comment.id}>
+        <div className="leadCommentMeta"><span className="leadCommentKind">{labels[comment.kind] ?? "Коментар"}</span>{comment.author_name && <span>{comment.author_name}</span>}<time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>{comment.updated_at !== comment.created_at && <small> · змінено</small>}</div>
+        <div className="leadCommentBody"><p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{comment.body}</p></div>
+      </li>)}
+    </ol> : student.comment ? <div className="leadCommentBody"><p style={{ whiteSpace: "pre-wrap" }}>{student.comment}</p></div> : <p className="leadCommentsEmpty">Коментарів ще немає.</p>}
+  </section>;
+}
+
+function StudentDetailsEditor({ student, onSave }: { student: Lead; onSave: (student: Lead) => Promise<void> }) {
+  const [draft, setDraft] = useState<Lead | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const begin = () => {
+    const parts = student.child.trim().split(/\s+/);
+    setDraft({ ...student, firstName: student.firstName ?? parts[0], lastName: student.lastName ?? parts.slice(1).join(" "), parent: student.parent === "Контакт не вказано" ? "" : student.parent });
+    setError(""); setSaved(false);
+  };
+  if (!draft) return <div className="studentSection">
+    <button className="search full" type="button" onClick={begin}>Редагувати дані</button>
+    {saved && <p role="status">Дані дитини та батьків збережено.</p>}
+  </div>;
+  const change = (value: Partial<Lead>) => setDraft({ ...draft, ...value });
+  return <form className="leadEditPanel" aria-label="Редагування даних учня" onSubmit={async (event) => {
+    event.preventDefault();
+    if (saving) return;
+    const validation = personNameError(draft.firstName ?? "", "Ім’я дитини")
+      || (draft.lastName?.trim() ? personNameError(draft.lastName, "Прізвище дитини") : "")
+      || personNameError(draft.parent, "Ім’я одного з батьків")
+      || uaPhoneError(draft.phone) || uaPhoneError(draft.childPhone ?? "", false)
+      || (!Number.isInteger(draft.age) || draft.age < 3 || draft.age > 25 ? "Вік дитини має бути від 3 до 25 років." : "");
+    if (validation) { setError(validation); return; }
+    const firstName = cleanSpaces(draft.firstName ?? "");
+    const lastName = cleanSpaces(draft.lastName ?? "");
+    setSaving(true); setError("");
+    try {
+      await onSave({ ...draft, firstName, lastName, child: [firstName, lastName].filter(Boolean).join(" "), parent: cleanSpaces(draft.parent), phone: formatUaPhone(normalizeUaPhone(draft.phone)!), childPhone: draft.childPhone?.trim() ? formatUaPhone(normalizeUaPhone(draft.childPhone)!) : undefined });
+      setDraft(null); setSaved(true);
+    } catch (err) { setError(err instanceof Error ? err.message : "Не вдалося зберегти дані. Спробуйте ще раз."); }
+    finally { setSaving(false); }
+  }}>
+    <h3>Дані дитини та батьків</h3>
+    <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      <div className="formTwo">
+        <label>Ім’я дитини<input autoFocus required maxLength={120} value={draft.firstName ?? ""} onChange={e => change({ firstName: e.target.value })} /></label>
+        <label>Прізвище дитини<input maxLength={120} value={draft.lastName ?? ""} onChange={e => change({ lastName: e.target.value })} /></label>
+      </div>
+      <div className="formTwo">
+        <label>Вік<input required type="number" min={3} max={25} step={1} value={draft.age || ""} onChange={e => change({ age: Number(e.target.value) })} /></label>
+        <label>Телефон дитини (необов’язково)<input type="tel" value={draft.childPhone ?? ""} onChange={e => change({ childPhone: e.target.value })} /></label>
+      </div>
+      <label>Ім’я одного з батьків / опікуна<input required maxLength={160} value={draft.parent} onChange={e => change({ parent: e.target.value })} /></label>
+      <label>Телефон батьків<input required type="tel" value={draft.phone} onChange={e => change({ phone: e.target.value })} /></label>
+      {error && <p role="alert">{error}</p>}
+      <button className="primary full" type="submit">{saving ? "Зберігаємо…" : "Зберегти зміни"}</button>
+      <button className="search full" type="button" onClick={() => setDraft(null)}>Скасувати</button>
+    </fieldset>
+  </form>;
+}
+
 type StudentDrawerProps = {
   student: Lead | null;
   currentGroup: GroupItem | undefined;
   studentState: StudentLifecycleLabel;
+  session: Session | null;
+  onSaveDetails: (student: Lead) => Promise<void>;
   canManageStudents: boolean;
   canDeleteStudents: boolean;
   transferGroupId: EntityId | null;
@@ -143,6 +227,8 @@ export function StudentDrawer({
   currentGroup,
   studentState,
   canManageStudents,
+  onSaveDetails,
+  session,
   canDeleteStudents,
   transferGroupId,
   groups,
@@ -175,6 +261,8 @@ export function StudentDrawer({
         <div><span>Локація</span><b>{currentGroup?.location ?? "Без локації"}</b></div>
       </div>
       <div className="contactCard"><span>Контакт</span><b>{student.parent}</b><a href={"tel:" + student.phone.replace(/\s/g, "")}>{student.phone}</a></div>
+
+      {canManageStudents && <StudentDetailsEditor key={student.id} student={student} onSave={onSaveDetails} />}
 
       {canManageStudents && <>
         <div className="studentSection">
@@ -217,6 +305,8 @@ export function StudentDrawer({
         <span>Службова дія</span>
         <button className="subtleDangerAction" type="button" disabled={deleting} onClick={onDelete}>{deleting ? "Видаляємо…" : "Видалити учня"}</button>
       </div>}
+
+      <StudentComments key={student.id} student={student} session={session} apiEnabled={apiEnabled} />
 
       {apiEnabled
         ? <AuditHistory title="Історія учня" events={auditEvents} loading={historyLoading} labelForEvent={auditEventLabel} detailForEvent={auditEventDetail} />

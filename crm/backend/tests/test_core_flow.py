@@ -804,7 +804,8 @@ def test_schedule_session_and_attendance_flow(client):
     assert roster.json()[0]["first_name"] == "Максим"
 
     lesson_date = date.today() + timedelta(days=1)
-    while lesson_date.weekday() == 0:
+    # Avoid every recurring slot created above, regardless of the current date.
+    while lesson_date.weekday() in {0, 1, 3}:
         lesson_date += timedelta(days=1)
     session = client.post(
         "/lesson-sessions",
