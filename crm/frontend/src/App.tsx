@@ -4135,7 +4135,7 @@ function auditEventLabel(type: string) {
   const labels: Record<string, string> = {
     "lead.created": "Заявка створена",
     "lead.duplicate_intake": "Повторна заявка",
-    "lead.details_updated": "Дані заявки змінено",
+    "lead.details_updated": "Дані дитини та батьків змінено",
     "lead.comment_added": "Коментар додано",
     "lead.comment_edited": "Коментар відредаговано",
     "student.crm_status_changed": "Статус заявки змінено",
@@ -4152,34 +4152,50 @@ function auditEventLabel(type: string) {
     "student.returned_to_waiting": "Повернуто в роботу",
     "student.transferred": "Переведено в іншу групу",
     "student.status_changed": "Статус учня змінено",
+    "student.lifecycle_hardened": "Статус учня змінено",
+    "student.enrolled_hardened": "Зараховано до групи",
+    "student.enrolled_capacity_safe": "Зараховано до групи",
+    "student.transferred_hardened": "Переведено в іншу групу",
+    "student.transferred_capacity_safe": "Переведено в іншу групу",
+    "student.learning_paused": "Навчання призупинено",
+    "student.learning_resumed": "Навчання відновлено",
+    "student.preferences_updated": "Побажання щодо навчання змінено",
+    "student.anonymized": "Особисті дані видалено",
+    "student.deleted": "Учня видалено",
     "payment.created": "Створено нарахування",
     "payment.paid": "Оплату отримано",
   };
-  return labels[type] ?? type;
+  return labels[type] ?? "Запис оновлено";
+}
+
+function auditStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    new: "Нова заявка", contacted: "Зв’язались", trial_scheduled: "Пробне заплановано",
+    trial_completed: "Після пробного", waiting_for_group: "Очікує групу", enrolled: "Зарахований",
+    declined: "Відмовились", no_response: "Не відповідає", not_relevant: "Неактуально",
+    prospect: "Потенційний учень", active: "Активний", paused: "Пауза", archived: "Архів",
+  };
+  return labels[status] ?? "Статус оновлено";
 }
 
 function auditEventDetail(event: ApiAuditEvent) {
   const payload = event.payload ?? {};
   if (event.event_type === "trial.rescheduled") return "Змінено дату, час або локацію";
   if (event.event_type === "trial.no_show" && typeof payload["teacher_notes"] === "string") return String(payload["teacher_notes"]);
+  if (typeof payload["after"] === "string" && ["student.crm_status_changed", "student.status_changed", "student.lifecycle_hardened"].includes(event.event_type)) {
+    const after = auditStatusLabel(payload["after"]);
+    return typeof payload["before"] === "string" ? `${auditStatusLabel(payload["before"])} → ${after}` : after;
+  }
   if (typeof payload["after"] === "string") return String(payload["after"]);
   if (typeof payload["body"] === "string") return String(payload["body"]);
   if (typeof payload["group_name"] === "string") return payload["group_name"];
   if (typeof payload["to_group_name"] === "string") return payload["to_group_name"];
   if (typeof payload["crm_status"] === "string") {
-    const labels: Record<string, string> = {
-      contacted: "Зв'язались",
-      trial_completed: "Після пробного",
-      waiting_for_group: "Очікує групу",
-      declined: "Відмовились",
-      no_response: "Не відповідає",
-      not_relevant: "Неактуально",
-    };
-    const status = labels[String(payload["crm_status"])] ?? String(payload["crm_status"]);
+    const status = auditStatusLabel(String(payload["crm_status"]));
     const reason = typeof payload["close_reason"] === "string" ? ` · ${closeReasonLabel(String(payload["close_reason"]))}` : "";
     return status + reason;
   }
-  if (typeof payload["student_status"] === "string") return String(payload["student_status"]);
+  if (typeof payload["student_status"] === "string") return auditStatusLabel(payload["student_status"]);
   if (typeof payload["amount_minor"] === "number") return formatMoney(Number(payload["amount_minor"]) / 100);
   return "CRM";
 }
