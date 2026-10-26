@@ -3927,6 +3927,7 @@ function App() {
       <StudentDrawer
         key={selectedStudent?.id ?? "closed"}
         onSaveDetails={saveStudentDetails}
+        session={session}
         student={selectedStudent}
         currentGroup={selectedStudent ? studentGroup(selectedStudent.id) : undefined}
         studentState={selectedStudent ? (studentStates[selectedStudent.id] ?? "Активний") : "Активний"}
