@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cleanSpaces, personNameError, uaPhoneError, normalizeUaPhone, formatUaPhone } from "../../utils/contact";
 import { AuditHistory } from "../../components/AuditHistory";
-import type { ApiAuditEvent } from "../../api";
+import { apiGet, type ApiAuditEvent, type ApiLeadComment, type Session } from "../../api";
 import type { EntityId, Lead } from "../leads/model";
 import type { GroupItem } from "../groups/types";
 import type { WorkspaceStudent } from "../../api";
@@ -117,6 +117,34 @@ export function StudentsView({
   </section>;
 }
 
+function StudentComments({ student, session, apiEnabled }: { student: Lead; session: Session | null; apiEnabled: boolean }) {
+  const [comments, setComments] = useState<ApiLeadComment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setComments([]); setError(""); setLoading(true);
+    if (!apiEnabled) { setLoading(false); return; }
+    if (!session) { setError("Увійдіть у CRM повторно."); setLoading(false); return; }
+    apiGet<ApiLeadComment[]>(`/students/${student.id}/lead-comments`, session)
+      .then(items => { if (!cancelled) setComments(items); })
+      .catch(() => { if (!cancelled) setError("Не вдалося завантажити коментарі."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [student.id, session?.accessToken, session?.organizationId, apiEnabled, retry]);
+  const labels: Record<ApiLeadComment["kind"], string> = { registration: "Реєстрація", repeat_intake: "Повторне звернення", call: "Після дзвінка", trial: "Пробне заняття", note: "Коментар" };
+  return <section className="leadCommentHistory" aria-label="Історія коментарів учня">
+    <header><b>Історія коментарів</b><small>Коментарі із заявки та пробних занять</small></header>
+    {loading ? <p role="status">Завантажуємо історію…</p> : error ? <div role="alert"><p>{error}</p><button type="button" className="search" onClick={() => setRetry(value => value + 1)}>Спробувати ще раз</button></div> : comments.length ? <ol>
+      {comments.slice().reverse().map(comment => <li key={comment.id}>
+        <div className="leadCommentMeta"><span className="leadCommentKind">{labels[comment.kind] ?? "Коментар"}</span>{comment.author_name && <span>{comment.author_name}</span>}<time dateTime={comment.created_at}>{new Date(comment.created_at).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</time>{comment.updated_at !== comment.created_at && <small> · змінено</small>}</div>
+        <div className="leadCommentBody"><p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{comment.body}</p></div>
+      </li>)}
+    </ol> : student.comment ? <div className="leadCommentBody"><p style={{ whiteSpace: "pre-wrap" }}>{student.comment}</p></div> : <p className="leadCommentsEmpty">Коментарів ще немає.</p>}
+  </section>;
+}
+
 function StudentDetailsEditor({ student, onSave }: { student: Lead; onSave: (student: Lead) => Promise<void> }) {
   const [draft, setDraft] = useState<Lead | null>(null);
   const [saving, setSaving] = useState(false);
@@ -173,6 +201,7 @@ type StudentDrawerProps = {
   student: Lead | null;
   currentGroup: GroupItem | undefined;
   studentState: StudentLifecycleLabel;
+  session: Session | null;
   onSaveDetails: (student: Lead) => Promise<void>;
   canManageStudents: boolean;
   canDeleteStudents: boolean;
@@ -199,6 +228,7 @@ export function StudentDrawer({
   studentState,
   canManageStudents,
   onSaveDetails,
+  session,
   canDeleteStudents,
   transferGroupId,
   groups,
@@ -275,6 +305,8 @@ export function StudentDrawer({
         <span>Службова дія</span>
         <button className="subtleDangerAction" type="button" disabled={deleting} onClick={onDelete}>{deleting ? "Видаляємо…" : "Видалити учня"}</button>
       </div>}
+
+      <StudentComments key={student.id} student={student} session={session} apiEnabled={apiEnabled} />
 
       {apiEnabled
         ? <AuditHistory title="Історія учня" events={auditEvents} loading={historyLoading} labelForEvent={auditEventLabel} detailForEvent={auditEventDetail} />
