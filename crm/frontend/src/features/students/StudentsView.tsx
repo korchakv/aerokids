@@ -1,3 +1,4 @@
+import { UiIcon } from "../../components/UiIcon";
 import { useEffect, useState } from "react";
 import { cleanSpaces, personNameError, uaPhoneError, normalizeUaPhone, formatUaPhone } from "../../utils/contact";
 import { AuditHistory } from "../../components/AuditHistory";
@@ -145,20 +146,13 @@ function StudentComments({ student, session, apiEnabled }: { student: Lead; sess
   </section>;
 }
 
-function StudentDetailsEditor({ student, onSave }: { student: Lead; onSave: (student: Lead) => Promise<void> }) {
-  const [draft, setDraft] = useState<Lead | null>(null);
+function StudentDetailsEditor({ student, onSave, onClose }: { student: Lead; onSave: (student: Lead) => Promise<void>; onClose: () => void }) {
+  const [draft, setDraft] = useState<Lead>(() => {
+    const parts = student.child.trim().split(/\s+/);
+    return { ...student, firstName: student.firstName ?? parts[0], lastName: student.lastName ?? parts.slice(1).join(" "), parent: student.parent === "Контакт не вказано" ? "" : student.parent };
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
-  const begin = () => {
-    const parts = student.child.trim().split(/\s+/);
-    setDraft({ ...student, firstName: student.firstName ?? parts[0], lastName: student.lastName ?? parts.slice(1).join(" "), parent: student.parent === "Контакт не вказано" ? "" : student.parent });
-    setError(""); setSaved(false);
-  };
-  if (!draft) return <div className="studentSection">
-    <button className="search full" type="button" onClick={begin}>Редагувати дані</button>
-    {saved && <p role="status">Дані дитини та батьків збережено.</p>}
-  </div>;
   const change = (value: Partial<Lead>) => setDraft({ ...draft, ...value });
   return <form className="leadEditPanel" aria-label="Редагування даних учня" onSubmit={async (event) => {
     event.preventDefault();
@@ -174,7 +168,7 @@ function StudentDetailsEditor({ student, onSave }: { student: Lead; onSave: (stu
     setSaving(true); setError("");
     try {
       await onSave({ ...draft, firstName, lastName, child: [firstName, lastName].filter(Boolean).join(" "), parent: cleanSpaces(draft.parent), phone: formatUaPhone(normalizeUaPhone(draft.phone)!), childPhone: draft.childPhone?.trim() ? formatUaPhone(normalizeUaPhone(draft.childPhone)!) : undefined });
-      setDraft(null); setSaved(true);
+      onClose();
     } catch (err) { setError(err instanceof Error ? err.message : "Не вдалося зберегти дані. Спробуйте ще раз."); }
     finally { setSaving(false); }
   }}>
@@ -192,7 +186,7 @@ function StudentDetailsEditor({ student, onSave }: { student: Lead; onSave: (stu
       <label>Телефон батьків<input required type="tel" value={draft.phone} onChange={e => change({ phone: e.target.value })} /></label>
       {error && <p role="alert">{error}</p>}
       <button className="primary full" type="submit">{saving ? "Зберігаємо…" : "Зберегти зміни"}</button>
-      <button className="search full" type="button" onClick={() => setDraft(null)}>Скасувати</button>
+      <button className="search full" type="button" onClick={onClose}>Скасувати</button>
     </fieldset>
   </form>;
 }
@@ -246,6 +240,7 @@ export function StudentDrawer({
   auditEventLabel,
   auditEventDetail,
 }: StudentDrawerProps) {
+  const [editing, setEditing] = useState(false);
   if (!student) return null;
 
   return <div className="drawerBackdrop" onClick={onClose}>
@@ -254,7 +249,7 @@ export function StudentDrawer({
       <p className="eyebrow">Картка учня</p>
       <div className="studentHero">
         <span>{student.child[0]}</span>
-        <div><h2>{student.child}</h2><p>{student.age} років · {student.status === "Очікує групу" ? "Очікує групу" : studentState}</p></div>
+        <div><div style={{ display: "flex", alignItems: "center", gap: 8 }}><h2>{student.child}</h2>{canManageStudents && <button className="leadEditIcon" type="button" aria-label="Редагувати дані дитини та батьків" title="Редагувати дані дитини та батьків" onClick={() => setEditing(true)}><UiIcon name="edit" size={16} /></button>}</div><p>{student.age} років · {student.status === "Очікує групу" ? "Очікує групу" : studentState}</p></div>
       </div>
       <div className="studentInfoGrid">
         <div><span>Група</span><b>{currentGroup?.name ?? "Без групи"}</b><small>{currentGroup?.schedule ?? "Розклад не задано"}</small></div>
@@ -262,7 +257,7 @@ export function StudentDrawer({
       </div>
       <div className="contactCard"><span>Контакт</span><b>{student.parent}</b><a href={"tel:" + student.phone.replace(/\s/g, "")}>{student.phone}</a></div>
 
-      {canManageStudents && <StudentDetailsEditor key={student.id} student={student} onSave={onSaveDetails} />}
+      {canManageStudents && editing && <StudentDetailsEditor key={student.id} student={student} onSave={onSaveDetails} onClose={() => setEditing(false)} />}
 
       {canManageStudents && <>
         <div className="studentSection">
