@@ -1297,6 +1297,31 @@ function App() {
     }
   };
 
+  const saveStudentDetails = async (updated: Lead) => {
+    if (apiEnabled) {
+      if (!session) throw new Error("Увійдіть у CRM повторно.");
+      await apiPatch(`/students/${updated.id}/lead-details`, {
+        child_first_name: updated.firstName,
+        child_last_name: updated.lastName || null,
+        child_phone: updated.childPhone ? normalizeUaPhone(updated.childPhone) : null,
+        child_age: updated.age,
+        contact_name: updated.parent,
+        phone: normalizeUaPhone(updated.phone),
+        source: updated.source,
+      }, session);
+    }
+    const applyDetails = (items: Lead[]) => items.map(item => item.id === updated.id ? {
+      ...item, firstName: updated.firstName, lastName: updated.lastName, child: updated.child,
+      childPhone: updated.childPhone, age: updated.age, parent: updated.parent, phone: updated.phone,
+    } : item);
+    setLeads(applyDetails);
+    setStudentRegistryRows(applyDetails);
+    setRegistryRefreshTick(tick => tick + 1);
+    if (apiEnabled && session) {
+      try { setEntityEvents(await loadAuditEvents("student", updated.id, session)); } catch { /* Saved successfully; history reloads when reopened. */ }
+    }
+  };
+
   const saveLeadDetails = async () => {
     if (!selected || leadEditSaving) return;
     const childNameError = personNameError(leadEditFirstName, "Ім’я дитини");
@@ -3900,6 +3925,8 @@ function App() {
       />
 
       <StudentDrawer
+        key={selectedStudent?.id ?? "closed"}
+        onSaveDetails={saveStudentDetails}
         student={selectedStudent}
         currentGroup={selectedStudent ? studentGroup(selectedStudent.id) : undefined}
         studentState={selectedStudent ? (studentStates[selectedStudent.id] ?? "Активний") : "Активний"}
