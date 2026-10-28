@@ -25,7 +25,7 @@ services:
       - key: BOOTSTRAP_SECRET
         sync: false
       - key: ACCESS_TOKEN_MINUTES
-        value: "30"
+        value: "240"
       - key: CORS_ORIGINS
         value: https://aerokids-crm.onrender.com,https://crm.aerokids.space,https://aerokids.space,https://www.aerokids.space
       - key: FRONTEND_URL

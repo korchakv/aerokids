@@ -1,3 +1,4 @@
+import { SESSION_EXPIRED_EVENT, sessionExpiresAt, expireSession } from "./api/client";
 import type { PotentialGroupProposal } from "./features/groups/potentialGroups";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UiIcon, navigationIcon } from "./components/UiIcon";
@@ -121,6 +122,7 @@ function App() {
     const saved = Number(window.localStorage.getItem("aerokids-crm-ui-scale"));
     return UI_SCALE_LEVELS.includes(saved as UiScale) ? saved as UiScale : 1;
   });
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [session, setSession] = useState<Session | null>(() => loadSession());
   const [workspaceLoading, setWorkspaceLoading] = useState(() => Boolean(apiEnabled && loadSession()));
   const [workspaceRefreshing, setWorkspaceRefreshing] = useState(false);
@@ -420,14 +422,44 @@ function App() {
   }, [saveToastTick]);
 
   useEffect(() => {
-    if (!apiEnabled || !session) return;
-    refreshMe(session).then(setSession).catch(() => {
-      clearSession();
-      setSession(null);
-    });
-    // Session is refreshed once when the app shell mounts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const onExpired = (event: Event) => {
+      const token = (event as CustomEvent<{ accessToken: string }>).detail.accessToken;
+      setSession(current => {
+        if (current?.accessToken !== token) return current;
+        return null;
+      });
+      setSessionExpired(true);
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, []);
+
+  useEffect(() => {
+    if (!apiEnabled || !session) return;
+    let cancelled = false;
+    const checkExpiry = () => {
+      const expiresAt = sessionExpiresAt(session);
+      if (expiresAt !== null && expiresAt <= Date.now()) expireSession(session);
+    };
+    checkExpiry();
+    const expiresAt = sessionExpiresAt(session);
+    const timer = expiresAt === null ? undefined : window.setTimeout(checkExpiry, Math.max(0, Math.min(2_147_483_647, expiresAt - Date.now())));
+    const onVisible = () => { if (document.visibilityState === "visible") checkExpiry(); };
+    window.addEventListener("focus", checkExpiry);
+    document.addEventListener("visibilitychange", onVisible);
+    refreshMe(session).then(updated => {
+      if (!cancelled && loadSession()?.accessToken === session.accessToken) setSession(updated);
+    }).catch(error => {
+      // A network/server outage is not a reason to discard a valid login.
+      if (!cancelled) setWorkspaceError(error instanceof Error ? error.message : "Не вдалося перевірити з’єднання із CRM.");
+    });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", checkExpiry);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [session?.accessToken]);
 
 
   const syncWorkspace = async (currentSession: Session) => {
@@ -3163,7 +3195,7 @@ function App() {
 
 
   if (apiEnabled && !session) {
-    return <LoginView onAuthenticated={setSession} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} />;
+    return <LoginView notice={sessionExpired ? "Сесія завершилася. Увійдіть повторно. Остання дія могла не зберегтися — перевірте її після входу." : undefined} onAuthenticated={(next) => { setSessionExpired(false); setWorkspaceError(""); setSession(next); }} theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} />;
   }
 
   const currentMembership = session?.user.memberships.find((item) => item.organization_id === session.organizationId);

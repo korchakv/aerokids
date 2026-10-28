@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { acceptInvite, bootstrapOwner, getBootstrapStatus, getInvitationStatus, login, resetPassword, type Session } from "../../api";
 import { UiIcon } from "../../components/UiIcon";
 
-export function LoginView({ onAuthenticated, theme, onToggleTheme }: { onAuthenticated: (session: Session) => void; theme: "dark" | "light"; onToggleTheme: () => void }) {
+export function LoginView({ onAuthenticated, theme, onToggleTheme, notice }: { notice?: string; onAuthenticated: (session: Session) => void; theme: "dark" | "light"; onToggleTheme: () => void }) {
   const params = new URLSearchParams(window.location.search);
   const inviteToken = params.get("invite");
   const resetToken = params.get("reset");
@@ -125,6 +125,7 @@ export function LoginView({ onAuthenticated, theme, onToggleTheme }: { onAuthent
     <div className="loginCard">
       <div className="loginBrand"><img className="brandLogo brandLogoLarge" src="/aerokids-logo-master-v1.png" alt="AeroKids" /><div><b>AeroKids CRM</b><small>Керування школою в одному місці</small></div></div>
 
+      {notice && <p className="loginError" role="alert">{notice}</p>}
       {resetToken ? <>
         <p className="eyebrow">Новий пароль</p>
         <h1>Створіть новий пароль</h1>

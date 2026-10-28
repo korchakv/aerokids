@@ -266,25 +266,55 @@ function emitMutationSaved(path: string, method: string) {
   window.dispatchEvent(new CustomEvent("crm:saved", { detail: { path, method } }));
 }
 
-export async function request<T>(path: string, init: RequestInit = {}, session?: Session): Promise<T> {
+export const SESSION_EXPIRED_EVENT = "crm:session-expired";
+const SESSION_EXPIRED_MESSAGE = "Сесія завершилася. Увійдіть у CRM повторно, щоб продовжити роботу.";
+
+// The JWT expiry is used only for UI timing. The server still verifies the signature.
+export function sessionExpiresAt(session: Session): number | null {
+  try {
+    const encoded = session.accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(encoded));
+    return typeof payload.exp === "number" && Number.isFinite(payload.exp) ? payload.exp * 1000 : null;
+  } catch { return null; }
+}
+
+export function expireSession(session: Session) {
+  // An old request must not invalidate a newer login.
+  if (loadSession()?.accessToken !== session.accessToken) return;
+  clearSession();
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { accessToken: session.accessToken } }));
+}
+
+export async function authenticatedResponse(path: string, init: RequestInit = {}, session?: Session): Promise<Response> {
   if (!API_URL) throw new Error("CRM не підключена до сервера. Перевірте налаштування API.");
+  if (session) {
+    const expiresAt = sessionExpiresAt(session);
+    if (expiresAt !== null && expiresAt <= Date.now()) {
+      expireSession(session);
+      throw new Error(SESSION_EXPIRED_MESSAGE);
+    }
+  }
   const headers = new Headers(init.headers);
   if (!(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (session) {
     headers.set("Authorization", `Bearer ${session.accessToken}`);
     headers.set("X-Organization-Id", session.organizationId);
   }
-
-  const method = init.method ?? "GET";
   let response: Response;
-  try {
-    response = await fetch(`${API_URL}${path}`, { ...init, headers });
-  } catch {
-    throw new Error("Не вдалося з’єднатися із сервером CRM. Перевірте інтернет-з’єднання та спробуйте ще раз.");
+  try { response = await fetch(`${API_URL}${path}`, { ...init, headers }); }
+  catch { throw new Error("Не вдалося з’єднатися із сервером CRM. Перевірте інтернет-з’єднання та спробуйте ще раз."); }
+  if (response.status === 401 && session) {
+    expireSession(session);
+    throw new Error(SESSION_EXPIRED_MESSAGE);
   }
-  if (!response.ok) throw await responseError(response, path, method);
-  emitMutationSaved(path, method);
-  return response.json() as Promise<T>;
+  if (!response.ok) throw await responseError(response, path, init.method ?? "GET");
+  return response;
+}
+
+export async function request<T>(path: string, init: RequestInit = {}, session?: Session): Promise<T> {
+  const response = await authenticatedResponse(path, init, session);
+  emitMutationSaved(path, init.method ?? "GET");
+  return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }
 
 export function loadSession(): Session | null {
@@ -337,21 +367,5 @@ export function apiPut<T>(path: string, body: unknown, session: Session) {
 }
 
 export async function apiDelete(path: string, session: Session): Promise<void> {
-  if (!API_URL) throw new Error("CRM не підключена до сервера. Перевірте налаштування API.");
-  let response: Response;
-  try {
-    response = await fetch(`${API_URL}${path}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        "X-Organization-Id": session.organizationId,
-      },
-    });
-  } catch {
-    throw new Error("Не вдалося з’єднатися із сервером CRM. Перевірте інтернет-з’єднання та спробуйте ще раз.");
-  }
-  if (!response.ok) throw await responseError(response, path, "DELETE");
-  emitMutationSaved(path, "DELETE");
+  await request<void>(path, { method: "DELETE" }, session);
 }
-
-
