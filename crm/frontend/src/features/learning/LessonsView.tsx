@@ -1,3 +1,4 @@
+import { authenticatedResponse } from "../../api/client";
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../../api";
 import type { LessonItem } from "../teaching/model";
@@ -129,11 +130,7 @@ export function LessonsView({ session, groups, students, sessions, canEdit }: Pr
   async function openFile(lessonId: string, materialId: string, filename: string | null) {
     if (!session) return;
     try {
-      const root = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
-      const response = await fetch(`${root}${materialFileUrl(lessonId, materialId)}?inline=true`, {
-        headers: { Authorization: `Bearer ${session.accessToken}`, "X-Organization-Id": session.organizationId },
-      });
-      if (!response.ok) throw new Error("Не вдалося відкрити файл.");
+      const response = await authenticatedResponse(`${materialFileUrl(lessonId, materialId)}?inline=true`, {}, session);
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       if (blob.type === "application/pdf" || blob.type.startsWith("image/") || blob.type.startsWith("video/")) {
