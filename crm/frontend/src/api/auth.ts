@@ -1,5 +1,5 @@
 import type { AuthUser, InvitationStatus, Session } from "./types";
-import { request, saveSession } from "./client";
+import { request, saveSession, loadSession } from "./client";
 
 export async function login(email: string, password: string): Promise<Session> {
   const result = await request<{ access_token: string; user: AuthUser }>("/auth/login", {
@@ -16,12 +16,13 @@ export async function login(email: string, password: string): Promise<Session> {
 export async function refreshMe(session: Session): Promise<Session> {
   const user = await request<AuthUser>("/auth/me", {
     headers: { Authorization: `Bearer ${session.accessToken}` },
-  });
+  }, session);
   const organizationId = user.memberships.some((m) => m.organization_id === session.organizationId)
     ? session.organizationId
     : user.memberships[0]?.organization_id;
   if (!organizationId) throw new Error("Немає доступної організації");
   const updated = { ...session, user, organizationId };
+  if (loadSession()?.accessToken !== session.accessToken) throw new Error("Сесія змінилася. Увійдіть повторно.");
   saveSession(updated);
   return updated;
 }
