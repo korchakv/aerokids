@@ -10,9 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.core import (
-    Contact, Enrollment, EnrollmentStatus, Group, GroupSchedule, LeadComment,
-    Payment, Student, StudentContact, StudentStatus, StudentSubscription,
-    SubscriptionPlan, TrialLesson, User,
+    Attendance, Contact, Enrollment, EnrollmentStatus, Group, GroupSchedule, LeadComment,
+    LessonSession, Payment, Student, StudentAvailability, StudentContact, StudentStatus,
+    StudentSubscription, SubscriptionPlan, TrialLesson, User,
 )
 
 WEEKDAYS = ("Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя")
@@ -227,6 +227,58 @@ def build_students_export(db: Session, org_id: UUID) -> bytes:
         "Період, днів", "Занять включено", "Кредит, грн", "Знижка, грн", "Причина знижки",
         "Автопродовження",
     ], subscription_rows)
+
+    enrollment_rows = []
+    for enrollment in enrollments:
+        group = groups.get(enrollment.group_id)
+        enrollment_rows.append([
+            names.get(enrollment.student_id, ""), str(enrollment.student_id),
+            group.name if group else "", enrollment.status, enrollment.started_at,
+            enrollment.ended_at, enrollment.schedule_match, enrollment.schedule_note,
+        ])
+    make_sheet(book, "Історія груп", [
+        "Учень", "ID учня", "Група", "Статус зарахування", "Початок", "Завершення",
+        "Відповідність розкладу", "Примітка",
+    ], enrollment_rows)
+
+    trial_rows = []
+    for trial in trials:
+        trial_rows.append([
+            names.get(trial.student_id, ""), str(trial.student_id), trial.starts_at,
+            trial.status, trial.recommended_level, trial.teacher_notes,
+        ])
+    make_sheet(book, "Пробні заняття", [
+        "Учень", "ID учня", "Дата і час", "Статус", "Рекомендований рівень", "Нотатки викладача",
+    ], trial_rows)
+
+    availability_rows = []
+    for slot in db.scalars(select(StudentAvailability).where(StudentAvailability.organization_id == org_id)):
+        day = WEEKDAYS[slot.weekday] if 0 <= slot.weekday < len(WEEKDAYS) else str(slot.weekday)
+        availability_rows.append([
+            names.get(slot.student_id, ""), str(slot.student_id), day,
+            slot.start_time, slot.end_time, slot.preference, slot.note,
+        ])
+    make_sheet(book, "Доступність учнів", [
+        "Учень", "ID учня", "День", "З", "До", "Побажання", "Примітка",
+    ], availability_rows)
+
+    sessions = {
+        item.id: item for item in db.scalars(select(LessonSession).where(LessonSession.organization_id == org_id))
+    }
+    attendance_rows = []
+    for item in db.scalars(select(Attendance).where(Attendance.organization_id == org_id)):
+        lesson = sessions.get(item.session_id)
+        group = groups.get(lesson.group_id) if lesson else None
+        attendance_rows.append([
+            names.get(item.student_id, ""), str(item.student_id),
+            group.name if group else "", lesson.starts_at if lesson else "",
+            lesson.topic if lesson else "", lesson.status if lesson else "",
+            item.status, item.note, item.updated_at,
+        ])
+    make_sheet(book, "Відвідування", [
+        "Учень", "ID учня", "Група", "Дата заняття", "Тема", "Статус заняття",
+        "Відвідування", "Примітка", "Оновлено",
+    ], attendance_rows)
 
     output = BytesIO()
     book.save(output)
