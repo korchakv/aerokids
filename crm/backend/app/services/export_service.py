@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import json
 from uuid import UUID
 
 from openpyxl import Workbook
@@ -10,9 +11,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.core import (
-    Attendance, Contact, Enrollment, EnrollmentStatus, Group, GroupSchedule, LeadComment,
-    LessonSession, Payment, Student, StudentAvailability, StudentContact, StudentStatus,
-    StudentSubscription, SubscriptionPlan, TrialLesson, User,
+    Attendance, AuditEvent, Contact, CrmStatus, Enrollment, EnrollmentStatus, Group, GroupSchedule,
+    LeadComment, LessonSession, Payment, PaymentTransaction, Student, StudentAvailability,
+    StudentContact, StudentStatus, StudentSubscription, SubscriptionPause, SubscriptionPlan,
+    TrialLesson, User,
 )
 
 WEEKDAYS = ("Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя")
@@ -156,7 +158,7 @@ def build_students_export(db: Session, org_id: UUID) -> bytes:
     ]
     active_rows, potential_rows = [], []
     for student in students:
-        (potential_rows if student.student_status == StudentStatus.PROSPECT else active_rows).append(row_for(student))
+        (potential_rows if (student.student_status == StudentStatus.PROSPECT or (student.student_status == StudentStatus.ARCHIVED and student.crm_status != CrmStatus.ENROLLED)) else active_rows).append(row_for(student))
     active_rows.sort(key=lambda row: (str(row[8]).casefold(), str(row[1]).casefold()))
     potential_rows.sort(key=lambda row: (str(value(row[11])).casefold(), str(row[1]).casefold()))
 
@@ -188,6 +190,22 @@ def build_students_export(db: Session, org_id: UUID) -> bytes:
         "Учень", "ID учня", "Дата", "Оновлено", "Тип події", "Автор", "Коментар / опис",
     ], comment_rows)
 
+    audit_rows = []
+    audit_events = list(db.scalars(select(AuditEvent).where(
+        AuditEvent.organization_id == org_id,
+        AuditEvent.entity_type == "student",
+    ).order_by(AuditEvent.created_at)))
+    for event in audit_events:
+        actor = users.get(event.actor_user_id)
+        audit_rows.append([
+            names.get(event.entity_id, ""), str(event.entity_id or ""), event.created_at,
+            event.event_type, actor.full_name if actor else "",
+            json.dumps(event.payload or {}, ensure_ascii=False, default=str),
+        ])
+    make_sheet(book, "Системна історія", [
+        "Учень", "ID учня", "Дата і час", "Подія", "Хто виконав", "Деталі події",
+    ], audit_rows)
+
     group_rows = []
     for group in sorted(groups.values(), key=lambda item: item.name.casefold()):
         roster = [
@@ -215,6 +233,23 @@ def build_students_export(db: Session, org_id: UUID) -> bytes:
         "Статус", "Спосіб", "Примітка",
     ], payment_rows)
 
+    transactions = list(db.scalars(select(PaymentTransaction).where(
+        PaymentTransaction.organization_id == org_id
+    ).order_by(PaymentTransaction.occurred_at)))
+    transaction_rows = []
+    for transaction in transactions:
+        actor = users.get(transaction.actor_user_id)
+        transaction_rows.append([
+            names.get(transaction.student_id, ""), str(transaction.student_id),
+            str(transaction.payment_id), transaction.occurred_at, transaction.kind,
+            transaction.amount_minor / 100, transaction.method, transaction.note,
+            actor.full_name if actor else "",
+        ])
+    make_sheet(book, "Рух коштів", [
+        "Учень", "ID учня", "ID платежу", "Дата", "Операція", "Сума", "Спосіб",
+        "Примітка", "Хто виконав",
+    ], transaction_rows)
+
     subscription_rows = []
     for sub in subscriptions:
         plan = plans.get(sub.plan_id)
@@ -229,6 +264,20 @@ def build_students_export(db: Session, org_id: UUID) -> bytes:
         "Період, днів", "Занять включено", "Кредит, грн", "Знижка, грн", "Причина знижки",
         "Автопродовження",
     ], subscription_rows)
+
+    pauses = list(db.scalars(select(SubscriptionPause).where(
+        SubscriptionPause.organization_id == org_id
+    ).order_by(SubscriptionPause.created_at)))
+    pause_rows = []
+    for pause in pauses:
+        pause_rows.append([
+            names.get(pause.student_id, ""), str(pause.student_id), str(pause.subscription_id),
+            pause.starts_on, pause.ends_on, pause.resumed_at, pause.note, pause.created_at,
+        ])
+    make_sheet(book, "Паузи абонементів", [
+        "Учень", "ID учня", "ID абонемента", "Початок паузи", "Кінець паузи",
+        "Відновлено", "Причина / нотатка", "Створено",
+    ], pause_rows)
 
     enrollment_rows = []
     for enrollment in enrollments:
