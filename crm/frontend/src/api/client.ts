@@ -369,3 +369,17 @@ export function apiPut<T>(path: string, body: unknown, session: Session) {
 export async function apiDelete(path: string, session: Session): Promise<void> {
   await request<void>(path, { method: "DELETE" }, session);
 }
+
+
+export async function downloadStudentsExcel(session: Session): Promise<void> {
+  const response = await authenticatedResponse("/exports/students.xlsx", {}, session);
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = "aerokids-students-export.xlsx";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}

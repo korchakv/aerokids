@@ -18,6 +18,8 @@ type SettingsViewProps = {
   onScaleUp: () => void;
   organizationSlug: string;
   roleName: string;
+  exportLoading: boolean;
+  onExportExcel: () => void;
 };
 
 export function SettingsView({
@@ -40,6 +42,8 @@ export function SettingsView({
   onScaleUp,
   organizationSlug,
   roleName,
+  exportLoading,
+  onExportExcel,
 }: SettingsViewProps) {
   return <section className="settingsLayout">
     <div className="settingsPrimaryColumn">
@@ -53,6 +57,12 @@ export function SettingsView({
         </div>
         <label>Локаль<input value={organizationLocale} onChange={(event) => onOrganizationLocale(event.target.value)} placeholder="uk-UA" /></label>
         <button className="primary" disabled={organizationSaving || !organizationName.trim()} onClick={onSaveOrganization}>{organizationSaving ? "Зберігаємо…" : "Зберегти налаштування"}</button>
+      </article>
+
+      <article className="panel settingsPanel">
+        <div className="panelHead"><div><p className="eyebrow">Дані</p><h2>Експорт бази учнів</h2></div></div>
+        <p className="settingsIntro">Завантажте повну базу CRM у форматі Excel: учні, потенційні клієнти, контакти батьків, групи та розклад, коментарі, історія пробних занять, абонементи й оплати.</p>
+        <button className="primary" type="button" disabled={exportLoading} onClick={onExportExcel}>{exportLoading ? "Готуємо Excel…" : "Експортувати всю базу в Excel"}</button>
       </article>
 
       <article className="panel settingsPanel appearanceSettings">

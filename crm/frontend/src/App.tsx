@@ -41,7 +41,7 @@ import { applyWorkspace, crmStatusLabel, crmStatusValue, workspaceGroupToGroupIt
 import { cleanSpaces, emailError, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
-import { apiDelete, apiEnabled, apiGet, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, type ApiAuditEvent, type ApiLeadComment, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle, type WorkspaceStudent } from "./api";
+import { apiDelete, apiEnabled, apiGet, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, downloadStudentsExcel, type ApiAuditEvent, type ApiLeadComment, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle, type WorkspaceStudent } from "./api";
 
 
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
@@ -146,6 +146,7 @@ function App() {
   const [organizationCurrency, setOrganizationCurrency] = useState("UAH");
   const [organizationLocale, setOrganizationLocale] = useState("uk-UA");
   const [organizationSaving, setOrganizationSaving] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   const [leadSort, setLeadSort] = useState<"priority" | "next_action" | "newest">("priority");
   const [leadSourceFilter, setLeadSourceFilter] = useState("all");
   const [leadMoveSavingId, setLeadMoveSavingId] = useState<EntityId | null>(null);
@@ -895,6 +896,19 @@ function App() {
       setWorkspaceError(error instanceof Error ? error.message : "Не вдалося зберегти налаштування");
     } finally {
       setOrganizationSaving(false);
+    }
+  };
+
+  const exportExcel = async () => {
+    if (!session || exportLoading) return;
+    setExportLoading(true);
+    setWorkspaceError("");
+    try {
+      await downloadStudentsExcel(session);
+    } catch (error) {
+      setWorkspaceError(error instanceof Error ? error.message : "Не вдалося експортувати базу");
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -3637,6 +3651,8 @@ function App() {
           onScaleUp={() => changeUiScale(1)}
           organizationSlug={currentMembership?.organization_slug ?? ""}
           roleName={roleLabel(currentMembership?.role)}
+          exportLoading={exportLoading}
+          onExportExcel={exportExcel}
         />}
         {active === "Звіти" && <ReportsView
           conversionPercent={leads.length ? Math.round(activeStudents.length / leads.length * 100) : 0}

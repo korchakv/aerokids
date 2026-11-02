@@ -9,3 +9,4 @@ httpx==0.28.1
 PyJWT[crypto]==2.15.1
 pwdlib[argon2]==0.3.1
 python-multipart==0.0.31
+openpyxl==3.1.5

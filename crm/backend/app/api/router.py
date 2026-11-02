@@ -2,7 +2,7 @@ import hmac
 import ipaddress
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,7 @@ from app.auth import service as auth_service
 from app.auth.schemas import AcceptInvitationCreate, InvitationStatusCreate, InvitationStatusResult, AuthTokenResponse, AuthUserInfo, BootstrapOwnerCreate, BootstrapOwnerResult, BootstrapStatus, LoginCreate, OrganizationInvitationCreate, OrganizationInvitationResult, PasswordResetComplete, PasswordResetLinkCreate, PasswordResetLinkResult
 from app.core.config import settings
 from app.core.security import auth_is_required
-from app.services import audit_service, billing_service, contact_service, crm, group_service, location_service, organization_service, potential_group_service, reporting_service, staff_service, student_service, trial_service
+from app.services import audit_service, billing_service, contact_service, crm, group_service, location_service, organization_service, potential_group_service, reporting_service, staff_service, student_service, trial_service, export_service
 
 router = APIRouter()
 
@@ -943,6 +943,19 @@ def remove_staff_group(
 ):
     crm.remove_staff_from_group(db, org_id, staff_id, group_id)
 
+
+
+@router.get("/exports/students.xlsx")
+def export_students_excel(
+    org_id: UUID = Depends(require_org_roles(StaffRole.OWNER, StaffRole.ADMIN, StaffRole.MANAGER)),
+    db: Session = Depends(get_db),
+):
+    content = export_service.build_students_export(db, org_id)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="aerokids-students-export.xlsx"'},
+    )
 
 @router.get("/audit-events", response_model=list[AuditEventRead])
 def audit_events(
