@@ -34,6 +34,8 @@ def value(item):
         return LABELS.get(item.value, item.value)
     if hasattr(item, "isoformat"):
         return item.isoformat(sep=" ") if hasattr(item, "hour") else item.isoformat()
+    if isinstance(item, str) and item.startswith(("=", "+", "-", "@")):
+        return "'" + item
     return item
 
 def make_sheet(book, title, headers, rows):
