@@ -35,7 +35,10 @@ def value(item):
     if hasattr(item, "value"):
         return LABELS.get(item.value, item.value)
     if hasattr(item, "isoformat"):
-        return item.isoformat(sep=" ") if hasattr(item, "hour") else item.isoformat()
+        try:
+            return item.isoformat(sep=" ")
+        except TypeError:
+            return item.isoformat()
     if isinstance(item, str) and item.startswith(("=", "+", "-", "@")):
         return "'" + item
     return item
