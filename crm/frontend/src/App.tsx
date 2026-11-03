@@ -3293,7 +3293,17 @@ function App() {
   const dashboardPaymentTasks = canSeePayments ? payments
     .filter((payment) => payment.balanceAmount > 0 && payment.status !== "cancelled" && Boolean(payment.dueDate) && payment.dueDate <= todayKey)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || b.balanceAmount - a.balanceAmount) : [];
-  const renewalSubscriptionTasks = canSeePayments ? subscriptions.filter((item) => item.status === "active" && item.needs_renewal) : [];
+  const latestSubscriptionByStudent = new Map<EntityId, ApiStudentSubscription>();
+  for (const subscription of [...subscriptions].sort((a, b) =>
+    b.starts_on.localeCompare(a.starts_on) || b.id.localeCompare(a.id)
+  )) {
+    if (!latestSubscriptionByStudent.has(subscription.student_id)) {
+      latestSubscriptionByStudent.set(subscription.student_id, subscription);
+    }
+  }
+  const renewalSubscriptionTasks = canSeePayments
+    ? [...latestSubscriptionByStudent.values()].filter((item) => item.status === "active" && item.needs_renewal)
+    : [];
   const dashboardTaskCount = dashboardLeadTasks.length + dashboardPaymentTasks.length + renewalSubscriptionTasks.length;
   const searchTerm = normalizedSearch(searchQuery);
   const searchLeads = searchTerm ? leads.filter((item) =>
