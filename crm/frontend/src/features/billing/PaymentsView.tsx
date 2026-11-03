@@ -112,7 +112,7 @@ export function PaymentsView({
         <p className="reminderIntro">CRM показує лише актуальний етап нагадування. Після фіксації дзвінка цей етап зникає і не дублюється; наступне нагадування з’явиться лише на наступному етапі прострочення.</p>
         <div className="reminderList">{paymentReminders.map((reminder) => <div className="reminderRow" key={reminder.payment_id + reminder.stage}>
           <div><b>{reminder.student_name}</b><small>{reminder.contact_name ?? "Контакт не вказано"}{reminder.contact_phone ? " · " + reminder.contact_phone : ""}</small></div>
-          <span><b>{money(reminder.amount_minor / 100)}</b><small>до {new Date(reminder.due_date + "T00:00:00").toLocaleDateString("uk-UA")}</small></span>
+          <span><b>{money(reminder.amount_minor / 100)}</b><small>{reminder.stage === "lessons_exhausted" ? "Усі заняття використано" : "до " + new Date(reminder.due_date + "T00:00:00").toLocaleDateString("uk-UA")}</small></span>
           <span className={"reminderStage " + (reminder.days_from_due > 0 ? "overdue" : "upcoming")}>{reminder.label}</span>
           <div className="reminderActions">{reminder.contact_phone && <a className="link" href={"tel:" + reminder.contact_phone.replace(/\s/g, "")}>Подзвонити</a>}<button className="search" disabled={reminderSavingId === reminder.payment_id} onClick={() => onReminderHandled(reminder)}>{reminderSavingId === reminder.payment_id ? "Зберігаємо…" : "Дзвінок зроблено"}</button></div>
         </div>)}</div>
