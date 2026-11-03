@@ -991,13 +991,13 @@ class PaymentReminderCandidate(BaseModel):
     currency: str
     due_date: date
     days_from_due: int
-    stage: Literal["upcoming_3", "due_today", "overdue_1", "overdue_3", "overdue_7", "overdue_14", "overdue_30"]
+    stage: Literal["upcoming_3", "due_today", "overdue_1", "overdue_3", "overdue_7", "overdue_14", "overdue_30", "lessons_exhausted"]
     label: str
     last_reminder_at: datetime | None = None
 
 
 class PaymentReminderMark(BaseModel):
-    stage: Literal["upcoming_3", "due_today", "overdue_1", "overdue_3", "overdue_7", "overdue_14", "overdue_30"]
+    stage: Literal["upcoming_3", "due_today", "overdue_1", "overdue_3", "overdue_7", "overdue_14", "overdue_30", "lessons_exhausted"]
     channel: Literal["manual", "sms", "email", "messenger", "phone"] = "manual"
 
 
