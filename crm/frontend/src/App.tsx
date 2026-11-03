@@ -3475,7 +3475,11 @@ function App() {
           studentStates={registryStudentStates}
           groupForStudent={studentGroup}
           studentBilling={studentRegistryBilling}
+          payments={payments}
           showBilling={canSeePayments}
+          onOpenAttendance={goToStudentAttendance}
+          onOpenPayments={goToStudentPayments}
+          onOpenGroup={goToGroup}
           onOpenStudent={(studentId, currentGroupId) => {
             setSelectedStudentId(studentId);
             setTransferGroupId(currentGroupId);
