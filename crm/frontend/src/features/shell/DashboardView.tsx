@@ -114,7 +114,7 @@ export function DashboardView({
           const plan = plans.find((item) => item.id === subscription.plan_id);
           return <button className="todayActionRow" key={"renewal-" + subscription.id} onClick={() => onOpenStudent(subscription.student_id)}>
             <span className="todayActionType payment">Абонемент</span>
-            <span className="todayActionText"><b>{student?.child ?? "Учень"} · залишилось 1 заняття</b><small>{plan?.name ?? "Абонемент"} · скоро продовження</small></span>
+            <span className="todayActionText"><b>{student?.child ?? "Учень"} · {subscription.remaining_lessons === 0 ? "усі заняття використано" : `залишилось ${subscription.remaining_lessons ?? "—"} занять`}</b><small>{plan?.name ?? "Абонемент"} · час продовжити</small></span>
             <span className="todayActionArrow">→</span>
           </button>;
         })}
