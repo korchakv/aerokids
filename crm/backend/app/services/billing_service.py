@@ -1459,6 +1459,60 @@ def payment_reminder_queue(db: Session, org_id: UUID) -> list[dict]:
             "label": label,
             "last_reminder_at": last_reminder_at,
         })
+
+    # Lesson-count trigger: notify only after all included lessons are consumed.
+    # Keep the existing calendar-date reminder stages above unchanged.
+    queued_payment_ids = {item["payment_id"] for item in result}
+    subscriptions = list(db.scalars(
+        select(StudentSubscription).where(
+            StudentSubscription.organization_id == org_id,
+            StudentSubscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED]),
+        )
+    ))
+    for subscription in subscriptions:
+        summary = subscription_usage_summary(db, org_id, subscription)
+        if not summary["needs_renewal"]:
+            continue
+        payment = db.scalar(
+            select(Payment)
+            .where(
+                Payment.organization_id == org_id,
+                Payment.subscription_id == subscription.id,
+                Payment.status != PaymentStatus.CANCELLED,
+            )
+            .order_by(Payment.created_at.desc(), Payment.id.desc())
+            .limit(1)
+        )
+        if payment is None or payment.id in queued_payment_ids:
+            continue
+        already_sent = db.scalar(select(PaymentReminder.id).where(
+            PaymentReminder.organization_id == org_id,
+            PaymentReminder.payment_id == payment.id,
+            PaymentReminder.stage == "lessons_exhausted",
+        ))
+        if already_sent is not None:
+            continue
+        student = scoped_get(db, Student, org_id, subscription.student_id)
+        contact = _primary_contact_for_student(db, org_id, student.id)
+        last_reminder_at = db.scalar(select(func.max(PaymentReminder.sent_at)).where(
+            PaymentReminder.organization_id == org_id,
+            PaymentReminder.payment_id == payment.id,
+        ))
+        finance = payment_financials(db, org_id, payment)
+        result.append({
+            "payment_id": payment.id,
+            "student_id": student.id,
+            "student_name": " ".join(filter(None, [student.first_name, student.last_name])),
+            "contact_name": contact.full_name if contact else None,
+            "contact_phone": contact.phone if contact else None,
+            "amount_minor": finance["balance_minor"],
+            "currency": payment.currency,
+            "due_date": subscription.ends_on or today,
+            "days_from_due": 0,
+            "stage": "lessons_exhausted",
+            "label": "Заняття за абонементом використано",
+            "last_reminder_at": last_reminder_at,
+        })
     return result
 
 
@@ -1474,9 +1528,17 @@ def mark_payment_reminder_sent(
     if payment.status != PaymentStatus.PENDING or payment.due_date is None:
         raise HTTPException(status_code=409, detail="Payment no longer needs a reminder")
 
-    expected = _payment_reminder_stage(payment.due_date, date.today())
-    if expected is None or expected[0] != stage:
-        raise HTTPException(status_code=409, detail="Reminder stage is no longer current")
+    if stage == "lessons_exhausted":
+        if payment.subscription_id is None:
+            raise HTTPException(status_code=409, detail="Payment has no subscription to check")
+        subscription = scoped_get(db, StudentSubscription, org_id, payment.subscription_id)
+        summary = subscription_usage_summary(db, org_id, subscription)
+        if not summary["needs_renewal"]:
+            raise HTTPException(status_code=409, detail="Lesson package is not exhausted")
+    else:
+        expected = _payment_reminder_stage(payment.due_date, date.today())
+        if expected is None or expected[0] != stage:
+            raise HTTPException(status_code=409, detail="Reminder stage is no longer current")
 
     existing = db.scalar(select(PaymentReminder).where(
         PaymentReminder.organization_id == org_id,
