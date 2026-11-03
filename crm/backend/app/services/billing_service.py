@@ -1555,7 +1555,10 @@ def mark_payment_reminder_sent(
     actor_user_id: UUID | None = None,
 ) -> PaymentReminder:
     payment = scoped_get(db, Payment, org_id, payment_id)
-    if payment.status != PaymentStatus.PENDING or payment.due_date is None:
+    if stage == "lessons_exhausted":
+        if payment.subscription_id is None:
+            raise HTTPException(status_code=409, detail="Payment has no subscription to check")
+    elif payment.status != PaymentStatus.PENDING or payment.due_date is None:
         raise HTTPException(status_code=409, detail="Payment no longer needs a reminder")
 
     if stage == "lessons_exhausted":
