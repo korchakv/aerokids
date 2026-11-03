@@ -306,7 +306,7 @@ def subscription_usage_summary(db: Session, org_id: UUID, subscription: StudentS
         SubscriptionUsage.subscription_id == subscription.id,
     )) or 0
     remaining = max(0, included - int(used)) if included is not None else None
-    return {"used_lessons": int(used), "remaining_lessons": remaining, "needs_renewal": remaining == 1 if remaining is not None else False}
+    return {"used_lessons": int(used), "remaining_lessons": remaining, "needs_renewal": remaining == 0 if remaining is not None else False}
 
 
 def _attach_subscription_usage(db: Session, org_id: UUID, subscription: StudentSubscription) -> StudentSubscription:
@@ -977,7 +977,24 @@ def paginate_payments(
         .scalar_subquery()
     )
 
-    filters = [Payment.organization_id == org_id]
+    latest_payment_rows = (
+        select(
+            Payment.id.label("payment_id"),
+            func.row_number().over(
+                partition_by=Payment.student_id,
+                order_by=(Payment.created_at.desc(), Payment.id.desc()),
+            ).label("student_payment_rank"),
+        )
+        .where(Payment.organization_id == org_id)
+        .subquery()
+    )
+    filters = [
+        Payment.organization_id == org_id,
+        exists(select(1).where(
+            latest_payment_rows.c.payment_id == Payment.id,
+            latest_payment_rows.c.student_payment_rank == 1,
+        )),
+    ]
     if status is not None:
         filters.append(Payment.status == status)
     if overdue is True:
