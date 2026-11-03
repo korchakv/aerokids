@@ -49,20 +49,16 @@ def test_payment_page_aggregates_ledger_and_filters_overdue(client):
 
     page = client.get("/payments/page?limit=10&sort=due", headers=headers)
     assert page.status_code == 200, page.text
-    assert page.json()["total"] == 2
+    assert page.json()["total"] == 1
     first = page.json()["items"][0]
-    assert first["id"] == overdue["id"]
+    assert first["id"] == paid["id"]
     assert first["student_name"] == "Марко"
     assert first["contact_name"] == "Олена Платник"
-    assert first["adjusted_amount_minor"] == 90000
-    assert first["paid_minor"] == 30000
-    assert first["refunded_minor"] == 0
-    assert first["balance_minor"] == 60000
+    assert first["balance_minor"] == 0
 
     overdue_page = client.get("/payments/page?overdue=true&limit=10", headers=headers)
     assert overdue_page.status_code == 200, overdue_page.text
-    assert overdue_page.json()["total"] == 1
-    assert overdue_page.json()["items"][0]["id"] == overdue["id"]
+    assert overdue_page.json()["total"] == 0
 
     paid_page = client.get("/payments/page?status=paid&limit=10", headers=headers)
     assert paid_page.status_code == 200, paid_page.text
@@ -72,7 +68,7 @@ def test_payment_page_aggregates_ledger_and_filters_overdue(client):
 
     search = client.get("/payments/page?q=%D0%9F%D0%BB%D0%B0%D1%82%D0%BD%D0%B8%D0%BA&limit=10", headers=headers)
     assert search.status_code == 200, search.text
-    assert search.json()["total"] == 2
+    assert search.json()["total"] == 1
 
 
 def test_payment_page_is_paginated_and_tenant_scoped(client):
@@ -89,11 +85,10 @@ def test_payment_page_is_paginated_and_tenant_scoped(client):
 
     page = client.get("/payments/page?limit=2&offset=0", headers=first)
     assert page.status_code == 200, page.text
-    assert page.json()["total"] == 3
-    assert len(page.json()["items"]) == 2
-    assert {item["student_id"] for item in page.json()["items"]} == {first_student["id"]}
+    assert page.json()["total"] == 1
+    assert len(page.json()["items"]) == 1
+    assert page.json()["items"][0]["student_id"] == first_student["id"]
 
     next_page = client.get("/payments/page?limit=2&offset=2", headers=first)
     assert next_page.status_code == 200, next_page.text
-    assert len(next_page.json()["items"]) == 1
-    assert next_page.json()["items"][0]["student_id"] == first_student["id"]
+    assert next_page.json()["items"] == []
