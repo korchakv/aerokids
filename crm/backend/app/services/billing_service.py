@@ -1414,12 +1414,27 @@ def _payment_reminder_stage(due_date: date, today: date) -> tuple[str, str] | No
 
 def payment_reminder_queue(db: Session, org_id: UUID) -> list[dict]:
     today = date.today()
+    latest_payment_rows = (
+        select(
+            Payment.id.label("payment_id"),
+            func.row_number().over(
+                partition_by=Payment.student_id,
+                order_by=(Payment.created_at.desc(), Payment.id.desc()),
+            ).label("student_payment_rank"),
+        )
+        .where(Payment.organization_id == org_id)
+        .subquery()
+    )
     payments = list(db.scalars(
         select(Payment)
         .where(
             Payment.organization_id == org_id,
             Payment.status == PaymentStatus.PENDING,
             Payment.due_date.is_not(None),
+            exists(select(1).where(
+                latest_payment_rows.c.payment_id == Payment.id,
+                latest_payment_rows.c.student_payment_rank == 1,
+            )),
         )
         .order_by(Payment.due_date, Payment.created_at)
     ))
@@ -1463,10 +1478,25 @@ def payment_reminder_queue(db: Session, org_id: UUID) -> list[dict]:
     # Lesson-count trigger: notify only after all included lessons are consumed.
     # Keep the existing calendar-date reminder stages above unchanged.
     queued_payment_ids = {item["payment_id"] for item in result}
+    latest_subscription_rows = (
+        select(
+            StudentSubscription.id.label("subscription_id"),
+            func.row_number().over(
+                partition_by=StudentSubscription.student_id,
+                order_by=(StudentSubscription.created_at.desc(), StudentSubscription.id.desc()),
+            ).label("student_subscription_rank"),
+        )
+        .where(StudentSubscription.organization_id == org_id)
+        .subquery()
+    )
     subscriptions = list(db.scalars(
         select(StudentSubscription).where(
             StudentSubscription.organization_id == org_id,
             StudentSubscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED]),
+            exists(select(1).where(
+                latest_subscription_rows.c.subscription_id == StudentSubscription.id,
+                latest_subscription_rows.c.student_subscription_rank == 1,
+            )),
         )
     ))
     for subscription in subscriptions:
