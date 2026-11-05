@@ -3650,3 +3650,42 @@ html[data-theme="light"] .noShowCard .inlineEditLink{color:#922b39}
 @media(max-width:1000px){.learningGrid{grid-template-columns:1fr}.learningSide{grid-template-columns:repeat(2,minmax(0,1fr))}.learningSide>.learningPanel:last-child{grid-column:1/-1}}
 @media(max-width:680px){.learningIntro{align-items:flex-start;padding:16px}.learningIntro h2{font-size:20px}.learningIntro p:last-child{font-size:12px}.learningCount{font-size:11px;padding:6px 9px}.learningSide{grid-template-columns:1fr}.learningSide>.learningPanel:last-child{grid-column:auto}.learningCurriculum,.learningPanel{padding:13px}.learningSessionRow{grid-template-columns:minmax(90px,.65fr) minmax(130px,1fr);gap:6px;padding:7px}.learningSessionRow select{font-size:10px}.learningLinkForm{grid-template-columns:1fr}.learningUpload{align-items:flex-start!important;flex-direction:column}.learningUpload input{max-width:100%;width:100%}}
 .learningSessionTopic{display:grid;gap:4px;min-width:0}.learningSessionTopic .learningTextButton{justify-self:start;padding:3px 0;font-size:10px}
+
+
+/* Grouped student registry */
+.studentsGroupedLayout .studentsPanel { min-width: 0; }
+.studentGroupedIntro { display:block; margin-top:5px; color:var(--muted,#64748b); font-size:12px; }
+.studentGroupSection { margin-top:18px; }
+.studentGroupSectionHead { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--line,#dbe2ea); border-radius:12px; background:var(--surface-soft,#f7f9fb); }
+.studentGroupSectionHead div { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.studentGroupSectionHead b { font-size:15px; }
+.studentGroupSectionHead small { color:var(--muted,#64748b); font-size:11px; }
+.studentGroupSectionHead button,.studentGroupActions button { border:0; background:transparent; color:var(--accent,#087f8c); font:inherit; font-size:12px; font-weight:650; cursor:pointer; white-space:nowrap; }
+.studentGroupCards { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; padding-top:8px; }
+.studentGroupCard { min-width:0; border:1px solid var(--line,#dbe2ea); border-radius:12px; padding:11px 13px 9px; background:var(--panel,#fff); }
+.studentGroupCardMain { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.studentGroupIdentity { display:flex; align-items:center; gap:10px; min-width:0; flex:1; border:0; padding:0; background:transparent; text-align:left; cursor:pointer; color:inherit; }
+.studentGroupAvatar { width:34px; height:34px; flex:0 0 34px; display:grid; place-items:center; border-radius:50%; background:var(--accent-soft,#e4f3f4); color:var(--accent,#087f8c); font-weight:750; }
+.studentGroupName { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.studentGroupName b { font-size:14px; }
+.studentGroupName small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted,#64748b); font-size:11px; }
+.studentGroupFacts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:10px; }
+.studentGroupFact { display:flex; flex-direction:column; gap:3px; min-width:0; padding:7px 9px; border:1px solid var(--line,#e1e7ed); border-radius:8px; }
+.studentGroupFact small { color:var(--muted,#64748b); font-size:9px; letter-spacing:.04em; }
+.studentGroupFact b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.studentGroupFact span { color:var(--muted,#64748b); font-size:10px; }
+.studentGroupActions { display:flex; flex-wrap:wrap; gap:14px; padding:7px 2px 1px; }
+.studentGroupMore { margin-top:6px; border-top:1px solid var(--line,#e1e7ed); padding-top:7px; }
+.studentGroupMore summary { color:var(--muted,#64748b); font-size:11px; cursor:pointer; }
+.studentGroupMoreGrid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; padding-top:9px; }
+.studentGroupMoreGrid span { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.studentGroupMoreGrid small { color:var(--muted,#64748b); font-size:10px; }
+.studentGroupMoreGrid b { overflow-wrap:anywhere; font-size:11px; font-weight:600; }
+.studentGroupComment { margin:9px 0 0; padding:8px; border-radius:7px; background:var(--surface-soft,#f7f9fb); font-size:11px; white-space:pre-wrap; }
+.studentUngroupedSection { margin-top:24px; }
+@media(max-width:760px) {
+ .studentGroupFacts { grid-template-columns:1fr 1fr; }
+ .studentGroupMoreGrid { grid-template-columns:1fr 1fr; }
+ .studentGroupFact:last-child { grid-column:1/-1; }
+ .studentGroupSectionHead { align-items:flex-start; }
+}

@@ -212,7 +212,7 @@ test("owner can open modular students workspace", async ({ page }) => {
   await login(page);
   await page.getByText("Учні", { exact: true }).first().click();
   await expect(page.getByTestId("students-workspace")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Активні учні" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Учні ·/ })).toBeVisible();
 });
 
 test("owner can open modular groups workspace", async ({ page }) => {

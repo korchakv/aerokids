@@ -6,6 +6,7 @@ import { apiGet, type ApiAuditEvent, type ApiLeadComment, type Session } from ".
 import type { EntityId, Lead } from "../leads/model";
 import type { GroupItem } from "../groups/types";
 import type { WorkspaceStudent } from "../../api";
+import type { PaymentDemo } from "../billing/model";
 
 export type StudentLifecycleLabel = "Активний" | "Пауза" | "Архів";
 export type StudentFilter = "all" | "active" | "paused" | "archived";
@@ -30,8 +31,12 @@ type StudentsViewProps = {
   studentStates: Record<EntityId, StudentLifecycleLabel>;
   groupForStudent: (studentId: EntityId) => GroupItem | undefined;
   studentBilling: Record<EntityId, WorkspaceStudent["billing"]>;
+  payments: PaymentDemo[];
   showBilling: boolean;
   onOpenStudent: (studentId: EntityId, currentGroupId: EntityId | null) => void;
+  onOpenAttendance: (studentId: EntityId, groupId: EntityId) => void;
+  onOpenPayments: (studentId: EntityId) => void;
+  onOpenGroup: (groupId: EntityId) => void;
 };
 
 function formatBillingDate(value: string | null | undefined) {
@@ -42,79 +47,78 @@ function formatBillingDate(value: string | null | undefined) {
     .format(new Date(year, month - 1, day));
 }
 
-export function StudentsView({
-  students,
-  totalStudents,
-  groupedStudents,
-  pausedStudents,
-  groupCount,
-  studentFilter,
-  onFilterChange,
-  query,
-  onQueryChange,
-  pageTotal,
-  pageLimit,
-  pageOffset,
-  loading,
-  error,
-  onPreviousPage,
-  onNextPage,
-  studentStates,
-  groupForStudent,
-  studentBilling,
-  showBilling,
-  onOpenStudent,
-}: StudentsViewProps) {
-  return <section className="studentsLayout" data-testid="students-workspace">
+export function StudentsView(props: StudentsViewProps) {
+  const { students,totalStudents,groupedStudents,pausedStudents,groupCount,studentFilter,onFilterChange,query,onQueryChange,pageTotal,pageLimit,pageOffset,loading,error,onPreviousPage,onNextPage,studentStates,groupForStudent,studentBilling,payments,showBilling,onOpenStudent,onOpenAttendance,onOpenPayments,onOpenGroup } = props;
+  const money = (v:number) => new Intl.NumberFormat("uk-UA",{style:"currency",currency:"UAH",maximumFractionDigits:0}).format(v);
+  const groups = new Map<string,{id:EntityId|null;name:string;schedule?:string;location?:string;students:Lead[]}>();
+  for (const student of students) {
+    const group=groupForStudent(student.id), id=student.groupId??group?.id??null, name=student.groupName??group?.name??"Без групи", key=id??"__none__";
+    if(!groups.has(key)) groups.set(key,{id,name,schedule:group?.schedule,location:group?.location,students:[]});
+    groups.get(key)!.students.push(student);
+  }
+  const sections=[...groups.values()].filter(g=>g.id!==null).sort((a,b)=>a.name.localeCompare(b.name,"uk"));
+  const noGroup=groups.get("__none__");
+  const renderStudent=(student:Lead)=>{
+    const group=groupForStudent(student.id), groupId=student.groupId??group?.id??null, state=studentStates[student.id]??"Активний", billing=studentBilling[student.id];
+    const payment=payments.filter(p=>p.studentId===student.id&&p.status!=="cancelled").sort((a,b)=>(b.dueDate||"").localeCompare(a.dueDate||""))[0];
+    const remaining=billing?.lessons_included!=null&&billing.lessons_used!=null?Math.max(0,billing.lessons_included-billing.lessons_used):null;
+    const paymentLabel=payment?(payment.balanceAmount>0?(payment.status==="overdue"?"Борг":"Очікується"):"Оплачено"):"Немає нарахувань";
+    return <article className="studentGroupCard" key={student.id}>
+      <div className="studentGroupCardMain">
+        <button className="studentGroupIdentity" onClick={()=>onOpenStudent(student.id,groupId)}>
+          <span className="studentGroupAvatar">{student.child?.[0]??"?"}</span>
+          <span className="studentGroupName"><b>{student.child}</b><small>{student.age} років · {student.parent||"Контакт не вказано"}</small><small>{student.phone||"Телефон не вказано"}</small></span>
+        </button>
+        <span className={"studentState "+state.toLowerCase()}>{state}</span>
+      </div>
+      <div className="studentGroupFacts">
+        <div className="studentGroupFact"><small>АБОНЕМЕНТ</small><b>{billing?.lessons_used??"—"} використано{billing?.lessons_included!=null?" із "+billing.lessons_included:""}</b><span>{remaining==null?"Тариф не задано":"Залишилось "+remaining+" занять"}</span></div>
+        {showBilling&&<div className="studentGroupFact"><small>ОПЛАТА</small><b>{paymentLabel}</b><span>{payment?(payment.balanceAmount>0?"Борг "+money(payment.balanceAmount):"Сплачено "+money(payment.paidAmount||payment.adjustedAmount)):"Сума не вказана"}</span></div>}
+        <div className="studentGroupFact"><small>НАСТУПНА ОПЛАТА</small><b>{formatBillingDate(billing?.next_due_date)}</b><span>{payment?.planName??"Тариф не вказано"}</span></div>
+      </div>
+      <div className="studentGroupActions">
+        <button onClick={()=>onOpenStudent(student.id,groupId)}>Картка учня →</button>
+        {groupId&&<button onClick={()=>onOpenAttendance(student.id,groupId)}>Відвідування →</button>}
+        {showBilling&&<button onClick={()=>onOpenPayments(student.id)}>Оплати →</button>}
+      </div>
+      <details className="studentGroupMore"><summary>Додаткова інформація</summary>
+        <div className="studentGroupMoreGrid">
+          <span><small>Батьки / опікун</small><b>{student.parent||"Не вказано"}</b></span>
+          <span><small>Телефон батьків</small><b>{student.phone||"Не вказано"}</b></span>
+          <span><small>Телефон дитини</small><b>{student.childPhone||"Не вказано"}</b></span>
+          <span><small>Тариф</small><b>{payment?.planName??"Не задано"}</b></span>
+          <span><small>Сума останнього платежу</small><b>{payment?money(payment.paidAmount||0):"—"}</b></span>
+          <span><small>Дата нарахування</small><b>{formatBillingDate(payment?.dueDate)}</b></span>
+        </div>
+        {student.comment&&<p className="studentGroupComment">{student.comment}</p>}
+      </details>
+    </article>;
+  };
+  return <section className="studentsLayout studentsGroupedLayout" data-testid="students-workspace">
     <article className="panel studentsPanel">
-      <div className="panelHead">
-        <div><p className="eyebrow">База учнів</p><h2>Активні учні</h2></div>
-        <div className="registryToolbar">
-          <label className="registrySearch"><span>Пошук</span><input value={query} onChange={(e) => onQueryChange(e.target.value)} placeholder="Ім’я або телефон" /></label>
+      <div className="panelHead"><div><p className="eyebrow">База учнів</p><h2>Учні · {totalStudents}</h2><small className="studentGroupedIntro">Учні згруповані за групами. Додаткові дані — у розгортанні картки.</small></div>
+        <div className="registryToolbar"><label className="registrySearch"><span>Пошук</span><input value={query} onChange={e=>onQueryChange(e.target.value)} placeholder="Ім’я або телефон"/></label>
           <div className="filters">
-          <button className={"chip " + (studentFilter === "all" ? "active" : "")} onClick={() => onFilterChange("all")}>Усі</button>
-          <button className={"chip " + (studentFilter === "active" ? "active" : "")} onClick={() => onFilterChange("active")}>Активні</button>
-          <button className={"chip " + (studentFilter === "paused" ? "active" : "")} onClick={() => onFilterChange("paused")}>Пауза</button>
-          <button className={"chip " + (studentFilter === "archived" ? "active" : "")} onClick={() => onFilterChange("archived")}>Архів</button>
+            <button className={"chip "+(studentFilter==="all"?"active":"")} onClick={()=>onFilterChange("all")}>Усі</button>
+            <button className={"chip "+(studentFilter==="active"?"active":"")} onClick={()=>onFilterChange("active")}>Активні</button>
+            <button className={"chip "+(studentFilter==="paused"?"active":"")} onClick={()=>onFilterChange("paused")}>Пауза</button>
+            <button className={"chip "+(studentFilter==="archived"?"active":"")} onClick={()=>onFilterChange("archived")}>Архів</button>
           </div>
         </div>
       </div>
-      {error && <div className="registryError" role="alert">{error}</div>}
-      <div className={"studentTable " + (loading ? "registryLoading" : "")}>
-        <div className={"studentRow studentHead " + (showBilling ? "hasBilling" : "")}><span>Учень</span><span>Група</span><span>Контакт</span>{showBilling && <span>Заняття й оплата</span>}<span>Статус</span></div>
-        {loading && students.length === 0 && <div className="emptyState">Завантаження учнів…</div>}
-        {!loading && students.length === 0 && <div className="emptyState">За цим фільтром учнів немає.</div>}
-        {students.map((student) => {
-          const group = groupForStudent(student.id);
-          const groupName = student.groupName ?? group?.name;
-          const groupId = student.groupId ?? group?.id ?? null;
-          const state = studentStates[student.id] ?? "Активний";
-          const billing = studentBilling[student.id];
-          const lessonsLabel = billing?.lessons_included == null ? "Абонемент не задано" : `Абонемент: ${billing.lessons_included} занять`;
-          const paidLabel = billing?.paid_lessons == null
-            ? "Оплачено: немає даних"
-            : `Оплачено: ${billing.paid_lessons} із ${billing.lessons_included ?? billing.paid_lessons}`;
-          const usedLabel = billing?.lessons_used == null ? "Відвідано: —" : `Відвідано: ${billing.lessons_used}`;
-          return <button className={"studentRow studentButton " + (showBilling ? "hasBilling" : "")} key={student.id} onClick={() => onOpenStudent(student.id, groupId)}>
-            <span className="studentIdentity"><i>{student.child[0]}</i><b>{student.child}<small>{student.age} років</small></b></span>
-            <span>{groupName ?? "Без групи"}</span>
-            <span>{student.parent}<small>{student.phone}</small></span>
-            {showBilling && <span className="studentBillingCell"><b>{paidLabel}</b><small>{usedLabel} · {lessonsLabel}</small><small>Наступна оплата: {formatBillingDate(billing?.next_due_date)}</small></span>}
-            <span className={"studentState " + state.toLowerCase()}>{state}</span>
-          </button>;
-        })}
+      {error&&<div className="registryError" role="alert">{error}</div>}
+      <div className={loading?"registryLoading":""}>
+        {loading&&students.length===0&&<div className="emptyState">Завантаження учнів…</div>}
+        {!loading&&students.length===0&&<div className="emptyState">За цим фільтром учнів немає.</div>}
+        {sections.map(section=><section className="studentGroupSection" key={section.id}>
+          <header className="studentGroupSectionHead"><div><b>{section.name}</b><small>{section.students.length} учнів{section.schedule?" · "+section.schedule:""}{section.location?" · "+section.location:""}</small></div><button onClick={()=>section.id&&onOpenGroup(section.id)}>Відкрити групу →</button></header>
+          <div className="studentGroupCards">{section.students.map(renderStudent)}</div>
+        </section>)}
+        {noGroup&&noGroup.students.length>0&&<section className="studentGroupSection studentUngroupedSection"><header className="studentGroupSectionHead"><div><b>Без групи</b><small>{noGroup.students.length} учнів</small></div></header><div className="studentGroupCards">{noGroup.students.map(renderStudent)}</div></section>}
       </div>
-      <div className="registryPager" aria-label="Сторінки учнів">
-        <span>{pageTotal === 0 ? "0" : `${pageOffset + 1}–${Math.min(pageOffset + pageLimit, pageTotal)}`} з {pageTotal}</span>
-        <div><button disabled={loading || pageOffset === 0} onClick={onPreviousPage}>← Назад</button><button disabled={loading || pageOffset + pageLimit >= pageTotal} onClick={onNextPage}>Далі →</button></div>
-      </div>
+      <div className="registryPager" aria-label="Сторінки учнів"><span>{pageTotal===0?"0":`${pageOffset+1}–${Math.min(pageOffset+pageLimit,pageTotal)}`} з {pageTotal}</span><div><button disabled={loading||pageOffset===0} onClick={onPreviousPage}>← Назад</button><button disabled={loading||pageOffset+pageLimit>=pageTotal} onClick={onNextPage}>Далі →</button></div></div>
     </article>
-    <aside className="studentSummary panel">
-      <p className="eyebrow">Огляд</p><h2>{totalStudents} учнів</h2>
-      <div className="summaryMetric"><span>У групах</span><strong>{groupedStudents}</strong></div>
-      <div className="summaryMetric"><span>На паузі</span><strong>{pausedStudents}</strong></div>
-      <div className="summaryMetric"><span>Груп</span><strong>{groupCount}</strong></div>
-    </aside>
+    <aside className="studentSummary panel"><p className="eyebrow">Огляд</p><h2>{totalStudents} учнів</h2><div className="summaryMetric"><span>У групах</span><strong>{groupedStudents}</strong></div><div className="summaryMetric"><span>На паузі</span><strong>{pausedStudents}</strong></div><div className="summaryMetric"><span>Груп</span><strong>{groupCount}</strong></div></aside>
   </section>;
 }
 
