@@ -168,7 +168,7 @@ export function AttendanceView({
           <button className="lessonBackButton" onClick={onCloseStudentHistory}><UiIcon name="back" size={16} /><span>До журналу занять</span></button>
           <div className="studentAttendanceTitle">
             <span>{focusedAttendanceStudent?.child?.[0] ?? "?"}</span>
-            <div><p className="eyebrow">Відвідування учня</p><h2>{focusedAttendanceStudent?.child ?? "Учень"}</h2><small>{focusedAttendanceGroup?.name ?? "Усі групи"}{focusedAttendanceStudent?.parent ? " · " + focusedAttendanceStudent.parent : ""}</small></div>
+            <div><p className="eyebrow">Відвідування учня</p><h2>{focusedAttendanceStudent?.child ?? "Учень"} <small className="attendanceProgressInline">Відвідано {focusedAttendanceCounts.present + focusedAttendanceCounts.late} із {focusedAttendanceCounts.total}</small></h2><small>{focusedAttendanceGroup?.name ?? "Усі групи"}{focusedAttendanceStudent?.parent ? " · " + focusedAttendanceStudent.parent : ""}</small></div>
           </div>
         </div>
         <div className="studentAttendanceStats">
