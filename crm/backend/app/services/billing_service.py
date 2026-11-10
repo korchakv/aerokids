@@ -673,6 +673,37 @@ def create_subscription_charge(db: Session, org_id: UUID, data, actor_user_id: U
     if amount_minor <= 0:
         raise HTTPException(status_code=422, detail="Сума нарахування має бути більшою за нуль")
 
+    # Do not create a second subscription charge while this student already
+    # has an unpaid charge for the same active tariff. Reuse the original
+    # charge so receipts and attendance stay attached to one subscription.
+    existing_charge = db.execute(
+        select(Payment, StudentSubscription)
+        .join(StudentSubscription, StudentSubscription.id == Payment.subscription_id)
+        .where(
+            Payment.organization_id == org_id,
+            Payment.student_id == student.id,
+            Payment.status == PaymentStatus.PENDING,
+            StudentSubscription.organization_id == org_id,
+            StudentSubscription.student_id == student.id,
+            StudentSubscription.plan_id == plan.id,
+            StudentSubscription.status == SubscriptionStatus.ACTIVE,
+        )
+        .order_by(Payment.created_at.desc(), Payment.id.desc())
+    ).first()
+    if existing_charge is not None:
+        existing_payment, existing_subscription = existing_charge
+        # Same-period duplicate requests remain a conflict (handled by the
+        # duplicate-subscription guard below). Reuse only for a later period.
+        requested_start = getattr(data, "starts_on", None)
+        if (
+            requested_start is not None
+            and requested_start != existing_subscription.starts_on
+            and payment_financials(db, org_id, existing_payment)["balance_minor"] > 0
+        ):
+            existing_payment.plan_id = plan.id
+            _attach_payment_financials(db, org_id, existing_payment)
+            return _attach_subscription_usage(db, org_id, existing_subscription), existing_payment
+
     group_id = getattr(data, "group_id", None)
     starts_on = _first_planned_lesson_date(db, org_id, group_id, data.starts_on)
 

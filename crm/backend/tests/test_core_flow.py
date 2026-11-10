@@ -3966,3 +3966,36 @@ def test_group_overview_exposes_assigned_teacher(client):
     row = next(item for item in groups.json() if item["group_id"] == group["id"])
     assert row["primary_teacher_id"] == teacher["id"]
     assert row["primary_teacher_name"] == "Іван Петренко"
+
+
+def test_new_charge_reuses_existing_unpaid_subscription_for_same_tariff(client):
+    org = create_org(client, "Charge Reuse School", "charge-reuse-school")
+    headers = {"X-Organization-Id": org["id"]}
+    student = client.post("/students", headers=headers, json={"first_name": "Матвій"}).json()
+    plan = client.post("/subscription-plans", headers=headers, json={
+        "name": "8 занять", "price_minor": 180000, "period_days": 60, "lessons_included": 8,
+        "usage_mode": "attendance", "absent_rule": "choice", "excused_rule": "makeup",
+        "late_rule": "consume", "end_rule": "whichever_first", "renewal_trigger": "last_lesson", "allow_debt": True,
+    }).json()
+
+    first = client.post("/billing/charges", headers=headers, json={
+        "student_id": student["id"], "plan_id": plan["id"],
+        "starts_on": date.today().isoformat(), "due_date": date.today().isoformat(),
+    })
+    assert first.status_code == 201, first.text
+
+    second = client.post("/billing/charges", headers=headers, json={
+        "student_id": student["id"], "plan_id": plan["id"],
+        "starts_on": (date.today() + timedelta(days=5)).isoformat(),
+        "due_date": (date.today() + timedelta(days=5)).isoformat(),
+    })
+    assert second.status_code == 201, second.text
+    assert second.json()["subscription"]["id"] == first.json()["subscription"]["id"]
+    assert second.json()["payment"]["id"] == first.json()["payment"]["id"]
+
+    subscriptions = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers)
+    payments = client.get(f"/payments?student_id={student['id']}", headers=headers)
+    assert subscriptions.status_code == 200
+    assert payments.status_code == 200
+    assert len(subscriptions.json()) == 1
+    assert len(payments.json()) == 1
