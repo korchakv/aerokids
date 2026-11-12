@@ -14,7 +14,7 @@ export { checkIntakeDuplicates } from "./api/intake";
 export { loadWorkspace, loadWorkspaceStudentsPage, loadWorkspaceGroupsPage } from "./api/workspace";
 export type { StudentPageOptions, GroupPageOptions } from "./api/workspace";
 export { loadOperations } from "./api/operations";
-export { runBillingRenewals, loadPaymentPage, loadPaymentReminders, recordPaymentReminder } from "./api/billing";
+export { runBillingRenewals, loadPaymentPage, loadPaymentReminders, recordPaymentReminder, loadStudentPayments } from "./api/billing";
 export type { PaymentPageOptions } from "./api/billing";
 export { loadStudentAttendanceHistory, loadGroupRoster, loadGroupDetail, loadTeaching, loadAttendance } from "./api/teaching";
 export { loadOverviewReport } from "./api/reports";
