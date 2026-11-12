@@ -59,6 +59,7 @@ export function applyOperations(
     balanceAmount: item.balance_minor / 100,
     creditAmount: item.credit_minor / 100,
     dueDate: item.due_date ?? "",
+    paidAt: item.paid_at ?? undefined,
     status: item.status === "pending" && item.due_date && item.due_date < today ? "overdue" : item.status,
     method: paymentMethodLabel(item.method),
   })));
@@ -79,6 +80,7 @@ export function paymentPageItemToDemo(item: ApiPaymentWorkspaceItem): PaymentDem
     balanceAmount: item.balance_minor / 100,
     creditAmount: item.credit_minor / 100,
     dueDate: item.due_date ?? "",
+    paidAt: item.paid_at ?? undefined,
     status: item.status === "pending" && item.due_date && item.due_date < today ? "overdue" : item.status,
     studentName: item.student_name,
     studentPhone: item.student_phone ?? undefined,
