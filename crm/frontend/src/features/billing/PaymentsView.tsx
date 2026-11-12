@@ -16,6 +16,7 @@ type PaymentOverdueFilter = "all" | "yes" | "no";
 
 type PaymentsViewProps = {
   payments: PaymentDemo[];
+  onLoadPaymentArchive: (studentId: string) => Promise<PaymentDemo[]>;
   plans: PlanDemo[];
   subscriptions: ApiStudentSubscription[];
   leads: Lead[];
@@ -58,6 +59,7 @@ type PaymentsViewProps = {
 
 export function PaymentsView({
   payments,
+  onLoadPaymentArchive,
   plans,
   subscriptions,
   leads,
@@ -100,6 +102,28 @@ export function PaymentsView({
   const activePlans = plans.filter((plan) => plan.isActive);
   const inactivePlans = plans.filter((plan) => !plan.isActive);
   const [expandedArchiveIds, setExpandedArchiveIds] = useState<string[]>([]);
+  const [archiveCache, setArchiveCache] = useState<Record<string, PaymentDemo[]>>({});
+  const [archiveLoadingIds, setArchiveLoadingIds] = useState<string[]>([]);
+  const [archiveErrors, setArchiveErrors] = useState<Record<string, string>>({});
+  const togglePaymentArchive = async (studentId: string) => {
+    const isExpanded = expandedArchiveIds.includes(studentId);
+    if (isExpanded) {
+      setExpandedArchiveIds((current) => current.filter((id) => id !== studentId));
+      return;
+    }
+    setExpandedArchiveIds((current) => [...current, studentId]);
+    if (archiveCache[studentId] || archiveLoadingIds.includes(studentId)) return;
+    setArchiveLoadingIds((current) => [...current, studentId]);
+    setArchiveErrors((current) => ({ ...current, [studentId]: "" }));
+    try {
+      const history = await onLoadPaymentArchive(studentId);
+      setArchiveCache((current) => ({ ...current, [studentId]: history }));
+    } catch (error) {
+      setArchiveErrors((current) => ({ ...current, [studentId]: error instanceof Error ? error.message : "Не вдалося завантажити архів оплат" }));
+    } finally {
+      setArchiveLoadingIds((current) => current.filter((id) => id !== studentId));
+    }
+  };
   const paymentGroups = payments.reduce<Array<{ studentId: string; items: PaymentDemo[] }>>((groups, payment) => {
     let group = groups.find((item) => item.studentId === payment.studentId);
     if (!group) { group = { studentId: payment.studentId, items: [] }; groups.push(group); }
@@ -147,7 +171,10 @@ export function PaymentsView({
           {loading && payments.length === 0 && <div className="emptyState">Завантаження оплат…</div>}
           {paymentGroups.map((group) => {
             const expanded = expandedArchiveIds.includes(group.studentId);
-            const visiblePayments = expanded ? group.items : group.items.slice(0, 1);
+            const historyPayments = archiveCache[group.studentId] ?? [];
+            const visiblePayments = expanded
+              ? [...group.items, ...historyPayments.filter((item) => !group.items.some((latest) => latest.id === item.id))]
+              : group.items.slice(0, 1);
             return <div className="paymentStudentGroup" key={group.studentId}>
               {visiblePayments.map((payment) => {
             const student = leads.find((lead) => lead.id === payment.studentId);
@@ -175,9 +202,11 @@ export function PaymentsView({
               </span>
             </div>;
               })}
-              {group.items.length > 1 && <button className="paymentArchiveToggle" type="button" aria-expanded={expanded} onClick={() => setExpandedArchiveIds((current) => expanded ? current.filter((id) => id !== group.studentId) : [...current, group.studentId])}>
-                {expanded ? "Згорнути архів" : "Архів оплат"} · {group.items.length - 1}
-              </button>}
+              <button className="paymentArchiveToggle" type="button" aria-expanded={expanded} onClick={() => void togglePaymentArchive(group.studentId)}>
+                {archiveLoadingIds.includes(group.studentId) ? "Завантаження архіву…" : expanded ? "Згорнути архів" : "Архів оплат"}
+                {!archiveLoadingIds.includes(group.studentId) && historyPayments.length > 1 ? " · " + (historyPayments.length - 1) : ""}
+              </button>
+              {archiveErrors[group.studentId] && <small className="paymentArchiveError">{archiveErrors[group.studentId]}</small>}
             </div>;
           })}
         </div>
