@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.core import CrmStatus, Enrollment, EnrollmentStatus, Student, StudentStatus, StudentSubscription, SubscriptionStatus, SubscriptionUsage
+from app.services.billing_hardening import run_renewals
 
 
 def create_org(client, name="Hardening School", slug="hardening-school"):
@@ -417,6 +418,39 @@ def test_individual_student_can_consume_and_safely_reverse_auto_renewal(client):
         active_children = [row for row in subscriptions if row.renewal_of_id == parent.id and row.status != SubscriptionStatus.CANCELLED]
         assert parent.status == SubscriptionStatus.ACTIVE
         assert active_children == []
+
+
+def test_scheduled_renewals_skip_last_lesson_tariffs(client):
+    org = create_org(client, "Lesson Trigger School", "lesson-trigger-renewal")
+    group = create_group(client, org, "Lesson Trigger Group")
+    student = create_student(client, org, "Lesson Trigger Child")
+    assert client.post("/enrollments", headers=headers(org), json={
+        "student_id": student["id"], "group_id": group["id"],
+    }).status_code == 201
+    plan = create_plan(client, org, lessons=8)
+    # The 30-day period is inside the scheduler's seven-day horizon, but
+    # last_lesson tariffs must wait for attendance to consume all 8 lessons.
+    start_date = date.today() - timedelta(days=24)
+    charge = client.post("/billing/charges", headers=headers(org), json={
+        "student_id": student["id"],
+        "plan_id": plan["id"],
+        "group_id": group["id"],
+        "starts_on": start_date.isoformat(),
+        "auto_renew": True,
+    })
+    assert charge.status_code == 201, charge.text
+    parent_id = charge.json()["subscription"]["id"]
+
+    with SessionLocal() as db:
+        result = run_renewals(db, UUID(org["id"]), through_date=None, actor_user_id=None)
+        subscriptions = list(db.scalars(select(StudentSubscription).where(
+            StudentSubscription.student_id == UUID(student["id"]),
+        )))
+        parent = next(row for row in subscriptions if str(row.id) == parent_id)
+        children = [row for row in subscriptions if row.renewal_of_id == parent.id]
+        assert result["created_subscriptions"] == 0
+        assert parent.status == SubscriptionStatus.ACTIVE
+        assert children == []
 
 
 def test_transfer_date_belongs_only_to_target_group(client):
