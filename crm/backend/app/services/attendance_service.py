@@ -206,6 +206,20 @@ def _sync_attendance_usage(db: Session, org_id: UUID, session: LessonSession, at
     if attendance.status in {AttendanceStatus.PRESENT, AttendanceStatus.LATE}:
         _complete_oldest_makeup(db, org_id, attendance.student_id, session.id)
 
+    print("DEBUG ATTENDANCE", {
+        "status": str(attendance.status),
+        "is_present": attendance.status == AttendanceStatus.PRESENT,
+        "session_group_id": str(session.group_id),
+        "eligible": bool(eligible),
+        "subscription": ({
+            "status": str(eligible[0].status),
+            "group_id": str(eligible[0].group_id),
+            "starts_on": str(eligible[0].starts_on),
+            "ends_on": str(eligible[0].ends_on),
+            "used": subscription_usage_summary(db, org_id, eligible[0])["used_lessons"],
+            "remaining": subscription_usage_summary(db, org_id, eligible[0])["remaining_lessons"],
+        } if eligible else None),
+    })
     should_consume = bool(plan and _attendance_should_consume(plan, attendance.status, explicit_consume))
     if should_consume and eligible is not None:
         subscription, plan = eligible
