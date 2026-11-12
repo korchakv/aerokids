@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { UiIcon } from "../../components/UiIcon";
 import type { ApiPaymentReminder, ApiStudentSubscription } from "../../api";
 import type { EntityId, Lead } from "../leads/model";
@@ -15,6 +16,7 @@ type PaymentOverdueFilter = "all" | "yes" | "no";
 
 type PaymentsViewProps = {
   payments: PaymentDemo[];
+  onLoadPaymentArchive: (studentId: string) => Promise<PaymentDemo[]>;
   plans: PlanDemo[];
   subscriptions: ApiStudentSubscription[];
   leads: Lead[];
@@ -57,6 +59,7 @@ type PaymentsViewProps = {
 
 export function PaymentsView({
   payments,
+  onLoadPaymentArchive,
   plans,
   subscriptions,
   leads,
@@ -98,6 +101,35 @@ export function PaymentsView({
 }: PaymentsViewProps) {
   const activePlans = plans.filter((plan) => plan.isActive);
   const inactivePlans = plans.filter((plan) => !plan.isActive);
+  const [expandedArchiveIds, setExpandedArchiveIds] = useState<string[]>([]);
+  const [archiveCache, setArchiveCache] = useState<Record<string, PaymentDemo[]>>({});
+  const [archiveLoadingIds, setArchiveLoadingIds] = useState<string[]>([]);
+  const [archiveErrors, setArchiveErrors] = useState<Record<string, string>>({});
+  const togglePaymentArchive = async (studentId: string) => {
+    const isExpanded = expandedArchiveIds.includes(studentId);
+    if (isExpanded) {
+      setExpandedArchiveIds((current) => current.filter((id) => id !== studentId));
+      return;
+    }
+    setExpandedArchiveIds((current) => [...current, studentId]);
+    if (archiveCache[studentId] || archiveLoadingIds.includes(studentId)) return;
+    setArchiveLoadingIds((current) => [...current, studentId]);
+    setArchiveErrors((current) => ({ ...current, [studentId]: "" }));
+    try {
+      const history = await onLoadPaymentArchive(studentId);
+      setArchiveCache((current) => ({ ...current, [studentId]: history }));
+    } catch (error) {
+      setArchiveErrors((current) => ({ ...current, [studentId]: error instanceof Error ? error.message : "Не вдалося завантажити архів оплат" }));
+    } finally {
+      setArchiveLoadingIds((current) => current.filter((id) => id !== studentId));
+    }
+  };
+  const paymentGroups = payments.reduce<Array<{ studentId: string; items: PaymentDemo[] }>>((groups, payment) => {
+    let group = groups.find((item) => item.studentId === payment.studentId);
+    if (!group) { group = { studentId: payment.studentId, items: [] }; groups.push(group); }
+    group.items.push(payment);
+    return groups;
+  }, []).map((group) => ({ ...group, items: [...group.items].sort((a, b) => (b.paidAt ?? b.dueDate).localeCompare(a.paidAt ?? a.dueDate)) }));
 
   return <section className="paymentsLayout" data-testid="payments-workspace">
     <div className="paymentsMain">
@@ -137,7 +169,14 @@ export function PaymentsView({
           <div className="paymentRow paymentHead"><span>Дитина / відповідальний</span><span>Абонемент</span><span>Нараховано / залишок</span><span>До дати</span><span>Статус</span><span>Дії</span></div>
           {!loading && payments.length === 0 && <div className="emptyState">{query.trim() || statusFilter !== "all" || overdueFilter !== "all" ? "За цим фільтром оплат не знайдено." : "Оплат поки немає."}</div>}
           {loading && payments.length === 0 && <div className="emptyState">Завантаження оплат…</div>}
-          {payments.map((payment) => {
+          {paymentGroups.map((group) => {
+            const expanded = expandedArchiveIds.includes(group.studentId);
+            const historyPayments = archiveCache[group.studentId] ?? [];
+            const visiblePayments = expanded
+              ? [...group.items, ...historyPayments.filter((item) => !group.items.some((latest) => latest.id === item.id))]
+              : group.items.slice(0, 1);
+            return <div className="paymentStudentGroup" key={group.studentId}>
+              {visiblePayments.map((payment) => {
             const student = leads.find((lead) => lead.id === payment.studentId);
             const plan = plans.find((item) => item.id === payment.planId);
             const subscription = payment.subscriptionId ? subscriptions.find((item) => item.id === payment.subscriptionId) : undefined;
@@ -147,7 +186,7 @@ export function PaymentsView({
             const contactName = payment.contactName ?? student?.parent ?? "Не вказано";
             const contactPhone = payment.contactPhone ?? student?.phone;
             return <div id={"payment-" + payment.id} className={"paymentRow " + (focusedPaymentId === payment.id ? "paymentFocused" : "")} key={payment.id}>
-              <span className="paymentIdentity"><b>{studentName}</b><small>Дитина{studentPhone ? " · " + formatPhone(studentPhone) : ""}</small><small><strong>Відповідальний:</strong> {contactName}{contactPhone ? " · " + formatPhone(contactPhone) : ""}</small></span>
+              <span className="paymentIdentity"><b>{studentName}</b><small>Дитина{studentPhone ? " · " + formatPhone(studentPhone) : ""}</small><small><strong>Відповідальний:</strong> {contactName}{contactPhone ? " · " + formatPhone(contactPhone) : ""}</small>{payment.paidAt && <small className="paymentHistoryMeta">Оплачено: {new Date(payment.paidAt).toLocaleDateString("uk-UA")}</small>}{subscription?.ends_on && <small className="paymentHistoryMeta">{subscription.status === "expired" ? "Абонемент завершено" : "Період абонемента до"}: {new Date(subscription.ends_on + "T00:00:00").toLocaleDateString("uk-UA")}</small>}</span>
               <span className="paymentPlanCell"><b>{payment.planName ?? plan?.name ?? "—"}{plan && !plan.isActive ? <em className="inactivePlanInline">Неактивний</em> : null}</b>{subscription && <small>{subscription.status === "paused" ? "Пауза" : subscription.auto_renew ? "Автопродовження увімкнено" : "Без автопродовження"}</small>}{subscription && (() => { const included = subscription.lessons_included ?? (subscription.period_days === null ? plan?.lessons ?? null : null); const remaining = subscription.remaining_lessons ?? (included !== null ? Math.max(0, included - subscription.used_lessons) : null); return included !== null ? <small className="paymentLessonUsage">Відвідано: {subscription.used_lessons} · Залишилось: {remaining ?? "—"} із {included}</small> : null; })()}</span>
               <span className="paymentAmountCell"><b>{money(payment.adjustedAmount)}</b><small>{payment.balanceAmount > 0 ? <>Залишок: {money(payment.balanceAmount)}</> : payment.creditAmount > 0 ? <>Кредит: {money(payment.creditAmount)}</> : <>Внесено: {money(Math.max(0, payment.paidAmount - payment.refundedAmount))}</>}{payment.refundedAmount > 0 ? " · повернено " + money(payment.refundedAmount) : ""}</small>{payment.creditAmount > 0 && <em className="paymentCreditHint">Буде враховано в наступному періоді</em>}</span>
               <span>{payment.dueDate ? new Date(payment.dueDate + "T00:00:00").toLocaleDateString("uk-UA") : "—"}</span>
@@ -161,6 +200,14 @@ export function PaymentsView({
                 {subscription && ["active", "paused"].includes(subscription.status) && plans.some((item) => item.isActive && item.id !== subscription.plan_id) && <button className="link" onClick={() => onOpenPlanChange(subscription.id)}>Змінити тариф зараз</button>}
                 {subscription?.status === "paused" ? <button className="link" onClick={() => onResumeSubscription(subscription.id)}>Відновити</button> : subscription && subscription.status === "active" ? <button className="link" onClick={() => onPauseSubscription(subscription.id)}>Пауза</button> : null}
               </span>
+            </div>;
+              })}
+              {(!archiveCache[group.studentId] || historyPayments.length > 1) && <button className="paymentArchiveToggle" type="button" aria-expanded={expanded} onClick={() => void togglePaymentArchive(group.studentId)}>
+                {archiveLoadingIds.includes(group.studentId) ? "Завантаження архіву…" : expanded ? "Згорнути архів" : "Архів оплат"}
+                {!archiveLoadingIds.includes(group.studentId) && historyPayments.length > 1 ? " · " + (historyPayments.length - 1) : ""}
+              </button>}
+              {expanded && archiveCache[group.studentId] && historyPayments.length <= 1 && <small className="paymentArchiveEmpty">Попередніх оплат немає</small>}
+              {archiveErrors[group.studentId] && <small className="paymentArchiveError">{archiveErrors[group.studentId]}</small>}
             </div>;
           })}
         </div>

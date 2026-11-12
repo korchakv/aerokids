@@ -1457,10 +1457,11 @@ def finalize_group_lesson(db: Session, org_id: UUID, session: LessonSession, act
         eligible = _eligible_subscription(db, org_id, mark.student_id, lesson_date, session.group_id)
         plan = eligible[1] if eligible else None
         _sync_excused_makeup(db, org_id, session, mark.student_id, plan, mark.status)
-        used_makeup = False
         if mark.status in {AttendanceStatus.PRESENT, AttendanceStatus.LATE}:
-            used_makeup = _consume_oldest_makeup(db, org_id, mark.student_id, session.id, lesson_date)
-        if eligible is not None and not used_makeup and _should_consume(plan, mark.status, getattr(mark, "consume_lesson", None)):
+            _consume_oldest_makeup(db, org_id, mark.student_id, session.id, lesson_date)
+        # Completing a makeup closes the excused absence; the attended makeup
+        # itself still consumes one lesson from the eligible subscription.
+        if eligible is not None and _should_consume(plan, mark.status, getattr(mark, "consume_lesson", None)):
             subscription, plan = eligible
             usage = SubscriptionUsage(
                 organization_id=org_id, subscription_id=subscription.id, student_id=mark.student_id,

@@ -3689,3 +3689,13 @@ html[data-theme="light"] .noShowCard .inlineEditLink{color:#922b39}
  .studentGroupFact:last-child { grid-column:1/-1; }
  .studentGroupSectionHead { align-items:flex-start; }
 }
+
+
+/* Compact per-student payment archive */
+.paymentStudentGroup{border-bottom:1px solid var(--ak-surface)}
+.paymentStudentGroup>.paymentRow{border-bottom:0}
+.paymentArchiveToggle{display:block;margin:0 0 8px 6px;padding:3px 0;border:0;background:transparent;color:var(--ak-muted);font-size:11px;text-align:left;cursor:pointer}
+.paymentArchiveToggle:hover{color:var(--ak-accent-soft)}
+.paymentHistoryMeta{font-size:10px!important;line-height:1.25!important;color:var(--ak-muted)!important}
+
+.paymentArchiveError,.paymentArchiveEmpty{display:block;margin:0 0 8px 6px;font-size:10px;color:var(--ak-muted)}

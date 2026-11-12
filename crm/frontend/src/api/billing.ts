@@ -1,4 +1,4 @@
-import type { ApiPaymentPage, ApiPaymentReminder, Session } from "./types";
+import type { ApiPayment, ApiPaymentPage, ApiPaymentReminder, Session } from "./types";
 import { apiGet, apiPost } from "./client";
 
 export type PaymentPageOptions = {
@@ -39,4 +39,8 @@ export function recordPaymentReminder(
   session: Session,
 ) {
   return apiPost(`/payments/${paymentId}/reminders`, { stage, channel }, session);
+}
+
+export function loadStudentPayments(session: Session, studentId: string) {
+  return apiGet<ApiPayment[]>(`/payments?student_id=${encodeURIComponent(studentId)}`, session);
 }

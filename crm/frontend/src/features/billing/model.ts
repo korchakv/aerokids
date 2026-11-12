@@ -25,6 +25,7 @@ export type PaymentDemo = {
   balanceAmount: number;
   creditAmount: number;
   dueDate: string;
+  paidAt?: string;
   status: "pending" | "paid" | "overdue" | "refunded" | "cancelled";
   method?: "Картка" | "Готівка" | "Переказ";
   studentName?: string;

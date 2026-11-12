@@ -202,11 +202,12 @@ def finalize_group_lesson(db: Session, org_id: UUID, session: LessonSession, act
         eligible = hardening._eligible_subscription(db, org_id, mark.student_id, lesson_date, session.group_id)
         plan = eligible[1] if eligible else None
         hardening._sync_excused_makeup(db, org_id, session, mark.student_id, plan, mark.status)
-        used_makeup = False
         if mark.status in {AttendanceStatus.PRESENT, AttendanceStatus.LATE}:
-            used_makeup = hardening._consume_oldest_makeup(db, org_id, mark.student_id, session.id, lesson_date)
+            hardening._consume_oldest_makeup(db, org_id, mark.student_id, session.id, lesson_date)
         explicit = decisions.get(mark.student_id)
-        if eligible is not None and not used_makeup and hardening._should_consume(plan, mark.status, explicit):
+        # Completing a makeup closes the excused absence; the attended makeup
+        # itself still consumes one lesson from the eligible subscription.
+        if eligible is not None and hardening._should_consume(plan, mark.status, explicit):
             subscription, plan = eligible
             db.add(SubscriptionUsage(
                 organization_id=org_id,

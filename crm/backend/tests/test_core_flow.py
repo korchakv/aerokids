@@ -938,18 +938,23 @@ def test_attendance_consumes_subscription_and_creates_makeup(client):
     assert client.put(f"/lesson-sessions/{lesson1['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "excused"}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
     assert subs[0]["used_lessons"] == 0 and subs[0]["remaining_lessons"] == 4
+    assert subs[0]["status"] == "active", subs[0]
 
     lesson2 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": f"{(date.today() + timedelta(days=2)).isoformat()}T17:00:00+03:00"}).json()
     assert client.put(f"/lesson-sessions/{lesson2['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "present"}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
-    # The next attendance uses the pending makeup first, so it does not spend
-    # a new subscription lesson.
-    assert subs[0]["used_lessons"] == 0 and subs[0]["remaining_lessons"] == 4
+    # A makeup closes the excused absence, but the actual attendance is still
+    # a normal lesson and consumes one lesson from the active subscription.
+    assert subs[0]["used_lessons"] == 1 and subs[0]["remaining_lessons"] == 3, subs[0]
+    # Re-saving the same attendance must not create a duplicate deduction.
+    assert client.put(f"/lesson-sessions/{lesson2['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "present"}]}).status_code == 200
+    subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    assert subs[0]["used_lessons"] == 1 and subs[0]["remaining_lessons"] == 3
 
     lesson3 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": f"{(date.today() + timedelta(days=3)).isoformat()}T17:00:00+03:00"}).json()
     assert client.put(f"/lesson-sessions/{lesson3['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "absent", "consume_lesson": True}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
-    assert subs[0]["used_lessons"] == 1 and subs[0]["remaining_lessons"] == 3
+    assert subs[0]["used_lessons"] == 2 and subs[0]["remaining_lessons"] == 2
 
 
 def test_student_attendance_history_endpoint(client):
