@@ -36,12 +36,12 @@ import { SettingsView } from "./features/settings/SettingsView";
 import { ReportsView } from "./features/reports/ReportsView";
 import { LessonsView } from "./features/learning/LessonsView";
 import { StudentDrawer, StudentsView, type StudentFilter, type StudentLifecycleLabel } from "./features/students/StudentsView";
-import { applyOperations, paymentPageItemToDemo } from "./features/operations/adapters";
+import { applyOperations, paymentPageItemToDemo, paymentReadToDemo } from "./features/operations/adapters";
 import { applyWorkspace, crmStatusLabel, crmStatusValue, workspaceGroupToGroupItem, workspaceStudentLifecycle, workspaceStudentToLead } from "./features/workspace/adapters";
 import { cleanSpaces, emailError, formatUaPhone, fullNameError, normalizeUaPhone, normalizedSearch, personNameError, searchMatches, uaPhoneError } from "./utils/contact";
 import { addLocalDays, dateValue, dayOffsetForDate, defaultPaymentDueDate, lessonWeekdayLabel, localDateInput, startOfLocalWeek, toLocalDateTimeInput, weekdayLong } from "./utils/date";
 import { AvailabilityWindowEditor, DateTimeEditor, DAY_NAMES, DurationSelect, ScheduleSlotEditor, TimeSelect, type AvailabilitySlot, type AvailabilityWindowDraft, type DraftScheduleSlot } from "./components/ScheduleEditors";
-import { apiDelete, apiEnabled, apiGet, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, downloadStudentsExcel, type ApiAuditEvent, type ApiLeadComment, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle, type WorkspaceStudent } from "./api";
+import { apiDelete, apiEnabled, apiGet, apiPatch, apiPost, apiPut, changeOrganization, checkIntakeDuplicates, clearSession, loadAttendance, loadAuditEvents, loadGroupDetail, loadGroupRoster, loadOperations, loadOverviewReport, loadPaymentPage, loadPaymentReminders, loadStudentPayments, loadSession, loadStudentAttendanceHistory, loadTeaching, loadWorkspace, loadWorkspaceGroupsPage, loadWorkspaceStudentsPage, recordPaymentReminder, refreshMe, runBillingRenewals, downloadStudentsExcel, type ApiAuditEvent, type ApiLeadComment, type ApiGroupDetail, type ApiGroupRosterStudent, type ApiPaymentReminder, type ApiStudentAttendanceHistoryItem, type ApiStudentSubscription, type IntakeDuplicateMatch, type OverviewReport, type Session, type WorkspaceBundle, type WorkspaceStudent } from "./api";
 
 
 type UiScale = 1 | 1.1 | 1.25 | 1.4;
@@ -3588,6 +3588,11 @@ function App() {
 
         {active === "Оплати" && <PaymentsView
           payments={visiblePaymentRows}
+          onLoadPaymentArchive={async (studentId) => {
+            if (!session) return [];
+            const history = await loadStudentPayments(session, studentId);
+            return history.map(paymentReadToDemo);
+          }}
           plans={plans}
           subscriptions={subscriptions}
           leads={leads}
