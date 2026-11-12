@@ -186,6 +186,12 @@ def run_renewals(
                 break
             if _open_pause(db, org_id, current.id) is not None:
                 break
+            plan = crm.scoped_get(db, SubscriptionPlan, org_id, current.plan_id)
+            # Lesson-triggered tariffs renew from attendance processing only
+            # after the final included lesson is consumed. Calendar expiry is
+            # not a reason to pre-create their next subscription/payment.
+            if plan.renewal_trigger == "last_lesson":
+                break
             existing_child = db.scalar(select(StudentSubscription).where(
                 StudentSubscription.organization_id == org_id,
                 StudentSubscription.renewal_of_id == current.id,
@@ -199,7 +205,6 @@ def run_renewals(
                 break
             if not _has_learning_relationship(db, org_id, current):
                 break
-            plan = crm.scoped_get(db, SubscriptionPlan, org_id, current.plan_id)
             if not plan.is_active:
                 break
             current_period_days = current.period_days or plan.period_days or 30
