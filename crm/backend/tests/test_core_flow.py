@@ -3443,7 +3443,7 @@ def test_auto_renewal_is_idempotent_and_requires_active_enrollment(client):
     plan = client.post(
         "/subscription-plans",
         headers=headers,
-        json={"name": "Monthly renew", "price_minor": 180000, "period_days": 30},
+        json={"name": "Monthly renew", "price_minor": 180000, "period_days": 30, "renewal_trigger": "date"},
     ).json()
     start = date.today() - timedelta(days=29)
     charge = client.post(
@@ -3484,7 +3484,7 @@ def test_auto_renewal_skips_stale_subscription_instead_of_backfilling(client):
     plan = client.post(
         "/subscription-plans",
         headers=headers,
-        json={"name": "Stale Monthly", "price_minor": 150000, "period_days": 30},
+        json={"name": "Stale Monthly", "price_minor": 150000, "period_days": 30, "renewal_trigger": "date"},
     ).json()
     old_start = date.today() - timedelta(days=100)
     client.post(
@@ -3565,7 +3565,7 @@ def test_auto_renewal_handles_recently_expired_period(client):
     plan = client.post(
         "/subscription-plans",
         headers=headers,
-        json={"name": "Recent Monthly", "price_minor": 140000, "period_days": 30},
+        json={"name": "Recent Monthly", "price_minor": 140000, "period_days": 30, "renewal_trigger": "date"},
     ).json()
     start = date.today() - timedelta(days=31)
     charge = client.post(
