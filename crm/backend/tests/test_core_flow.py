@@ -939,10 +939,12 @@ def test_attendance_consumes_subscription_and_creates_makeup(client):
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
     assert subs[0]["used_lessons"] == 0 and subs[0]["remaining_lessons"] == 4
     assert subs[0]["status"] == "active", subs[0]
+    print("SUBSCRIPTION AFTER EXCUSED", {key: subs[0].get(key) for key in ("status", "starts_on", "ends_on", "period_days", "lessons_included", "group_id")})
 
     lesson2 = client.post("/lesson-sessions", headers=headers, json={"group_id": group_id, "starts_at": f"{(date.today() + timedelta(days=2)).isoformat()}T17:00:00+03:00"}).json()
     assert client.put(f"/lesson-sessions/{lesson2['id']}/attendance", headers=headers, json={"items": [{"student_id": student["id"], "status": "present"}]}).status_code == 200
     subs = client.get(f"/student-subscriptions?student_id={student['id']}", headers=headers).json()
+    print("MAKEUP LESSON", lesson2.get("starts_at"), "SUBSCRIPTION", {key: subs[0].get(key) for key in ("status", "starts_on", "ends_on", "period_days", "lessons_included", "group_id", "used_lessons")})
     # A makeup closes the excused absence, but the actual attendance is still
     # a normal lesson and consumes one lesson from the active subscription.
     assert subs[0]["used_lessons"] == 1 and subs[0]["remaining_lessons"] == 3, subs[0]
