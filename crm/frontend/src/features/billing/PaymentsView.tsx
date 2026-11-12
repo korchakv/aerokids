@@ -202,10 +202,11 @@ export function PaymentsView({
               </span>
             </div>;
               })}
-              <button className="paymentArchiveToggle" type="button" aria-expanded={expanded} onClick={() => void togglePaymentArchive(group.studentId)}>
+              {(!archiveCache[group.studentId] || historyPayments.length > 1) && <button className="paymentArchiveToggle" type="button" aria-expanded={expanded} onClick={() => void togglePaymentArchive(group.studentId)}>
                 {archiveLoadingIds.includes(group.studentId) ? "Завантаження архіву…" : expanded ? "Згорнути архів" : "Архів оплат"}
                 {!archiveLoadingIds.includes(group.studentId) && historyPayments.length > 1 ? " · " + (historyPayments.length - 1) : ""}
-              </button>
+              </button>}
+              {expanded && archiveCache[group.studentId] && historyPayments.length <= 1 && <small className="paymentArchiveEmpty">Попередніх оплат немає</small>}
               {archiveErrors[group.studentId] && <small className="paymentArchiveError">{archiveErrors[group.studentId]}</small>}
             </div>;
           })}
