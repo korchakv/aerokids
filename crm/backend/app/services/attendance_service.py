@@ -200,13 +200,13 @@ def _sync_attendance_usage(db: Session, org_id: UUID, session: LessonSession, at
     plan = eligible[1] if eligible else None
     _sync_makeup_credit(db, org_id, session, attendance.student_id, plan, attendance.status)
 
-    # A pending excused absence is used before a new subscription lesson. This
-    # lets a child work it off even after the original 30-day period ended.
-    used_makeup = False
+    # A makeup lesson is still a normal attended lesson: completing a makeup
+    # credit closes the excused absence, but the actual attendance consumes
+    # one lesson from the active subscription just like any other PRESENT.
     if attendance.status in {AttendanceStatus.PRESENT, AttendanceStatus.LATE}:
-        used_makeup = _complete_oldest_makeup(db, org_id, attendance.student_id, session.id)
+        _complete_oldest_makeup(db, org_id, attendance.student_id, session.id)
 
-    should_consume = bool(plan and not used_makeup and _attendance_should_consume(plan, attendance.status, explicit_consume))
+    should_consume = bool(plan and _attendance_should_consume(plan, attendance.status, explicit_consume))
     if should_consume and eligible is not None:
         subscription, plan = eligible
         if current is None:
