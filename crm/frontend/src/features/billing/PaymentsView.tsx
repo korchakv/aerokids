@@ -129,7 +129,26 @@ export function PaymentsView({
     if (!group) { group = { studentId: payment.studentId, items: [] }; groups.push(group); }
     group.items.push(payment);
     return groups;
-  }, []).map((group) => ({ ...group, items: [...group.items].sort((a, b) => (b.paidAt ?? b.dueDate).localeCompare(a.paidAt ?? a.dueDate)) }));
+  }, []).map((group) => ({
+    ...group,
+    items: [...group.items].sort((a, b) => {
+      const subscriptionFor = (payment: PaymentDemo) => payment.subscriptionId
+        ? subscriptions.find((item) => item.id === payment.subscriptionId)
+        : undefined;
+      const aSubscription = subscriptionFor(a);
+      const bSubscription = subscriptionFor(b);
+      // The current paid/paused subscription with unused lessons is the primary
+      // record for a student. Future cancelled renewals belong in the archive.
+      const priority = (payment: PaymentDemo, subscription: ApiStudentSubscription | undefined) => {
+        if (subscription && ["active", "paused"].includes(subscription.status) && (subscription.remaining_lessons ?? 0) > 0) return 0;
+        if (payment.status !== "cancelled") return 1;
+        return 2;
+      };
+      const priorityDifference = priority(a, aSubscription) - priority(b, bSubscription);
+      if (priorityDifference !== 0) return priorityDifference;
+      return (b.paidAt ?? b.dueDate).localeCompare(a.paidAt ?? a.dueDate);
+    }),
+  }));
 
   return <section className="paymentsLayout" data-testid="payments-workspace">
     <div className="paymentsMain">
