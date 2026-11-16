@@ -191,9 +191,16 @@ export function PaymentsView({
           {paymentGroups.map((group) => {
             const expanded = expandedArchiveIds.includes(group.studentId);
             const historyPayments = archiveCache[group.studentId] ?? [];
+            const primaryActivePayments = group.items.filter((payment) => {
+              if (!payment.subscriptionId) return false;
+              const subscription = subscriptions.find((item) => item.id === payment.subscriptionId);
+              return Boolean(subscription && ["active", "paused"].includes(subscription.status) && (subscription.remaining_lessons ?? 0) > 0);
+            });
             const visiblePayments = expanded
               ? [...group.items, ...historyPayments.filter((item) => !group.items.some((latest) => latest.id === item.id))]
-              : group.items.slice(0, 1);
+              : primaryActivePayments.length > 0
+                ? primaryActivePayments
+                : [group.items.find((payment) => payment.status !== "cancelled") ?? group.items[0]].filter((payment): payment is PaymentDemo => Boolean(payment));
             return <div className="paymentStudentGroup" key={group.studentId}>
               {visiblePayments.map((payment) => {
             const student = leads.find((lead) => lead.id === payment.studentId);
