@@ -147,6 +147,12 @@ jobs:
           BACKUP_DIR: ${{ runner.temp }}/crm-restore-drill
         run: |
           sudo apt-get update -qq
+          sudo apt-get install -y curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o "$RUNNER_TEMP/pgdg.asc"
+          sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg "$RUNNER_TEMP/pgdg.asc"
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] http://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
           sudo apt-get install -y postgresql-client-16
           export PATH="/usr/lib/postgresql/16/bin:$PATH"
           python - <<'PY'

@@ -129,7 +129,26 @@ export function PaymentsView({
     if (!group) { group = { studentId: payment.studentId, items: [] }; groups.push(group); }
     group.items.push(payment);
     return groups;
-  }, []).map((group) => ({ ...group, items: [...group.items].sort((a, b) => (b.paidAt ?? b.dueDate).localeCompare(a.paidAt ?? a.dueDate)) }));
+  }, []).map((group) => ({
+    ...group,
+    items: [...group.items].sort((a, b) => {
+      const subscriptionFor = (payment: PaymentDemo) => payment.subscriptionId
+        ? subscriptions.find((item) => item.id === payment.subscriptionId)
+        : undefined;
+      const aSubscription = subscriptionFor(a);
+      const bSubscription = subscriptionFor(b);
+      // The current paid/paused subscription with unused lessons is the primary
+      // record for a student. Future cancelled renewals belong in the archive.
+      const priority = (payment: PaymentDemo, subscription: ApiStudentSubscription | undefined) => {
+        if (subscription && ["active", "paused"].includes(subscription.status) && (subscription.remaining_lessons ?? 0) > 0) return 0;
+        if (payment.status !== "cancelled") return 1;
+        return 2;
+      };
+      const priorityDifference = priority(a, aSubscription) - priority(b, bSubscription);
+      if (priorityDifference !== 0) return priorityDifference;
+      return (b.paidAt ?? b.dueDate).localeCompare(a.paidAt ?? a.dueDate);
+    }),
+  }));
 
   return <section className="paymentsLayout" data-testid="payments-workspace">
     <div className="paymentsMain">
@@ -172,9 +191,16 @@ export function PaymentsView({
           {paymentGroups.map((group) => {
             const expanded = expandedArchiveIds.includes(group.studentId);
             const historyPayments = archiveCache[group.studentId] ?? [];
+            const primaryActivePayments = group.items.filter((payment) => {
+              if (!payment.subscriptionId) return false;
+              const subscription = subscriptions.find((item) => item.id === payment.subscriptionId);
+              return Boolean(subscription && ["active", "paused"].includes(subscription.status) && (subscription.remaining_lessons ?? 0) > 0);
+            });
             const visiblePayments = expanded
               ? [...group.items, ...historyPayments.filter((item) => !group.items.some((latest) => latest.id === item.id))]
-              : group.items.slice(0, 1);
+              : primaryActivePayments.length > 0
+                ? primaryActivePayments
+                : [group.items.find((payment) => payment.status !== "cancelled") ?? group.items[0]].filter((payment): payment is PaymentDemo => Boolean(payment));
             return <div className="paymentStudentGroup" key={group.studentId}>
               {visiblePayments.map((payment) => {
             const student = leads.find((lead) => lead.id === payment.studentId);
