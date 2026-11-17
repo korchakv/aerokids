@@ -147,8 +147,8 @@ jobs:
           BACKUP_DIR: ${{ runner.temp }}/crm-restore-drill
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client-16
-          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          sudo apt-get install -y postgresql-client
+          export PATH="$(pg_config --bindir):$PATH"
           python - <<'PY'
           import os
           import psycopg
